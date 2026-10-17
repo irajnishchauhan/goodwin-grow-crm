@@ -14,6 +14,7 @@ export default function ProductsPage() {
   const [description, setDescription] = useState("");
   const [unitPrice, setUnitPrice] = useState(15000);
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     fetchProducts();
@@ -62,6 +63,13 @@ export default function ProductsPage() {
     }
   }
 
+  const filteredProducts = products.filter(
+    (p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())) ||
+      (p.description && p.description.toLowerCase().includes(search.toLowerCase()))
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -79,6 +87,23 @@ export default function ProductsPage() {
           <Plus className="w-4 h-4" />
           <span>Add New Product</span>
         </button>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by battery name, SKU, or competitor benchmark..."
+            className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 focus:bg-white transition"
+          />
+        </div>
+        <div className="text-xs text-slate-500 font-medium">
+          Showing <span className="font-bold text-slate-800">{filteredProducts.length}</span> of {products.length} products
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -99,14 +124,14 @@ export default function ProductsPage() {
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">Loading catalog...</td>
                 </tr>
-              ) : products.length === 0 ? (
+              ) : filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
-                    No products added yet. Define standard items to use in quotations!
+                    {search ? `No battery products matching "${search}"` : "No products added yet. Define standard items to use in quotations!"}
                   </td>
                 </tr>
               ) : (
-                products.map((p) => (
+                filteredProducts.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/60 transition">
                     <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2">
                       <Package className="w-4 h-4 text-emerald-600" />

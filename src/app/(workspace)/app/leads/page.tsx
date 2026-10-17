@@ -233,7 +233,8 @@ export default function LeadsPage() {
     (l) =>
       `${l.firstName} ${l.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
       (l.companyName && l.companyName.toLowerCase().includes(search.toLowerCase())) ||
-      (l.email && l.email.toLowerCase().includes(search.toLowerCase()))
+      (l.email && l.email.toLowerCase().includes(search.toLowerCase())) ||
+      (l.tags && Array.isArray(l.tags) && l.tags.some((t: string) => t.toLowerCase().includes(search.toLowerCase())))
   );
 
   return (
