@@ -3,6 +3,7 @@ import { provisionTenant } from "../src/lib/tenant/provision";
 import { hashPassword } from "../src/lib/auth/password";
 import { SYSTEM_PERMISSIONS } from "../src/lib/rbac/permissions";
 import { buildGoodwinBatteries } from "../scripts/build-goodwin-batteries";
+import { buildGoodwinGrowAI } from "../scripts/build-goodwin-grow-ai";
 
 const prisma = new PrismaClient();
 
@@ -87,6 +88,9 @@ async function main() {
     t1Tenant = t1.tenant;
   }
   console.log(`✅ Provisioned Tenant 1: Goodwin Grow AI (${t1Tenant.id})`);
+
+  // Comprehensive Agency Workspace Setup for Goodwin Grow AI
+  await buildGoodwinGrowAI(prisma);
 
   // 5. Provision Tenant 2: Goodwin Batteries
   let t2Tenant = await prisma.tenant.findUnique({ where: { code: "goodwin-batteries" } });
