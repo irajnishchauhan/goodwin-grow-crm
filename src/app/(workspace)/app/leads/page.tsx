@@ -12,7 +12,9 @@ import {
   X,
   ArrowRight,
   Download,
+  Upload,
   Filter,
+  FileSpreadsheet,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -42,6 +44,12 @@ export default function LeadsPage() {
   const [dealTitle, setDealTitle] = useState("");
   const [dealValue, setDealValue] = useState(100000);
   const [converting, setConverting] = useState(false);
+
+  // CSV Import Modal
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importRawText, setImportRawText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any | null>(null);
 
   useEffect(() => {
     fetchLeads();
@@ -153,6 +161,49 @@ export default function LeadsPage() {
     }
   }
 
+  async function handleCsvImport(e: React.FormEvent) {
+    e.preventDefault();
+    if (!importRawText.trim()) return;
+
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const lines = importRawText.trim().split("\n");
+      const rowsToImport = lines.slice(1).map((line) => {
+        const parts = line.split(",").map((p) => p.trim());
+        return {
+          firstName: parts[0] || "Prospect",
+          lastName: parts[1] || "Lead",
+          companyName: parts[2] || null,
+          email: parts[3] || null,
+          phone: parts[4] || null,
+          source: parts[5] || "CSV Import",
+          priority: parts[6] || "MEDIUM",
+          score: Number(parts[7]) || 60,
+        };
+      });
+
+      const res = await fetch("/api/leads/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leads: rowsToImport }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setImportResult(data.data);
+        fetchLeads();
+      } else {
+        alert(data.error || "Failed to import leads");
+      }
+    } catch {
+      alert("Error processing import");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   function exportCSV() {
     if (leads.length === 0) return;
     const headers = ["First Name", "Last Name", "Company", "Email", "Phone", "Status", "Priority", "Score", "Source"];
@@ -198,10 +249,21 @@ export default function LeadsPage() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => {
+              setImportRawText("First Name,Last Name,Company,Email,Phone,Source,Priority,Score\nNikhil,Sharma,Nexus Auto,nikhil@nexusauto.com,+91 98777 66554,Inbound,HIGH,80\nPooja,Iyer,Iyer Trading,pooja@iyertrade.com,+91 98888 77665,Expo,MEDIUM,65");
+              setImportResult(null);
+              setImportModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-xs transition cursor-pointer"
+          >
+            <Upload className="w-3.5 h-3.5 text-slate-500" />
+            <span>Import CSV</span>
+          </button>
+          <button
             onClick={exportCSV}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-xs transition cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export CSV</span>
           </button>
           <button
@@ -383,6 +445,71 @@ export default function LeadsPage() {
           </table>
         </div>
       </div>
+
+      {/* CSV Import Modal */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Bulk Import Leads via CSV</h2>
+                <p className="text-xs text-slate-500">
+                  Automatic duplicate detection: existing lead emails within this workspace will be skipped.
+                </p>
+              </div>
+              <button
+                onClick={() => setImportModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {importResult && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Import Completed:</span>
+                </div>
+                <div>• {importResult.importedCount} new leads inserted.</div>
+                <div>• {importResult.skippedCount} duplicate emails skipped.</div>
+              </div>
+            )}
+
+            <form onSubmit={handleCsvImport} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Paste CSV Data (First Name, Last Name, Company, Email, Phone, Source, Priority, Score)
+                </label>
+                <textarea
+                  rows={6}
+                  required
+                  value={importRawText}
+                  onChange={(e) => setImportRawText(e.target.value)}
+                  className="w-full p-3 font-mono text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setImportModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={importing}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+                >
+                  {importing ? "Importing..." : "Process Import"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Create Lead Modal */}
       {createModalOpen && (

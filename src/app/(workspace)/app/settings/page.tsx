@@ -1,44 +1,80 @@
-import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
-import { getTenantContext } from "@/lib/tenant/context";
-import { Settings, Users, Shield, Building2, Mail, Key, Check } from "lucide-react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { Settings, Users, Shield, Building2, Mail, Plus, X, CheckCircle2, Copy } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
-export default async function SettingsPage() {
-  const tenantCtx = await getTenantContext();
-  if (!tenantCtx) {
-    redirect("/login");
+export default function SettingsPage() {
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Invite Modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [roleName, setRoleName] = useState("Sales Executive");
+  const [inviting, setInviting] = useState(false);
+  const [inviteResult, setInviteResult] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  async function fetchSettings() {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/auth/session");
+      const sessionData = await res.json();
+      if (sessionData.success) {
+        setData(sessionData.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantCtx.tenant.id },
-    include: {
-      settings: true,
-      subscription: { include: { plan: true } },
-      memberships: {
-        include: {
-          user: true,
-          roles: { include: { role: true } },
-        },
-      },
-      invitations: {
-        include: { role: true },
-      },
-    },
-  });
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    setInviting(true);
+    setError(null);
+    setInviteResult(null);
 
-  if (!tenant) redirect("/login");
+    try {
+      const res = await fetch("/api/team/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, fullName, roleName }),
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        setInviteResult(resData.data);
+        setEmail("");
+        setFullName("");
+        fetchSettings();
+      } else {
+        setError(resData.error || "Failed to invite team member");
+      }
+    } catch (err: any) {
+      setError(err.message || "An error occurred");
+    } finally {
+      setInviting(false);
+    }
+  }
 
   return (
     <div className="space-y-8 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Organization Settings</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Organization Settings & Team</h1>
         <p className="text-xs text-slate-500 mt-0.5">
           Configure corporate CRM parameters, team access permissions, and subscription limits.
         </p>
       </div>
 
-      {/* Company Profile Card */}
+      {/* Organization Details */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-900 pb-3 border-b border-slate-100">
           <Building2 className="w-4 h-4 text-emerald-600" />
@@ -47,99 +83,155 @@ export default async function SettingsPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div>
-            <div className="text-slate-400 font-semibold mb-1">Company Name</div>
-            <div className="text-slate-900 font-bold text-sm">{tenant.name}</div>
+            <div className="text-slate-400 font-semibold mb-1">Company Workspace</div>
+            <div className="text-slate-900 font-bold text-sm">
+              {data?.activeTenant?.name || "Goodwin Grow CRM Workspace"}
+            </div>
           </div>
           <div>
             <div className="text-slate-400 font-semibold mb-1">Workspace Code</div>
             <div className="font-mono text-slate-800 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 w-fit">
-              {tenant.code}
+              {data?.activeTenant?.code || "goodwin-crm"}
             </div>
           </div>
           <div>
-            <div className="text-slate-400 font-semibold mb-1">Default Currency</div>
-            <div className="text-slate-900 font-medium">{tenant.settings?.currency || "INR (₹)"}</div>
+            <div className="text-slate-400 font-semibold mb-1">Active Roles</div>
+            <div className="text-slate-900 font-semibold">
+              {data?.roles?.join(", ") || "Company Admin"}
+            </div>
           </div>
           <div>
-            <div className="text-slate-400 font-semibold mb-1">Timezone</div>
-            <div className="text-slate-900 font-medium">{tenant.settings?.timezone || "Asia/Kolkata"}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Subscription & Seat Allocation */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-            <Shield className="w-4 h-4 text-emerald-600" />
-            <span>SaaS Subscription & Entitlements</span>
-          </div>
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 uppercase">
-            {tenant.subscription?.plan.name || "Growth"} Tier
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
-            <div className="text-slate-400 font-semibold mb-1">Seat Usage</div>
-            <div className="text-xl font-extrabold text-slate-900">
-              {tenant.memberships.length} / {tenant.settings?.seatLimit || 10}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-1">Active team seats</div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
             <div className="text-slate-400 font-semibold mb-1">Status</div>
-            <div className="text-xl font-extrabold text-emerald-600">
-              {tenant.subscription?.status || "ACTIVE"}
+            <div className="text-emerald-700 font-bold">
+              {data?.activeTenant?.status || "ACTIVE"}
             </div>
-            <div className="text-[10px] text-slate-500 mt-1">Goodwin Grow SaaS</div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
-            <div className="text-slate-400 font-semibold mb-1">Next Billing Date</div>
-            <div className="text-xl font-extrabold text-slate-900">
-              {formatDate(tenant.subscription?.currentPeriodEnd)}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-1">Auto-renews</div>
           </div>
         </div>
       </div>
 
-      {/* Team Members */}
+      {/* Team Management */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
             <Users className="w-4 h-4 text-emerald-600" />
             <span>Workspace Team Members</span>
           </div>
+
+          <button
+            onClick={() => {
+              setInviteResult(null);
+              setError(null);
+              setModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Invite Team Member</span>
+          </button>
         </div>
 
-        <div className="divide-y divide-slate-100">
-          {tenant.memberships.map((m) => (
-            <div key={m.id} className="py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center">
-                  {m.user.fullName.charAt(0)}
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-900">{m.user.fullName}</div>
-                  <div className="text-[11px] text-slate-500">{m.user.email}</div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
-                  {m.roles[0]?.role.name || (m.isOwner ? "Company Owner" : "Member")}
-                </span>
-                <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
-                  {m.status}
-                </span>
-              </div>
-            </div>
-          ))}
+        <div className="text-xs text-slate-600 space-y-2">
+          <p>
+            Users invited to this workspace have strictly scoped access and cannot see any other company records.
+          </p>
         </div>
       </div>
+
+      {/* Invite Member Modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h2 className="text-base font-bold text-slate-900">Invite New Team Member</h2>
+              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700">
+                {error}
+              </div>
+            )}
+
+            {inviteResult && (
+              <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-2">
+                <div className="font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Invitation Generated!</span>
+                </div>
+                <div className="text-slate-600">
+                  Send this link to <span className="font-bold text-slate-800">{inviteResult.email}</span> to activate their seat:
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-emerald-300 font-mono text-[11px] break-all select-all">
+                  {window.location.origin}{inviteResult.inviteUrl}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleInvite} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Team Member Email *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="colleague@company.com"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Ramesh Kumar"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Assigned CRM Role *
+                </label>
+                <select
+                  value={roleName}
+                  onChange={(e) => setRoleName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                >
+                  <option value="Sales Manager">Sales Manager (Team oversight & quotations)</option>
+                  <option value="Sales Executive">Sales Executive (Manage leads & deals)</option>
+                  <option value="Viewer">Viewer (Read-only access)</option>
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={inviting}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
+                >
+                  {inviting ? "Inviting..." : "Send Invitation"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

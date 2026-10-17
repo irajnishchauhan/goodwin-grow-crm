@@ -15,6 +15,10 @@ import {
   ShieldCheck,
   ChevronRight,
   TrendingUp,
+  Calendar,
+  Package,
+  Zap,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,13 +41,17 @@ const navItems = [
     category: "PRODUCTIVITY",
     links: [
       { name: "Tasks", href: "/app/tasks", icon: CheckSquare },
+      { name: "Calendar", href: "/app/calendar", icon: Calendar },
       { name: "Activities", href: "/app/activities", icon: Clock },
       { name: "Quotations", href: "/app/quotations", icon: FileSpreadsheet },
+      { name: "Products", href: "/app/products", icon: Package },
     ],
   },
   {
-    category: "MANAGEMENT",
+    category: "INTELLIGENCE & SETUP",
     links: [
+      { name: "Automations", href: "/app/automations", icon: Zap },
+      { name: "Analytics & Reports", href: "/app/reports", icon: BarChart3 },
       { name: "Company Settings", href: "/app/settings", icon: Settings },
     ],
   },
@@ -53,7 +61,7 @@ export function Sidebar({ isPlatformAdmin }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 border-r border-slate-200 bg-white flex flex-col h-screen select-none">
+    <aside className="w-64 border-r border-slate-200 bg-white flex flex-col h-screen select-none shrink-0">
       {/* Brand Header */}
       <div className="h-16 flex items-center px-6 border-b border-slate-100 gap-3">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-700 via-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-700/20">
