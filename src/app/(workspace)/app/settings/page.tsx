@@ -164,7 +164,7 @@ export default function SettingsPage() {
                   Send this link to <span className="font-bold text-slate-800">{inviteResult.email}</span> to activate their seat:
                 </div>
                 <div className="p-2 bg-white rounded-lg border border-emerald-300 font-mono text-[11px] break-all select-all">
-                  {window.location.origin}{inviteResult.inviteUrl}
+                  {typeof window !== "undefined" ? window.location.origin : ""}{inviteResult.inviteUrl}
                 </div>
               </div>
             )}
