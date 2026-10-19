@@ -101,6 +101,42 @@ export async function provisionTenant(input: ProvisionTenantInput) {
       },
     });
 
+    const agencyAdminRole = await tx.role.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Agency Admin",
+        description: "Full oversight over all agency clients, pods, campaigns, and billings",
+        isSystem: true,
+      },
+    });
+
+    const accountManagerRole = await tx.role.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Account Manager",
+        description: "Manages client relationships, deliverables, campaigns, tasks, and internal reviews",
+        isSystem: true,
+      },
+    });
+
+    const designerRole = await tx.role.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Designer",
+        description: "Creative design production, uploading asset versions, previewing and resolving feedback",
+        isSystem: true,
+      },
+    });
+
+    const clientRole = await tx.role.create({
+      data: {
+        tenantId: tenant.id,
+        name: "Client",
+        description: "Client portal access restricted to assigned client deliverables, approvals, and reports",
+        isSystem: true,
+      },
+    });
+
     const managerRole = await tx.role.create({
       data: {
         tenantId: tenant.id,
@@ -130,13 +166,52 @@ export async function provisionTenant(input: ProvisionTenantInput) {
 
     // Map permissions to roles
     for (const p of allPerms) {
-      // Owner & Admin get all
+      // Owner & Admin & Agency Admin get all
       await tx.rolePermission.create({
         data: { roleId: ownerRole.id, permissionId: p.id },
       });
       await tx.rolePermission.create({
         data: { roleId: adminRole.id, permissionId: p.id },
       });
+      await tx.rolePermission.create({
+        data: { roleId: agencyAdminRole.id, permissionId: p.id },
+      });
+
+      // Account Manager permissions
+      if (
+        p.code !== "settings:manage" &&
+        p.code !== "team:manage" &&
+        p.code !== "automations:manage"
+      ) {
+        await tx.rolePermission.create({
+          data: { roleId: accountManagerRole.id, permissionId: p.id },
+        });
+      }
+
+      // Designer permissions
+      if (
+        p.code.startsWith("creatives:") ||
+        p.code.startsWith("calendar:") ||
+        p.code === "tasks:read" ||
+        p.code === "tasks:write"
+      ) {
+        await tx.rolePermission.create({
+          data: { roleId: designerRole.id, permissionId: p.id },
+        });
+      }
+
+      // Client permissions (Strict client portal only)
+      if (
+        p.code === "portal:access" ||
+        p.code === "creatives:read" ||
+        p.code === "creatives:review_client" ||
+        p.code === "calendar:read" ||
+        p.code === "reports:read"
+      ) {
+        await tx.rolePermission.create({
+          data: { roleId: clientRole.id, permissionId: p.id },
+        });
+      }
 
       // Manager gets all except settings:manage
       if (p.code !== "settings:manage") {

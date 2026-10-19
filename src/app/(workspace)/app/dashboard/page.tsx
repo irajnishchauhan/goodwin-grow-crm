@@ -36,7 +36,21 @@ export default async function DashboardPage() {
 
   // If in Goodwin Grow AI workspace, load Marketing Agency OS data
   if (isAgency) {
-    const [clients, projects, upcomingPosts, adCampaigns, invoices, tasksCount] = await Promise.all([
+    const now = new Date();
+    const in72Hours = new Date(Date.now() + 72 * 60 * 60 * 1000);
+
+    const [
+      clients,
+      projects,
+      upcomingPosts,
+      adCampaigns,
+      invoices,
+      tasksCount,
+      overdueFollowUps,
+      pendingApprovals,
+      approachingPosts,
+      teamMembers,
+    ] = await Promise.all([
       prisma.agencyClient.findMany({
         where: { tenantId },
         orderBy: { monthlyRetainer: "desc" },
@@ -55,7 +69,51 @@ export default async function DashboardPage() {
       }),
       prisma.adCampaign.findMany({ where: { tenantId } }),
       prisma.agencyInvoice.findMany({ where: { tenantId } }),
-      prisma.agencyTask.count({ where: { tenantId } }),
+      prisma.task.count({ where: { tenantId, status: { not: "COMPLETED" } } }),
+      prisma.lead.findMany({
+        where: {
+          tenantId,
+          nextFollowUp: { lt: now },
+          status: { notIn: ["CONVERTED", "LOST"] },
+        },
+        take: 4,
+        orderBy: { nextFollowUp: "asc" },
+        include: { assignedOwner: true, client: true },
+      }),
+      prisma.creativeAsset.findMany({
+        where: {
+          tenantId,
+          reviewStatus: { in: ["INTERNAL_REVIEW", "CLIENT_REVIEW", "CHANGES_REQUESTED"] },
+        },
+        take: 4,
+        orderBy: { createdAt: "desc" },
+        include: { client: true },
+      }),
+      prisma.contentPost.findMany({
+        where: {
+          tenantId,
+          scheduledDate: { gte: now, lte: in72Hours },
+          status: { not: "PUBLISHED" },
+        },
+        take: 4,
+        orderBy: { scheduledDate: "asc" },
+        include: { client: true },
+      }),
+      prisma.user.findMany({
+        where: {
+          memberships: { some: { tenantId } },
+        },
+        take: 6,
+        include: {
+          assignedTasks: {
+            where: { tenantId, status: { not: "COMPLETED" } },
+          },
+          memberships: {
+            where: { tenantId },
+            include: { roles: { include: { role: true } } },
+          },
+        },
+      }),
     ]);
 
     const totalRetainerMRR = clients.reduce((acc, c) => acc + Number(c.monthlyRetainer), 0);
@@ -78,29 +136,29 @@ export default async function DashboardPage() {
               Agency Executive Command Center
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Welcome back, {tenantCtx.user.fullName}. Live client workspaces, monthly deliverable progress, and campaign analytics.
+              Welcome back, {tenantCtx.user.fullName}. Live client workspaces, monthly deliverable progress, and team workload.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Link
-              href="/app/clients"
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition"
+              href="/app/clients/portal"
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-xs transition"
             >
-              + Client 360° View
+              Client Portal
             </Link>
             <Link
-              href="/app/content-calendar"
-              className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-xs transition"
+              href="/app/creative-approvals"
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition"
             >
-              Social Calendar
+              Creative Approvals
             </Link>
           </div>
         </div>
 
         {/* Agency Top KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Monthly Retainer MRR
             </div>
@@ -112,9 +170,9 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Monthly Deliverables
+              Monthly Deliverables Completed
             </div>
             <div className="text-2xl font-black text-emerald-700 mt-1">
               {completionRate}% Done
@@ -124,47 +182,48 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Active Paid Ad Spend
+              Pending Approvals
             </div>
-            <div className="text-2xl font-black text-indigo-700 mt-1">
-              ₹{totalAdSpend.toLocaleString("en-IN")}
+            <div className="text-2xl font-black text-amber-600 mt-1">
+              {pendingApprovals.length} Assets
             </div>
-            <div className="text-[11px] text-indigo-600 font-medium mt-0.5">
-              {totalLeads} leads captured (Meta & Google)
+            <div className="text-[11px] text-amber-700 font-medium mt-0.5">
+              Awaiting internal or client review
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Live Delivery Tasks
+              Overdue Follow-ups
             </div>
-            <div className="text-2xl font-black text-purple-700 mt-1">
-              {tasksCount} Tasks
+            <div className="text-2xl font-black text-rose-600 mt-1">
+              {overdueFollowUps.length} Leads
             </div>
-            <div className="text-[11px] text-purple-600 font-medium mt-0.5">
-              Across 7 delivery stages
+            <div className="text-[11px] text-rose-600 font-medium mt-0.5">
+              Follow-up scheduled time passed
             </div>
           </div>
         </div>
 
-        {/* Client Deliverables Progress (From PRD & User Prompt) */}
+        {/* 1. Monthly Deliverables Completed Widget (Per-Client Progress Bars) */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Client Workspace Deliverable Status
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Monthly Deliverables Completed by Client Workspace</span>
               </h2>
               <p className="text-xs text-slate-500">
-                Live deliverable progress calculated from completed work pods
+                Live delivery progress tracking against contracted client retainer deliverables
               </p>
             </div>
             <Link
               href="/app/clients"
               className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
             >
-              <span>View All 360° Workspaces</span>
+              <span>View All Workspaces</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -216,75 +275,210 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Two-Column Grid: Active Projects & Content Calendar */}
+        {/* 2-Column Grid: Overdue Follow-ups & Pending Approvals */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Projects */}
+          {/* Overdue Follow-ups Widget */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-indigo-600" />
-                <span>Active Campaign Projects</span>
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+                <span>Overdue Follow-ups ({overdueFollowUps.length})</span>
               </h3>
-              <Link href="/app/projects" className="text-xs font-semibold text-emerald-700">
-                See All
+              <Link href="/app/leads" className="text-xs font-semibold text-rose-700 hover:text-rose-800">
+                View All Leads
               </Link>
             </div>
 
-            <div className="space-y-3">
-              {projects.map((p) => (
-                <div
-                  key={p.id}
-                  className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition"
-                >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-bold text-slate-900">{p.name}</span>
-                    <span className="text-xs font-bold text-emerald-600">{p.progressPercent}%</span>
+            {overdueFollowUps.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No overdue lead follow-ups. All agent follow-ups are on schedule!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {overdueFollowUps.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="p-3.5 rounded-2xl border border-rose-100 bg-rose-50/40 flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900 truncate">
+                        {lead.firstName} {lead.lastName}
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                        {lead.companyName || lead.serviceRequired || "Prospect Lead"}
+                      </div>
+                      <div className="text-[10px] text-rose-700 font-semibold mt-1 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        <span>Scheduled: {lead.nextFollowUp ? formatDate(lead.nextFollowUp) : "Past due"}</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] font-bold text-slate-600 block">
+                        Owner: {lead.assignedOwner?.fullName || "Unassigned"}
+                      </span>
+                      <Link
+                        href="/app/leads"
+                        className="inline-block mt-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold transition"
+                      >
+                        Follow Up Now
+                      </Link>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <span>{p.client?.name || "Client"}</span>
-                    <span>Lead: {p.assigneeName || "Kunal"}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Social Posts */}
+          {/* Pending Approvals Widget */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Share2 className="w-4 h-4 text-emerald-600" />
-                <span>Scheduled Content Posts (October 2026)</span>
+                <Clock className="w-4 h-4 text-amber-500" />
+                <span>Pending Creative Approvals ({pendingApprovals.length})</span>
+              </h3>
+              <Link href="/app/creative-approvals" className="text-xs font-semibold text-emerald-700">
+                Approvals Board
+              </Link>
+            </div>
+
+            {pendingApprovals.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No creatives currently awaiting approval.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pendingApprovals.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold text-emerald-700 truncate">
+                        {asset.client?.name || "Client"}
+                      </div>
+                      <div className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                        {asset.title} (v{asset.version || 1})
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        Submitted: {formatDate(asset.createdAt)}
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 block mb-1">
+                        {asset.reviewStatus}
+                      </span>
+                      <Link
+                        href="/app/creative-approvals"
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800"
+                      >
+                        Review Asset →
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 2-Column Grid: Approaching Deadlines & Team Workload */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Approaching Deadlines Widget */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-600" />
+                <span>Approaching Publishing Deadlines (Next 72h)</span>
               </h3>
               <Link href="/app/content-calendar" className="text-xs font-semibold text-emerald-700">
-                Calendar
+                Full Calendar
+              </Link>
+            </div>
+
+            {approachingPosts.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No deliverables due in the next 72 hours.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {approachingPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition flex items-center justify-between"
+                  >
+                    <div className="min-w-0 pr-3">
+                      <div className="text-[10px] font-bold text-emerald-700 truncate">
+                        {post.client?.name} • {post.platform}
+                      </div>
+                      <div className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                        {post.title}
+                      </div>
+                      <div className="text-[10px] text-indigo-700 font-semibold mt-1">
+                        Scheduled: {post.scheduledDate ? formatDate(post.scheduledDate) : "—"}
+                      </div>
+                    </div>
+
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                      {post.postType}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Team Workload Distribution Widget */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Users2 className="w-4 h-4 text-purple-600" />
+                <span>Team Workload Distribution</span>
+              </h3>
+              <Link href="/app/tasks" className="text-xs font-semibold text-emerald-700">
+                Tasks Queue
               </Link>
             </div>
 
             <div className="space-y-3">
-              {upcomingPosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition flex items-center justify-between"
-                >
-                  <div className="min-w-0 pr-3">
-                    <div className="text-[10px] font-bold text-emerald-700 truncate">
-                      {post.client?.name} • {post.platform}
-                    </div>
-                    <div className="text-xs font-bold text-slate-900 truncate mt-0.5">
-                      {post.title}
-                    </div>
-                    {post.festivalOrEvent && (
-                      <span className="inline-block text-[9px] font-semibold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded mt-1">
-                        {post.festivalOrEvent}
+              {teamMembers.map((member) => {
+                const activeCount = member.assignedTasks?.length || 0;
+                const roleName = member.memberships[0]?.roles[0]?.role?.name || "Team Member";
+                const capacityPercent = Math.min(100, activeCount * 25);
+
+                return (
+                  <div
+                    key={member.id}
+                    className="p-3 rounded-2xl border border-slate-100 bg-slate-50/50 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900">{member.fullName}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-200/80 text-slate-700">
+                          {roleName}
+                        </span>
+                      </div>
+                      <span className="font-bold text-purple-700 text-xs">
+                        {activeCount} active task{activeCount !== 1 ? "s" : ""}
                       </span>
-                    )}
+                    </div>
+
+                    <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          capacityPercent > 75
+                            ? "bg-rose-500"
+                            : capacityPercent > 50
+                            ? "bg-amber-500"
+                            : "bg-purple-600"
+                        }`}
+                        style={{ width: `${Math.max(10, capacityPercent)}%` }}
+                      />
+                    </div>
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shrink-0">
-                    {post.status}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

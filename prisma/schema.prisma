@@ -89,19 +89,22 @@ enum MembershipStatus {
 }
 
 model TenantMembership {
-  id        String           @id @default(uuid())
-  tenantId  String           @map("tenant_id")
-  userId    String           @map("user_id")
-  status    MembershipStatus @default(ACTIVE)
-  isOwner   Boolean          @default(false) @map("is_owner")
-  createdAt DateTime         @default(now()) @map("created_at")
-  updatedAt DateTime         @updatedAt @map("updated_at")
+  id             String           @id @default(uuid())
+  tenantId       String           @map("tenant_id")
+  userId         String           @map("user_id")
+  status         MembershipStatus @default(ACTIVE)
+  isOwner        Boolean          @default(false) @map("is_owner")
+  agencyClientId String?          @map("agency_client_id")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
 
-  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roles  MembershipRole[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agencyClient AgencyClient? @relation(fields: [agencyClientId], references: [id], onDelete: SetNull)
+  roles        MembershipRole[]
 
   @@unique([tenantId, userId])
+  @@index([tenantId, agencyClientId])
   @@map("tenant_memberships")
 }
 
@@ -305,34 +308,41 @@ enum LeadPriority {
 }
 
 model Lead {
-  id                 String       @id @default(uuid())
-  tenantId           String       @map("tenant_id")
-  firstName          String       @map("first_name")
-  lastName           String       @map("last_name")
-  companyName        String?      @map("company_name")
+  id                 String        @id @default(uuid())
+  tenantId           String        @map("tenant_id")
+  firstName          String        @map("first_name")
+  lastName           String        @map("last_name")
+  companyName        String?       @map("company_name")
   email              String?
   phone              String?
-  status             LeadStatus   @default(NEW)
+  status             LeadStatus    @default(NEW)
   source             String?
-  priority           LeadPriority @default(MEDIUM)
-  score              Int          @default(0)
-  assignedOwnerId    String?      @map("assigned_owner_id")
-  tags               String[]     @default([])
-  convertedAt        DateTime?    @map("converted_at")
-  convertedContactId String?      @map("converted_contact_id")
-  convertedDealId    String?      @map("converted_deal_id")
-  createdAt          DateTime     @default(now()) @map("created_at")
-  updatedAt          DateTime     @updatedAt @map("updated_at")
+  serviceRequired    String?       @map("service_required")
+  dealValue          Decimal?      @map("deal_value") @db.Decimal(14, 2)
+  nextFollowUp       DateTime?     @map("next_follow_up")
+  lostReason         String?       @map("lost_reason")
+  priority           LeadPriority  @default(MEDIUM)
+  score              Int           @default(0)
+  assignedOwnerId    String?       @map("assigned_owner_id")
+  clientId           String?       @map("client_id")
+  tags               String[]      @default([])
+  convertedAt        DateTime?     @map("converted_at")
+  convertedContactId String?       @map("converted_contact_id")
+  convertedDealId    String?       @map("converted_deal_id")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
 
-  tenant           Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assignedOwner    User?      @relation("AssignedLeads", fields: [assignedOwnerId], references: [id])
-  convertedContact Contact?   @relation("ConvertedContact", fields: [convertedContactId], references: [id])
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedOwner    User?         @relation("AssignedLeads", fields: [assignedOwnerId], references: [id])
+  convertedContact Contact?      @relation("ConvertedContact", fields: [convertedContactId], references: [id])
+  client           AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
   tasks            Task[]
   activities       Activity[]
   notes            Note[]
 
   @@index([tenantId, status])
   @@index([tenantId, assignedOwnerId])
+  @@index([tenantId, clientId])
   @@map("leads")
 }
 
@@ -453,28 +463,37 @@ enum TaskStatus {
 }
 
 model Task {
-  id           String       @id @default(uuid())
-  tenantId     String       @map("tenant_id")
-  title        String
-  description  String?
-  dueDate      DateTime?    @map("due_date")
-  priority     TaskPriority @default(MEDIUM)
-  status       TaskStatus   @default(PENDING)
-  assignedToId String?      @map("assigned_to_id")
-  leadId       String?      @map("lead_id")
-  contactId    String?      @map("contact_id")
-  dealId       String?      @map("deal_id")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
+  id                String         @id @default(uuid())
+  tenantId          String         @map("tenant_id")
+  title             String
+  description       String?
+  dueDate           DateTime?      @map("due_date")
+  priority          TaskPriority   @default(MEDIUM)
+  status            TaskStatus     @default(PENDING)
+  assignedToId      String?        @map("assigned_to_id")
+  leadId            String?        @map("lead_id")
+  contactId         String?        @map("contact_id")
+  dealId            String?        @map("deal_id")
+  clientId          String?        @map("client_id")
+  projectId         String?        @map("project_id")
+  checklist         Json           @default("[]")
+  attachments       Json           @default("[]")
+  isRecurring       Boolean        @default(false) @map("is_recurring")
+  recurringInterval String?        @map("recurring_interval")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
 
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assignedTo User?    @relation("AssignedTasks", fields: [assignedToId], references: [id])
-  lead       Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  contact    Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  deal       Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedTo User?          @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  lead       Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  contact    Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  deal       Deal?          @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  client     AgencyClient?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project    AgencyProject? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status])
   @@index([tenantId, dueDate])
+  @@index([tenantId, clientId])
   @@map("tasks")
 }
 
@@ -768,6 +787,9 @@ model AgencyClient {
   updatedAt           DateTime     @updatedAt @map("updated_at")
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships    TenantMembership[]
+  leads          Lead[]
+  crmTasks       Task[]
   projects       AgencyProject[]
   tasks          AgencyTask[]
   contentPosts   ContentPost[]
@@ -804,9 +826,10 @@ model AgencyProject {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  tasks  AgencyTask[]
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client   AgencyClient?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  tasks    AgencyTask[]
+  crmTasks Task[]
 
   @@index([tenantId, status])
   @@index([tenantId, clientId])
@@ -876,6 +899,9 @@ model ContentPost {
   caption         String?
   hashtags        String?
   mediaUrl        String?      @map("media_url")
+  ownerName       String?      @map("owner_name")
+  deadline        DateTime?
+  approvalStatus  String?      @default("SCHEDULED") @map("approval_status")
   scheduledDate   DateTime?    @map("scheduled_date")
   status          PostStatus   @default(SCHEDULED)
   festivalOrEvent String?      @map("festival_or_event")
@@ -896,9 +922,14 @@ model ContentPost {
 }
 
 enum CreativeReviewStatus {
-  PENDING
-  APPROVED
+  DRAFT
+  INTERNAL_REVIEW
+  CLIENT_REVIEW
   CHANGES_REQUESTED
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  PENDING
 }
 
 model CreativeAsset {
@@ -909,20 +940,61 @@ model CreativeAsset {
   assetType      String               @default("Social Graphic") @map("asset_type")
   dimensions     String?              @default("1080x1080")
   fileUrl        String?              @map("file_url")
+  mediaType      String               @default("image") @map("media_type")
   version        Int                  @default(1)
-  reviewStatus   CreativeReviewStatus @default(PENDING) @map("review_status")
+  reviewStatus   CreativeReviewStatus @default(INTERNAL_REVIEW) @map("review_status")
   clientFeedback String?              @map("client_feedback")
   submittedBy    String?              @map("submitted_by")
+  approverName   String?              @map("approver_name")
+  approverEmail  String?              @map("approver_email")
+  approvedAt     DateTime?            @map("approved_at")
   reviewedAt     DateTime?            @map("reviewed_at")
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
 
-  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client   AgencyClient?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  versions CreativeVersion[]
+  comments CreativeComment[]
 
   @@index([tenantId, reviewStatus])
   @@index([tenantId, clientId])
   @@map("creative_assets")
+}
+
+model CreativeVersion {
+  id            String        @id @default(uuid())
+  tenantId      String        @map("tenant_id")
+  assetId       String        @map("asset_id")
+  versionNumber Int           @map("version_number")
+  fileUrl       String        @map("file_url")
+  mediaType     String        @default("image") @map("media_type")
+  changelog     String?
+  submittedBy   String?       @map("submitted_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  asset CreativeAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, versionNumber])
+  @@index([tenantId, assetId])
+  @@map("creative_versions")
+}
+
+model CreativeComment {
+  id            String        @id @default(uuid())
+  tenantId      String        @map("tenant_id")
+  assetId       String        @map("asset_id")
+  versionNumber Int           @default(1) @map("version_number")
+  authorName    String        @map("author_name")
+  authorRole    String?       @map("author_role")
+  content       String
+  isInternal    Boolean       @default(false) @map("is_internal")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  asset CreativeAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assetId])
+  @@map("creative_comments")
 }
 
 enum AdPlatform {

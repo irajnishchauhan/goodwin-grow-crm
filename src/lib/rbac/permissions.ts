@@ -37,6 +37,31 @@ export const SYSTEM_PERMISSIONS = [
   { code: "automations:manage", module: "Automations", description: "Configure workflow rules" },
   { code: "team:manage", module: "Team", description: "Invite and manage company users" },
   { code: "settings:manage", module: "Settings", description: "Manage company settings and pipelines" },
+
+  // Agency & Creative Approvals
+  { code: "creatives:read", module: "Creatives", description: "View creative assets and revisions" },
+  { code: "creatives:write", module: "Creatives", description: "Create and update creative assets" },
+  { code: "creatives:delete", module: "Creatives", description: "Delete creative assets" },
+  { code: "creatives:review_internal", module: "Creatives", description: "Internal creative director review & approvals" },
+  { code: "creatives:review_client", module: "Creatives", description: "Client approval and revision sign-off" },
+  { code: "creatives:version", module: "Creatives", description: "Upload new creative version" },
+
+  // Content Calendar
+  { code: "calendar:read", module: "Calendar", description: "View scheduled social media content" },
+  { code: "calendar:write", module: "Calendar", description: "Schedule and edit calendar posts" },
+  { code: "calendar:delete", module: "Calendar", description: "Delete calendar posts" },
+
+  // Agency Clients & Portal
+  { code: "clients:read", module: "Clients", description: "View agency client workspaces" },
+  { code: "clients:write", module: "Clients", description: "Create and edit agency clients" },
+  { code: "portal:access", module: "Portal", description: "Access dedicated client approval portal" },
+
+  // Financials & Reports
+  { code: "invoices:read", module: "Invoices", description: "View agency invoices and retainers" },
+  { code: "invoices:write", module: "Invoices", description: "Create and manage agency invoices" },
+  { code: "reports:read", module: "Reports", description: "View agency reports and analytics" },
+  { code: "reports:export", module: "Reports", description: "Export report and performance data" },
 ] as const;
 
 export type PermissionCode = (typeof SYSTEM_PERMISSIONS)[number]["code"] | "*";
+

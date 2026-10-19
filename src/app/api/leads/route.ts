@@ -13,10 +13,33 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   const priority = searchParams.get("priority");
   const assignedOwnerId = searchParams.get("assignedOwnerId");
+  const clientId = searchParams.get("clientId");
+
+  // Client Isolation: One client must NEVER access another client's leads
+  if (tenantCtx.isClientUser) {
+    if (!tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: No client workspace associated with account" },
+        { status: 403 }
+      );
+    }
+    if (clientId && clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cross-client leads access is strictly prohibited" },
+        { status: 403 }
+      );
+    }
+  }
 
   const whereClause: any = {
     tenantId: tenantCtx.tenant.id,
   };
+
+  if (tenantCtx.isClientUser) {
+    whereClause.clientId = tenantCtx.agencyClientId;
+  } else if (clientId && clientId !== "ALL") {
+    whereClause.clientId = clientId;
+  }
 
   if (status && status !== "ALL") {
     whereClause.status = status;
@@ -36,6 +59,7 @@ export async function GET(req: Request) {
       { lastName: { contains: q, mode: "insensitive" } },
       { email: { contains: q, mode: "insensitive" } },
       { companyName: { contains: q, mode: "insensitive" } },
+      { serviceRequired: { contains: q, mode: "insensitive" } },
     ];
   }
 
@@ -45,6 +69,13 @@ export async function GET(req: Request) {
     include: {
       assignedOwner: {
         select: { id: true, fullName: true, email: true },
+      },
+      client: {
+        select: { id: true, name: true, brandName: true },
+      },
+      activities: {
+        orderBy: { occurredAt: "desc" },
+        take: 5,
       },
     },
   });
@@ -75,6 +106,11 @@ export async function POST(req: Request) {
       phone,
       status = "NEW",
       source,
+      serviceRequired,
+      dealValue,
+      nextFollowUp,
+      lostReason,
+      clientId,
       priority = "MEDIUM",
       score = 0,
       tags = [],
@@ -88,31 +124,78 @@ export async function POST(req: Request) {
       );
     }
 
-    // Defense-in-depth: Tenant ID is strictly derived from session context
+    // Duplicate Detection: Check email and phone in tenant
+    const trimmedEmail = email?.trim() || null;
+    const trimmedPhone = phone?.trim() || null;
+
+    if (trimmedEmail || trimmedPhone) {
+      const duplicateConditions: any[] = [];
+      if (trimmedEmail) {
+        duplicateConditions.push({ email: { equals: trimmedEmail, mode: "insensitive" } });
+      }
+      if (trimmedPhone) {
+        duplicateConditions.push({ phone: { equals: trimmedPhone } });
+      }
+
+      const duplicate = await prisma.lead.findFirst({
+        where: {
+          tenantId: tenantCtx.tenant.id,
+          OR: duplicateConditions,
+        },
+      });
+
+      if (duplicate) {
+        const matchedField =
+          trimmedEmail && duplicate.email?.toLowerCase() === trimmedEmail.toLowerCase()
+            ? `email (${trimmedEmail})`
+            : `phone (${trimmedPhone})`;
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Duplicate Detected: A lead with this ${matchedField} already exists (${duplicate.firstName} ${duplicate.lastName} at ${duplicate.companyName || "Organization"}).`,
+            duplicateId: duplicate.id,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    const targetClientId = tenantCtx.isClientUser ? tenantCtx.agencyClientId : (clientId || null);
+
     const lead = await prisma.lead.create({
       data: {
         tenantId: tenantCtx.tenant.id,
-        firstName,
-        lastName,
-        companyName,
-        email,
-        phone,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        companyName: companyName?.trim() || null,
+        email: trimmedEmail,
+        phone: trimmedPhone,
         status,
-        source,
+        source: source || null,
+        serviceRequired: serviceRequired || null,
+        dealValue: dealValue ? Number(dealValue) : null,
+        nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : null,
+        lostReason: status === "LOST" ? lostReason : null,
+        clientId: targetClientId,
         priority,
         score: Number(score) || 0,
         tags: Array.isArray(tags) ? tags : [],
         assignedOwnerId: assignedOwnerId || tenantCtx.user.id,
       },
+      include: {
+        assignedOwner: { select: { id: true, fullName: true, email: true } },
+        client: { select: { id: true, name: true, brandName: true } },
+      },
     });
 
-    // Log Activity
+    // Log Activity for Audit History
     await prisma.activity.create({
       data: {
         tenantId: tenantCtx.tenant.id,
         type: "NOTE",
         title: "Lead Created",
-        description: `Lead created for ${firstName} ${lastName} (${companyName || "No Company"})`,
+        description: `Lead created for ${firstName} ${lastName} (${companyName || "No Company"})${serviceRequired ? ` - Service: ${serviceRequired}` : ""}`,
         performedById: tenantCtx.user.id,
         leadId: lead.id,
       },
@@ -126,3 +209,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

@@ -30,6 +30,14 @@ export async function GET(
     return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
   }
 
+  // Client Isolation: One client must NEVER access another client's reports or workspace
+  if (tenantCtx.isClientUser && client.id !== tenantCtx.agencyClientId) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden: Access to another client's workspace is strictly prohibited" },
+      { status: 403 }
+    );
+  }
+
   return NextResponse.json({ success: true, data: client });
 }
 
@@ -42,6 +50,13 @@ export async function PUT(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify agency client configurations" },
+        { status: 403 }
+      );
     }
 
     const existing = await prisma.agencyClient.findFirst({
@@ -97,6 +112,12 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot delete client workspaces" },
+        { status: 403 }
+      );
     }
 
     const existing = await prisma.agencyClient.findFirst({

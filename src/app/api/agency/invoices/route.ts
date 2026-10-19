@@ -12,9 +12,30 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   const clientId = searchParams.get("clientId");
 
+  // Client Isolation: Enforce client access
+  if (tenantCtx.isClientUser) {
+    if (!tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: No client associated with account" },
+        { status: 403 }
+      );
+    }
+    if (clientId && clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cross-client invoice access is strictly prohibited" },
+        { status: 403 }
+      );
+    }
+  }
+
   const whereClause: any = { tenantId: tenantCtx.tenant.id };
   if (status && status !== "ALL") whereClause.status = status;
-  if (clientId) whereClause.clientId = clientId;
+
+  if (tenantCtx.isClientUser) {
+    whereClause.clientId = tenantCtx.agencyClientId;
+  } else if (clientId && clientId !== "ALL") {
+    whereClause.clientId = clientId;
+  }
 
   const invoices = await prisma.agencyInvoice.findMany({
     where: whereClause,
@@ -32,6 +53,13 @@ export async function POST(req: Request) {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot issue invoices" },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();

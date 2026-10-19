@@ -73,6 +73,13 @@ export async function getSessionByToken(token: string) {
                     status: true,
                   },
                 },
+                agencyClient: {
+                  select: {
+                    id: true,
+                    name: true,
+                    brandName: true,
+                  },
+                },
                 roles: {
                   include: {
                     role: {

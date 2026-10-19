@@ -15,11 +15,26 @@ export async function GET(
 
     const asset = await prisma.creativeAsset.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
-      include: { client: true },
+      include: {
+        client: true,
+        versions: { orderBy: { versionNumber: "desc" } },
+        comments: {
+          where: tenantCtx.isClientUser ? { isInternal: false } : {},
+          orderBy: { createdAt: "asc" },
+        },
+      },
     });
 
     if (!asset) {
       return NextResponse.json({ success: false, error: "Asset not found" }, { status: 404 });
+    }
+
+    // Client Isolation: One client must NEVER access another client's assets
+    if (tenantCtx.isClientUser && asset.clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Access to another client's creative asset is denied" },
+        { status: 403 }
+      );
     }
 
     return NextResponse.json({ success: true, data: asset });
@@ -47,23 +62,85 @@ export async function PUT(
       return NextResponse.json({ success: false, error: "Asset not found" }, { status: 404 });
     }
 
+    // Client Isolation: Check ownership
+    if (tenantCtx.isClientUser && existing.clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: You cannot modify another client's asset" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
-    const { title, assetType, dimensions, fileUrl, reviewStatus, clientFeedback, clientId } = body;
+    const {
+      title,
+      assetType,
+      dimensions,
+      fileUrl,
+      mediaType,
+      reviewStatus,
+      clientFeedback,
+      clientId,
+    } = body;
+
+    // Build update payload with audit approver and timestamps
+    const updateData: any = {};
+
+    if (tenantCtx.isClientUser) {
+      // Clients can only submit approval or request changes
+      if (reviewStatus && ["APPROVED", "CHANGES_REQUESTED"].includes(reviewStatus)) {
+        updateData.reviewStatus = reviewStatus;
+      }
+      if (clientFeedback !== undefined) {
+        updateData.clientFeedback = clientFeedback;
+      }
+    } else {
+      if (title !== undefined) updateData.title = title;
+      if (assetType !== undefined) updateData.assetType = assetType;
+      if (dimensions !== undefined) updateData.dimensions = dimensions;
+      if (fileUrl !== undefined) updateData.fileUrl = fileUrl;
+      if (mediaType !== undefined) updateData.mediaType = mediaType;
+      if (clientId !== undefined) updateData.clientId = clientId || null;
+      if (reviewStatus !== undefined) updateData.reviewStatus = reviewStatus;
+      if (clientFeedback !== undefined) updateData.clientFeedback = clientFeedback;
+    }
+
+    // Record approver and timestamp when transitioning to APPROVED
+    if (reviewStatus === "APPROVED") {
+      updateData.approverName = tenantCtx.user.fullName;
+      updateData.approverEmail = tenantCtx.user.email;
+      updateData.approvedAt = new Date();
+      updateData.reviewedAt = new Date();
+    } else if (reviewStatus === "CHANGES_REQUESTED") {
+      updateData.reviewedAt = new Date();
+    }
 
     const updated = await prisma.creativeAsset.update({
       where: { id },
-      data: {
-        title: title !== undefined ? title : existing.title,
-        assetType: assetType !== undefined ? assetType : existing.assetType,
-        dimensions: dimensions !== undefined ? dimensions : existing.dimensions,
-        fileUrl: fileUrl !== undefined ? fileUrl : existing.fileUrl,
-        clientId: clientId !== undefined ? (clientId || null) : existing.clientId,
-        reviewStatus: reviewStatus ?? existing.reviewStatus,
-        clientFeedback: clientFeedback !== undefined ? clientFeedback : existing.clientFeedback,
-        reviewedAt: reviewStatus === "APPROVED" ? new Date() : existing.reviewedAt,
+      data: updateData,
+      include: {
+        client: true,
+        versions: { orderBy: { versionNumber: "desc" } },
+        comments: {
+          where: tenantCtx.isClientUser ? { isInternal: false } : {},
+          orderBy: { createdAt: "asc" },
+        },
       },
-      include: { client: true },
     });
+
+    // If client requested changes or provided feedback, create comment automatically
+    if (clientFeedback && clientFeedback.trim()) {
+      await prisma.creativeComment.create({
+        data: {
+          tenantId: tenantCtx.tenant.id,
+          assetId: id,
+          versionNumber: updated.version,
+          authorName: tenantCtx.user.fullName,
+          authorRole: tenantCtx.primaryRole,
+          content: clientFeedback.trim(),
+          isInternal: false,
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, data: updated });
   } catch (err: any) {
@@ -85,6 +162,13 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Clients cannot delete creative assets" },
+        { status: 403 }
+      );
+    }
+
     const existing = await prisma.creativeAsset.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
     });
@@ -103,3 +187,4 @@ export async function DELETE(
     );
   }
 }
+

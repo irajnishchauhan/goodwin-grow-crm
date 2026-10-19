@@ -19,8 +19,37 @@ import {
   Trash2,
   User,
   Save,
+  AlertTriangle,
+  Clock,
+  IndianRupee,
+  Activity as ActivityIcon,
+  Calendar,
+  Layers,
+  ChevronRight,
+  MessageSquare,
+  Sparkles,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+
+const serviceOptions = [
+  "Full Stack Growth Marketing Retainer",
+  "Ceramic Detailing SEO & Meta Ads",
+  "Luxury Furnishing Omnichannel Brand Campaign",
+  "Performance Ads & Meta Funnels",
+  "Social Media Content & Reels Retainer",
+  "SEO & Google Business Profile Optimization",
+  "High-Converting Landing Page & WhatsApp Bot",
+];
+
+const lostReasonOptions = [
+  "Competitor chosen (pricing)",
+  "Competitor chosen (features/offer)",
+  "Budget constraints / price objection",
+  "Postponed / paused marketing expansion",
+  "Decided to build in-house",
+  "Unresponsive / ghosted after proposal",
+  "Mismatch in agency service scope",
+];
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<any[]>([]);
@@ -30,22 +59,28 @@ export default function LeadsPage() {
   const [priorityFilter, setPriorityFilter] = useState("ALL");
   const [assignedOwnerFilter, setAssignedOwnerFilter] = useState("ALL");
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
 
-  // Create Lead Modal
+  // Create Lead Modal State
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState("Website Inbound");
+  const [serviceRequired, setServiceRequired] = useState(serviceOptions[0]);
+  const [dealValue, setDealValue] = useState<number | string>(150000);
+  const [nextFollowUp, setNextFollowUp] = useState("2026-10-22T15:00");
   const [priority, setPriority] = useState("MEDIUM");
-  const [score, setScore] = useState(50);
+  const [score, setScore] = useState(65);
   const [assignedOwnerId, setAssignedOwnerId] = useState("");
+  const [clientId, setClientId] = useState("");
   const [tagsInput, setTagsInput] = useState("");
 
-  // Edit Lead Modal
+  // Edit Lead Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<any | null>(null);
   const [editFirstName, setEditFirstName] = useState("");
@@ -57,14 +92,23 @@ export default function LeadsPage() {
   const [editPriority, setEditPriority] = useState("MEDIUM");
   const [editScore, setEditScore] = useState(50);
   const [editSource, setEditSource] = useState("");
+  const [editServiceRequired, setEditServiceRequired] = useState("");
+  const [editDealValue, setEditDealValue] = useState<number | string>(0);
+  const [editNextFollowUp, setEditNextFollowUp] = useState("");
+  const [editLostReason, setEditLostReason] = useState("");
   const [editAssignedOwnerId, setEditAssignedOwnerId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Lead Detail & Activity History Slideover / Modal
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [activeLeadDetail, setActiveLeadDetail] = useState<any | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Convert Lead Modal
   const [convertModalOpen, setConvertModalOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
-  const [dealTitle, setDealTitle] = useState("");
-  const [dealValue, setDealValue] = useState(100000);
+  const [convertDealTitle, setConvertDealTitle] = useState("");
+  const [convertDealValue, setConvertDealValue] = useState(100000);
   const [converting, setConverting] = useState(false);
 
   // CSV Import Modal
@@ -75,6 +119,7 @@ export default function LeadsPage() {
 
   useEffect(() => {
     fetchTeam();
+    fetchClients();
   }, []);
 
   useEffect(() => {
@@ -90,6 +135,16 @@ export default function LeadsPage() {
       }
     } catch (err) {
       console.error("Failed to load team members", err);
+    }
+  }
+
+  async function fetchClients() {
+    try {
+      const res = await fetch("/api/agency/clients");
+      const data = await res.json();
+      if (data.success) setClients(data.data || []);
+    } catch (err) {
+      console.error(err);
     }
   }
 
@@ -116,6 +171,7 @@ export default function LeadsPage() {
   async function handleCreateLead(e: React.FormEvent) {
     e.preventDefault();
     setCreating(true);
+    setDuplicateWarning(null);
 
     try {
       const tags = tagsInput
@@ -133,14 +189,25 @@ export default function LeadsPage() {
           email: email || null,
           phone: phone || null,
           source,
+          serviceRequired: serviceRequired || null,
+          dealValue: dealValue ? Number(dealValue) : null,
+          nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : null,
           priority,
           score,
           tags,
           assignedOwnerId: assignedOwnerId || null,
+          clientId: clientId || null,
         }),
       });
 
       const data = await res.json();
+
+      if (res.status === 409 || data.isDuplicate) {
+        setDuplicateWarning(data.error || "Duplicate lead detected: A lead with this email or phone number already exists.");
+        setCreating(false);
+        return;
+      }
+
       if (data.success) {
         setCreateModalOpen(false);
         resetCreateForm();
@@ -162,10 +229,35 @@ export default function LeadsPage() {
     setEmail("");
     setPhone("");
     setSource("Website Inbound");
+    setServiceRequired(serviceOptions[0]);
+    setDealValue(150000);
+    setNextFollowUp("2026-10-22T15:00");
     setPriority("MEDIUM");
-    setScore(50);
+    setScore(65);
     setAssignedOwnerId("");
+    setClientId("");
     setTagsInput("");
+    setDuplicateWarning(null);
+  }
+
+  async function openLeadDetail(leadId: string) {
+    setDetailModalOpen(true);
+    setLoadingDetail(true);
+    try {
+      const res = await fetch(`/api/leads/${leadId}`);
+      const data = await res.json();
+      if (data.success) {
+        setActiveLeadDetail(data.data);
+      } else {
+        alert(data.error || "Failed to load lead details");
+        setDetailModalOpen(false);
+      }
+    } catch {
+      alert("Error fetching lead history");
+      setDetailModalOpen(false);
+    } finally {
+      setLoadingDetail(false);
+    }
   }
 
   function openEdit(lead: any) {
@@ -179,6 +271,12 @@ export default function LeadsPage() {
     setEditPriority(lead.priority);
     setEditScore(lead.score || 50);
     setEditSource(lead.source || "");
+    setEditServiceRequired(lead.serviceRequired || serviceOptions[0]);
+    setEditDealValue(lead.dealValue || 0);
+    setEditNextFollowUp(
+      lead.nextFollowUp ? new Date(lead.nextFollowUp).toISOString().slice(0, 16) : ""
+    );
+    setEditLostReason(lead.lostReason || "");
     setEditAssignedOwnerId(lead.assignedOwnerId || "");
     setEditModalOpen(true);
   }
@@ -202,6 +300,10 @@ export default function LeadsPage() {
           priority: editPriority,
           score: editScore,
           source: editSource,
+          serviceRequired: editServiceRequired || null,
+          dealValue: editDealValue ? Number(editDealValue) : null,
+          nextFollowUp: editNextFollowUp ? new Date(editNextFollowUp) : null,
+          lostReason: editStatus === "LOST" ? editLostReason : null,
           assignedOwnerId: editAssignedOwnerId || null,
         }),
       });
@@ -212,7 +314,7 @@ export default function LeadsPage() {
         setEditingLead(null);
         fetchLeads();
       } else {
-        alert(data.error || "Failed to update lead (RBAC verification error)");
+        alert(data.error || "Failed to update lead");
       }
     } catch {
       alert("Error updating lead");
@@ -237,6 +339,10 @@ export default function LeadsPage() {
           setEditModalOpen(false);
           setEditingLead(null);
         }
+        if (activeLeadDetail && activeLeadDetail.id === leadId) {
+          setDetailModalOpen(false);
+          setActiveLeadDetail(null);
+        }
         fetchLeads();
       } else {
         alert(data.error || "Failed to delete lead (Insufficient permissions / RBAC)");
@@ -248,8 +354,8 @@ export default function LeadsPage() {
 
   function openConvert(lead: any) {
     setSelectedLead(lead);
-    setDealTitle(`${lead.companyName || `${lead.firstName} ${lead.lastName}`} - Deal`);
-    setDealValue(100000);
+    setConvertDealTitle(`${lead.companyName || `${lead.firstName} ${lead.lastName}`} - ${lead.serviceRequired || "Deal"}`);
+    setConvertDealValue(lead.dealValue || 100000);
     setConvertModalOpen(true);
   }
 
@@ -262,7 +368,7 @@ export default function LeadsPage() {
       const res = await fetch(`/api/leads/${selectedLead.id}/convert`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealTitle, dealValue }),
+        body: JSON.stringify({ dealTitle: convertDealTitle, dealValue: convertDealValue }),
       });
 
       const data = await res.json();
@@ -298,8 +404,10 @@ export default function LeadsPage() {
           email: parts[3] || null,
           phone: parts[4] || null,
           source: parts[5] || "CSV Import",
-          priority: parts[6] || "MEDIUM",
-          score: Number(parts[7]) || 60,
+          serviceRequired: parts[6] || serviceOptions[0],
+          dealValue: Number(parts[7]) || 100000,
+          priority: parts[8] || "MEDIUM",
+          score: Number(parts[9]) || 60,
         };
       });
 
@@ -325,53 +433,89 @@ export default function LeadsPage() {
 
   function exportCSV() {
     if (leads.length === 0) return;
-    const headers = ["First Name", "Last Name", "Company", "Email", "Phone", "Status", "Priority", "Score", "Source", "Assigned Owner"];
+    const headers = [
+      "First Name",
+      "Last Name",
+      "Company",
+      "Email",
+      "Phone",
+      "Source",
+      "Service Required",
+      "Deal Value (INR)",
+      "Owner",
+      "Status",
+      "Priority",
+      "Next Follow-Up",
+      "Lost Reason",
+    ];
     const rows = leads.map((l) => [
       l.firstName,
       l.lastName,
       l.companyName || "",
       l.email || "",
       l.phone || "",
+      l.source || "",
+      l.serviceRequired || "",
+      l.dealValue || 0,
+      l.assignedOwner?.fullName || "Unassigned",
       l.status,
       l.priority,
-      l.score,
-      l.source || "",
-      l.assignedOwner?.fullName || "Unassigned",
+      l.nextFollowUp ? new Date(l.nextFollowUp).toISOString() : "",
+      l.lostReason || "",
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `crm_leads_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `goodwin_leads_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   }
+
+  const now = new Date();
 
   const filteredLeads = leads.filter(
     (l) =>
       `${l.firstName} ${l.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
       (l.companyName && l.companyName.toLowerCase().includes(search.toLowerCase())) ||
       (l.email && l.email.toLowerCase().includes(search.toLowerCase())) ||
-      (l.tags && Array.isArray(l.tags) && l.tags.some((t: string) => t.toLowerCase().includes(search.toLowerCase())))
+      (l.serviceRequired && l.serviceRequired.toLowerCase().includes(search.toLowerCase())) ||
+      (l.source && l.source.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const overdueFollowUps = leads.filter(
+    (l) => l.nextFollowUp && new Date(l.nextFollowUp) < now && !["CONVERTED", "LOST"].includes(l.status)
   );
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Lead Management</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Agency Leads & Pipeline</h1>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              Goodwin OS
+            </span>
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Capture, qualify, score, assign to sales team members, and convert prospects.
+            Track prospect source, requested agency service, deal value, account owner, follow-ups, and activity history.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {overdueFollowUps.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold animate-pulse">
+              <Clock className="w-3.5 h-3.5 text-amber-600" />
+              <span>{overdueFollowUps.length} Overdue Follow-up{overdueFollowUps.length > 1 ? "s" : ""}</span>
+            </div>
+          )}
+
           <button
             onClick={() => {
-              setImportRawText("First Name,Last Name,Company,Email,Phone,Source,Priority,Score\nNikhil,Sharma,Nexus Auto,nikhil@nexusauto.com,+91 98777 66554,Inbound,HIGH,80\nPooja,Iyer,Iyer Trading,pooja@iyertrade.com,+91 98888 77665,Expo,MEDIUM,65");
+              setImportRawText("First Name,Last Name,Company,Email,Phone,Source,Service Required,Deal Value,Priority,Score\nNikhil,Sharma,Nexus Auto Detailing,nikhil@nexusauto.com,+91 98777 66554,Inbound,Ceramic Detailing SEO & Meta Ads,180000,HIGH,80\nPooja,Iyer,Iyer Living Furnishings,pooja@iyerliving.com,+91 98888 77665,Meta Ads,Luxury Furnishing Omnichannel Brand Campaign,250000,URGENT,90");
               setImportResult(null);
               setImportModalOpen(true);
             }}
@@ -403,7 +547,7 @@ export default function LeadsPage() {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search leads by name, email, company..."
+            placeholder="Search by name, company, service, or source..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition"
@@ -413,18 +557,18 @@ export default function LeadsPage() {
         <div className="flex items-center gap-3 overflow-x-auto pb-1 md:pb-0">
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
             <Filter className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Assigned:</span>
+            <span>Owner:</span>
           </div>
           <select
             value={assignedOwnerFilter}
             onChange={(e) => setAssignedOwnerFilter(e.target.value)}
             className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
           >
-            <option value="ALL">All Team Members</option>
-            <option value="me">👤 Assigned to Me</option>
+            <option value="ALL">All Owners</option>
+            <option value="me">Assigned to Me</option>
             {teamMembers.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.fullName} ({m.primaryRole})
+                {m.fullName}
               </option>
             ))}
           </select>
@@ -469,13 +613,13 @@ export default function LeadsPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-500 uppercase text-[10px] tracking-wider">
-                <th className="py-3.5 px-4">Lead Name</th>
-                <th className="py-3.5 px-4">Company</th>
-                <th className="py-3.5 px-4">Contact Info</th>
-                <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4">Priority</th>
-                <th className="py-3.5 px-4">Score</th>
-                <th className="py-3.5 px-4">Assigned To</th>
+                <th className="py-3.5 px-4">Lead & Company</th>
+                <th className="py-3.5 px-3">Service Required</th>
+                <th className="py-3.5 px-3">Deal Value</th>
+                <th className="py-3.5 px-3">Source</th>
+                <th className="py-3.5 px-3">Owner</th>
+                <th className="py-3.5 px-3">Next Follow-Up</th>
+                <th className="py-3.5 px-3">Status</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -483,184 +627,313 @@ export default function LeadsPage() {
               {loading ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400">
-                    Loading leads...
+                    Loading agency leads...
                   </td>
                 </tr>
               ) : filteredLeads.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400">
-                    No leads found. Create your first lead to start building your sales pipeline!
+                    No leads match the filters. Click "Create New Lead" to add a prospective client.
                   </td>
                 </tr>
               ) : (
-                filteredLeads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-slate-50/60 transition group">
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {lead.firstName} {lead.lastName}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {lead.companyName ? (
-                        <div className="flex items-center gap-1.5 text-slate-800 font-medium">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{lead.companyName}</span>
+                filteredLeads.map((lead) => {
+                  const isFollowUpOverdue = Boolean(
+                    lead.nextFollowUp &&
+                      new Date(lead.nextFollowUp) < now &&
+                      !["CONVERTED", "LOST"].includes(lead.status)
+                  );
+
+                  return (
+                    <tr
+                      key={lead.id}
+                      className={`hover:bg-slate-50/60 transition group ${
+                        isFollowUpOverdue ? "bg-amber-50/30" : ""
+                      }`}
+                    >
+                      {/* Name & Company */}
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => openLeadDetail(lead.id)}
+                          className="font-bold text-slate-900 hover:text-emerald-700 text-left transition flex items-center gap-1 group/btn"
+                        >
+                          <span>{lead.firstName} {lead.lastName}</span>
+                          <ChevronRight className="w-3 h-3 text-slate-300 group-hover/btn:text-emerald-600 group-hover/btn:translate-x-0.5 transition" />
+                        </button>
+                        <div className="flex items-center gap-1.5 text-slate-500 text-[11px] mt-0.5">
+                          {lead.companyName && (
+                            <span className="font-medium text-slate-700 flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-slate-400" />
+                              {lead.companyName}
+                            </span>
+                          )}
+                          {lead.email && (
+                            <span className="text-slate-400 truncate max-w-[150px]">
+                              • {lead.email}
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 space-y-0.5">
-                      {lead.email && (
-                        <div className="flex items-center gap-1.5 text-slate-600">
-                          <Mail className="w-3 h-3 text-slate-400" />
-                          <span>{lead.email}</span>
+                      </td>
+
+                      {/* Service Required */}
+                      <td className="py-3.5 px-3">
+                        <div className="font-semibold text-slate-800 line-clamp-1 max-w-[180px]">
+                          {lead.serviceRequired || "Full Stack Marketing"}
                         </div>
-                      )}
-                      {lead.phone && (
-                        <div className="flex items-center gap-1.5 text-slate-500">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          <span>{lead.phone}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          lead.status === "QUALIFIED"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : lead.status === "NEW"
-                            ? "bg-blue-100 text-blue-800"
-                            : lead.status === "CONVERTED"
-                            ? "bg-teal-100 text-teal-800"
-                            : lead.status === "LOST"
-                            ? "bg-rose-100 text-rose-800"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {lead.status}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          lead.priority === "URGENT"
-                            ? "bg-rose-100 text-rose-800"
-                            : lead.priority === "HIGH"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {lead.priority}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                        <span className="text-xs">{lead.score}</span>
-                        <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${Math.min(100, lead.score)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                        <User className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{lead.assignedOwner?.fullName || "Unassigned"}</span>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {lead.status !== "CONVERTED" && (
-                          <button
-                            onClick={() => openConvert(lead)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] transition cursor-pointer"
-                          >
-                            Convert
-                          </button>
+                        {lead.client && (
+                          <div className="text-[10px] text-emerald-700 font-bold truncate">
+                            Linked: {lead.client.name}
+                          </div>
                         )}
-                        <button
-                          onClick={() => openEdit(lead)}
-                          title="Edit Lead"
-                          className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-emerald-600 cursor-pointer"
+                      </td>
+
+                      {/* Deal Value */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <div className="font-bold text-slate-900">
+                          {lead.dealValue ? `₹${Number(lead.dealValue).toLocaleString("en-IN")}` : "—"}
+                        </div>
+                        <div className="text-[10px] text-slate-400">Retainer / Deal</div>
+                      </td>
+
+                      {/* Source */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium text-[10px]">
+                          {lead.source || "Inbound"}
+                        </span>
+                      </td>
+
+                      {/* Owner */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1 text-slate-700 font-medium">
+                          <User className="w-3 h-3 text-slate-400" />
+                          <span>{lead.assignedOwner?.fullName || "Unassigned"}</span>
+                        </div>
+                      </td>
+
+                      {/* Next Follow-Up */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        {lead.nextFollowUp ? (
+                          <div className={isFollowUpOverdue ? "text-amber-700 font-bold" : "text-slate-600"}>
+                            <div className="flex items-center gap-1 text-[11px]">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              <span>{formatDate(lead.nextFollowUp)}</span>
+                            </div>
+                            {isFollowUpOverdue && (
+                              <span className="inline-block text-[9px] font-black text-amber-700 bg-amber-100 px-1 rounded">
+                                Overdue Follow-up
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+
+                      {/* Status & Lost Reason */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            lead.status === "QUALIFIED"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : lead.status === "NEW"
+                              ? "bg-blue-100 text-blue-800"
+                              : lead.status === "CONVERTED"
+                              ? "bg-teal-100 text-teal-800"
+                              : lead.status === "LOST"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteLead(lead.id, `${lead.firstName} ${lead.lastName}`)}
-                          title="Delete Lead"
-                          className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {lead.status}
+                        </span>
+
+                        {lead.status === "LOST" && lead.lostReason && (
+                          <div className="text-[10px] text-rose-700 font-medium max-w-[130px] truncate mt-0.5" title={lead.lostReason}>
+                            Reason: {lead.lostReason}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openLeadDetail(lead.id)}
+                            title="View Activity History"
+                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-emerald-700 cursor-pointer"
+                          >
+                            <ActivityIcon className="w-3.5 h-3.5" />
+                          </button>
+
+                          {lead.status !== "CONVERTED" && (
+                            <button
+                              onClick={() => openConvert(lead)}
+                              className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[10px] transition cursor-pointer"
+                            >
+                              Convert
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openEdit(lead)}
+                            title="Edit Lead"
+                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-emerald-600 cursor-pointer"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteLead(lead.id, `${lead.firstName} ${lead.lastName}`)}
+                            title="Delete Lead"
+                            className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* CSV Import Modal */}
-      {importModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                <h2 className="text-base font-bold text-slate-900">Bulk CSV Lead Ingestion</h2>
-              </div>
-              <button
-                onClick={() => setImportModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCsvImport} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Paste Raw CSV Records (Header Row Required)
-                </label>
-                <textarea
-                  rows={6}
-                  required
-                  value={importRawText}
-                  onChange={(e) => setImportRawText(e.target.value)}
-                  className="w-full font-mono text-[11px] p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                ></textarea>
-              </div>
-
-              {importResult && (
-                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900 space-y-1">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Import Completed</span>
+      {/* Lead Detail & Activity History Slideover / Modal */}
+      {detailModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-end p-0">
+          <div className="bg-white w-full max-w-xl h-full shadow-2xl border-l border-slate-200 overflow-y-auto flex flex-col justify-between">
+            <div>
+              {/* Header */}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-xs z-10">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black">
+                    {activeLeadDetail ? activeLeadDetail.firstName.charAt(0) : "L"}
                   </div>
-                  <div>• Successfully Created: {importResult.count} leads</div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">
+                      {activeLeadDetail ? `${activeLeadDetail.firstName} ${activeLeadDetail.lastName}` : "Lead History"}
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      {activeLeadDetail?.companyName || "Independent Prospect"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setDetailModalOpen(false);
+                    setActiveLeadDetail(null);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {loadingDetail || !activeLeadDetail ? (
+                <div className="p-12 text-center text-slate-400">Loading lead activity timeline...</div>
+              ) : (
+                <div className="p-6 space-y-6">
+                  {/* Lead Summary Card */}
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase">Service Required:</span>
+                        <span className="font-bold text-slate-900">{activeLeadDetail.serviceRequired || "General Retainer"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase">Deal Value:</span>
+                        <span className="font-bold text-emerald-700">
+                          {activeLeadDetail.dealValue ? `₹${Number(activeLeadDetail.dealValue).toLocaleString("en-IN")}` : "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase">Account Owner:</span>
+                        <span className="font-semibold text-slate-800">{activeLeadDetail.assignedOwner?.fullName || "Unassigned"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase">Lead Source:</span>
+                        <span className="font-semibold text-slate-800">{activeLeadDetail.source || "Inbound"}</span>
+                      </div>
+                    </div>
+
+                    {activeLeadDetail.status === "LOST" && activeLeadDetail.lostReason && (
+                      <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900">
+                        <span className="font-bold block">Lost Reason:</span>
+                        <span>{activeLeadDetail.lostReason}</span>
+                      </div>
+                    )}
+
+                    {activeLeadDetail.nextFollowUp && (
+                      <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200/60">
+                        <span className="text-slate-500 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Next Follow-Up:</span>
+                        </span>
+                        <span className="font-bold text-slate-900">{formatDate(activeLeadDetail.nextFollowUp)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Activity History Timeline */}
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                      <ActivityIcon className="w-4 h-4 text-emerald-600" />
+                      <span>Activity History & Audit Log ({activeLeadDetail.activities?.length || 0})</span>
+                    </h3>
+
+                    {(!activeLeadDetail.activities || activeLeadDetail.activities.length === 0) ? (
+                      <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
+                        No activity recorded yet for this lead. Changes to status and follow-ups will log here automatically.
+                      </div>
+                    ) : (
+                      <div className="relative border-l-2 border-slate-200 ml-3 space-y-4 pl-4 py-2">
+                        {activeLeadDetail.activities.map((act: any) => (
+                          <div key={act.id} className="relative group">
+                            <span className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-white" />
+                            <div className="text-xs font-bold text-slate-900 flex items-center justify-between">
+                              <span>{act.title}</span>
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                {formatDate(act.occurredAt || act.createdAt)}
+                              </span>
+                            </div>
+                            {act.description && (
+                              <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                                {act.description}
+                              </p>
+                            )}
+                            {act.performedBy && (
+                              <div className="text-[10px] text-slate-400 mt-1">
+                                Performed by: {act.performedBy.fullName}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
+            </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setImportModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
-                >
-                  Close
-                </button>
-                <button
-                  type="submit"
-                  disabled={importing}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
-                >
-                  {importing ? "Importing..." : "Process Import"}
-                </button>
-              </div>
-            </form>
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
+              <button
+                onClick={() => {
+                  if (activeLeadDetail) openEdit(activeLeadDetail);
+                  setDetailModalOpen(false);
+                }}
+                className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Edit Lead Info
+              </button>
+              <button
+                onClick={() => setDetailModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold"
+              >
+                Close Drawer
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -668,9 +941,12 @@ export default function LeadsPage() {
       {/* Create Lead Modal */}
       {createModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-100">
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h2 className="text-base font-bold text-slate-900">Add New Prospect Lead</h2>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Add New Prospect Lead</h2>
+                <p className="text-xs text-slate-500">Includes duplicate detection and service requirements.</p>
+              </div>
               <button
                 onClick={() => setCreateModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -678,6 +954,17 @@ export default function LeadsPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Duplicate Warning Banner */}
+            {duplicateWarning && (
+              <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs font-bold text-rose-950">Duplicate Lead Prevention</h4>
+                  <p className="text-[11px] text-rose-800 mt-0.5">{duplicateWarning}</p>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleCreateLead} className="space-y-3.5">
               <div className="grid grid-cols-2 gap-3">
@@ -688,7 +975,7 @@ export default function LeadsPage() {
                     required
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
                 <div>
@@ -698,19 +985,19 @@ export default function LeadsPage() {
                     required
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Company Name</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Company / Brand Name</label>
                 <input
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="e.g. Apex Corporation"
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  placeholder="e.g. Apex Detailing Studios"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                 />
               </div>
 
@@ -721,8 +1008,8 @@ export default function LeadsPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="prospect@company.com"
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    placeholder="prospect@brand.com"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
                 <div>
@@ -732,27 +1019,86 @@ export default function LeadsPage() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+91 98765 43210"
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              {/* Service Required */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Service Required *</label>
+                <select
+                  value={serviceRequired}
+                  onChange={(e) => setServiceRequired(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-semibold text-slate-800"
+                >
+                  {serviceOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Deal Value (₹ INR)</label>
+                  <input
+                    type="number"
+                    value={dealValue}
+                    onChange={(e) => setDealValue(e.target.value)}
+                    placeholder="150000"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Next Follow-Up</label>
+                  <input
+                    type="datetime-local"
+                    value={nextFollowUp}
+                    onChange={(e) => setNextFollowUp(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Source</label>
                   <input
                     type="text"
                     value={source}
                     onChange={(e) => setSource(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    placeholder="e.g. Website, Referral, Instagram"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Account Owner</label>
+                  <select
+                    value={assignedOwnerId}
+                    onChange={(e) => setAssignedOwnerId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  >
+                    <option value="">Leave Unassigned</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Priority</label>
                   <select
                     value={priority}
                     onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -760,46 +1106,22 @@ export default function LeadsPage() {
                     <option value="URGENT">Urgent</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Score (0-100)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={score}
-                    onChange={(e) => setScore(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                  />
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Link to Client Workspace</label>
+                  <select
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  >
+                    <option value="">None (New Standalone Prospect)</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Assigned Employee Owner
-                </label>
-                <select
-                  value={assignedOwnerId}
-                  onChange={(e) => setAssignedOwnerId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
-                >
-                  <option value="">Leave Unassigned</option>
-                  {teamMembers.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.fullName} ({m.primaryRole})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Tags (Comma-separated)</label>
-                <input
-                  type="text"
-                  value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
-                  placeholder="e.g. Enterprise, Inbound, OEM"
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                />
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
@@ -813,9 +1135,10 @@ export default function LeadsPage() {
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                 >
-                  {creating ? "Saving..." : "Save Lead"}
+                  {creating && <Clock className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Lead</span>
                 </button>
               </div>
             </form>
@@ -826,7 +1149,7 @@ export default function LeadsPage() {
       {/* Edit Lead Modal */}
       {editModalOpen && editingLead && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-100">
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h2 className="text-base font-bold text-slate-900">Edit Lead Record</h2>
               <button
@@ -846,7 +1169,7 @@ export default function LeadsPage() {
                     required
                     value={editFirstName}
                     onChange={(e) => setEditFirstName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
                 <div>
@@ -856,7 +1179,7 @@ export default function LeadsPage() {
                     required
                     value={editLastName}
                     onChange={(e) => setEditLastName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
               </div>
@@ -867,7 +1190,7 @@ export default function LeadsPage() {
                   type="text"
                   value={editCompanyName}
                   onChange={(e) => setEditCompanyName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                 />
               </div>
 
@@ -878,7 +1201,7 @@ export default function LeadsPage() {
                     type="email"
                     value={editEmail}
                     onChange={(e) => setEditEmail(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
                 <div>
@@ -887,18 +1210,18 @@ export default function LeadsPage() {
                     type="tel"
                     value={editPhone}
                     onChange={(e) => setEditPhone(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Pipeline Status</label>
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-bold text-slate-800"
                   >
                     <option value="NEW">New</option>
                     <option value="CONTACTED">Contacted</option>
@@ -908,12 +1231,13 @@ export default function LeadsPage() {
                     <option value="LOST">Lost</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Priority</label>
                   <select
                     value={editPriority}
                     onChange={(e) => setEditPriority(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
@@ -921,15 +1245,63 @@ export default function LeadsPage() {
                     <option value="URGENT">Urgent</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Lost Reason - displayed conditionally if status is LOST */}
+              {editStatus === "LOST" && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl space-y-2">
+                  <label className="block text-xs font-bold text-rose-900">
+                    Lost Reason (Required for Lost Pipeline Insights)
+                  </label>
+                  <select
+                    value={editLostReason}
+                    onChange={(e) => setEditLostReason(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-rose-300 rounded-xl focus:outline-none font-medium text-rose-950"
+                  >
+                    <option value="">Select lost reason</option>
+                    {lostReasonOptions.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Service Required */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Service Required</label>
+                <select
+                  value={editServiceRequired}
+                  onChange={(e) => setEditServiceRequired(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-medium text-slate-800"
+                >
+                  {serviceOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Score</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Deal Value (₹ INR)</label>
                   <input
                     type="number"
-                    min={0}
-                    max={100}
-                    value={editScore}
-                    onChange={(e) => setEditScore(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    value={editDealValue}
+                    onChange={(e) => setEditDealValue(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Next Follow-Up</label>
+                  <input
+                    type="datetime-local"
+                    value={editNextFollowUp}
+                    onChange={(e) => setEditNextFollowUp(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
               </div>
@@ -941,22 +1313,21 @@ export default function LeadsPage() {
                     type="text"
                     value={editSource}
                     onChange={(e) => setEditSource(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Assigned Employee Owner
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Account Owner</label>
                   <select
                     value={editAssignedOwnerId}
                     onChange={(e) => setEditAssignedOwnerId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
                   >
                     <option value="">Leave Unassigned</option>
                     {teamMembers.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.fullName} ({m.primaryRole})
+                        {m.fullName}
                       </option>
                     ))}
                   </select>
@@ -999,14 +1370,9 @@ export default function LeadsPage() {
       {/* Convert Lead Modal */}
       {convertModalOpen && selectedLead && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-100">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Convert Lead</h2>
-                <p className="text-xs text-slate-500">
-                  Converts {selectedLead.firstName} {selectedLead.lastName} into a Contact, Account Company, and Pipeline Deal.
-                </p>
-              </div>
+              <h2 className="text-base font-bold text-slate-900">Convert Lead to Deal & Account</h2>
               <button
                 onClick={() => setConvertModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -1017,37 +1383,29 @@ export default function LeadsPage() {
 
             <form onSubmit={handleConvert} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Opportunity / Deal Title *
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Deal Title</label>
                 <input
                   type="text"
                   required
-                  value={dealTitle}
-                  onChange={(e) => setDealTitle(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  value={convertDealTitle}
+                  onChange={(e) => setConvertDealTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-semibold text-slate-900"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Deal Value (₹ INR) *
-                </label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Deal Value (₹ INR)</label>
                 <input
                   type="number"
                   required
-                  min={0}
-                  value={dealValue}
-                  onChange={(e) => setDealValue(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  value={convertDealValue}
+                  onChange={(e) => setConvertDealValue(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-bold text-emerald-700"
                 />
               </div>
 
-              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-800 space-y-1">
-                <div className="font-bold">Conversion Summary:</div>
-                <div>• Create Contact: {selectedLead.firstName} {selectedLead.lastName}</div>
-                <div>• Create Company: {selectedLead.companyName || "Personal Account"}</div>
-                <div>• Place Deal in Default Sales Pipeline Stage 1</div>
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-900 leading-relaxed">
+                Converting this lead creates an enrolled Client Account, Contact, and Deal in the Goodwin Grow CRM pipeline.
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">
@@ -1061,9 +1419,71 @@ export default function LeadsPage() {
                 <button
                   type="submit"
                   disabled={converting}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                 >
                   {converting ? "Converting..." : "Complete Conversion"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <h2 className="text-base font-bold text-slate-900">Bulk CSV Lead Ingestion</h2>
+              </div>
+              <button
+                onClick={() => setImportModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCsvImport} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Paste Raw CSV Records (Header Row Required)
+                </label>
+                <textarea
+                  rows={6}
+                  required
+                  value={importRawText}
+                  onChange={(e) => setImportRawText(e.target.value)}
+                  className="w-full font-mono text-[11px] p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                ></textarea>
+              </div>
+
+              {importResult && (
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Import Completed</span>
+                  </div>
+                  <div>• Successfully Created: {importResult.count} leads</div>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setImportModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={importing}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+                >
+                  {importing ? "Importing..." : "Process Import"}
                 </button>
               </div>
             </form>

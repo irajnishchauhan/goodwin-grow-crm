@@ -18,11 +18,22 @@ export interface TenantContext {
     id: string;
     isOwner: boolean;
     status: string;
+    agencyClientId?: string | null;
+    agencyClient?: {
+      id: string;
+      name: string;
+      brandName?: string | null;
+    } | null;
   };
   roles: string[];
   permissions: string[];
   isPlatformAdmin: boolean;
+  isClientUser: boolean;
+  agencyClientId: string | null;
+  primaryRole: "Super Admin" | "Agency Admin" | "Account Manager" | "Designer" | "Client" | "Member";
   hasPermission: (code: string) => boolean;
+  assertClientAccess: (targetClientId?: string | null) => void;
+  getClientWhereClause: (baseWhere?: Record<string, any>) => Record<string, any>;
 }
 
 export async function getTenantContext(customToken?: string): Promise<TenantContext | null> {
@@ -64,12 +75,38 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
     });
   });
 
-  // If owner or company admin, grant wildcard permissions
-  if (membership.isOwner || roles.includes("Company Admin") || roles.includes("Company Owner")) {
+  // If owner or company admin or agency admin, grant wildcard permissions
+  const isAgencyAdmin =
+    membership.isOwner ||
+    roles.includes("Agency Admin") ||
+    roles.includes("Company Admin") ||
+    roles.includes("Company Owner");
+
+  if (isAgencyAdmin) {
     permissionSet.add("*");
   }
 
   const permissions = Array.from(permissionSet);
+
+  // Determine client role status and primary role
+  const isClientUser = Boolean(
+    roles.includes("Client") ||
+    membership.agencyClientId
+  );
+  const agencyClientId = membership.agencyClientId || null;
+
+  let primaryRole: TenantContext["primaryRole"] = "Member";
+  if (session.user.isPlatformAdmin) {
+    primaryRole = "Super Admin";
+  } else if (isAgencyAdmin) {
+    primaryRole = "Agency Admin";
+  } else if (roles.includes("Account Manager") || roles.includes("Sales Manager")) {
+    primaryRole = "Account Manager";
+  } else if (roles.includes("Designer") || roles.includes("Lead Designer")) {
+    primaryRole = "Designer";
+  } else if (isClientUser) {
+    primaryRole = "Client";
+  }
 
   return {
     user: {
@@ -88,13 +125,38 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
       id: membership.id,
       isOwner: membership.isOwner,
       status: membership.status,
+      agencyClientId: membership.agencyClientId,
+      agencyClient: membership.agencyClient,
     },
     roles,
     permissions,
     isPlatformAdmin: session.user.isPlatformAdmin,
+    isClientUser,
+    agencyClientId,
+    primaryRole,
     hasPermission: (code: string) => {
-      if (membership.isOwner || permissions.includes("*")) return true;
+      if (session.user.isPlatformAdmin || membership.isOwner || permissions.includes("*")) return true;
       return permissions.includes(code);
+    },
+    assertClientAccess: (targetClientId?: string | null) => {
+      if (isClientUser) {
+        if (!agencyClientId) {
+          throw new Error("Client account is not assigned to an active workspace client.");
+        }
+        if (targetClientId && targetClientId !== agencyClientId) {
+          throw new Error("Forbidden: Cross-client access is strictly prohibited.");
+        }
+      }
+    },
+    getClientWhereClause: (baseWhere: Record<string, any> = {}) => {
+      const where: Record<string, any> = {
+        tenantId: membership.tenant.id,
+        ...baseWhere,
+      };
+      if (isClientUser && agencyClientId) {
+        where.clientId = agencyClientId;
+      }
+      return where;
     },
   };
 }

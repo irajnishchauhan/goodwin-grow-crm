@@ -16,6 +16,8 @@ export async function GET(
     where: { id, tenantId: tenantCtx.tenant.id },
     include: {
       assignedTo: { select: { id: true, fullName: true, email: true } },
+      client: { select: { id: true, name: true, brandName: true } },
+      project: { select: { id: true, name: true } },
       lead: true,
       contact: true,
       deal: true,
@@ -26,7 +28,20 @@ export async function GET(
     return NextResponse.json({ success: false, error: "Task not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ success: true, data: task });
+  if (tenantCtx.isClientUser && task.clientId !== tenantCtx.agencyClientId) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden: Cannot view another client's task" },
+      { status: 403 }
+    );
+  }
+
+  const now = new Date();
+  const enrichedTask = {
+    ...task,
+    isOverdue: Boolean(task.dueDate && new Date(task.dueDate) < now && task.status !== "COMPLETED"),
+  };
+
+  return NextResponse.json({ success: true, data: enrichedTask });
 }
 
 export async function PUT(
@@ -52,21 +67,50 @@ export async function PUT(
       return NextResponse.json({ success: false, error: "Task not found" }, { status: 404 });
     }
 
+    if (tenantCtx.isClientUser && task.clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cannot edit another client's task" },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
-    const { title, description, dueDate, priority, status, assignedToId } = body;
+    const {
+      title,
+      description,
+      dueDate,
+      priority,
+      status,
+      assignedToId,
+      checklist,
+      attachments,
+      isRecurring,
+      recurringInterval,
+      clientId,
+      projectId,
+    } = body;
+
+    const updateData: any = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
+    if (priority !== undefined) updateData.priority = priority;
+    if (status !== undefined) updateData.status = status;
+    if (assignedToId !== undefined) updateData.assignedToId = assignedToId;
+    if (checklist !== undefined) updateData.checklist = checklist;
+    if (attachments !== undefined) updateData.attachments = attachments;
+    if (isRecurring !== undefined) updateData.isRecurring = isRecurring;
+    if (recurringInterval !== undefined) updateData.recurringInterval = recurringInterval;
+    if (!tenantCtx.isClientUser && clientId !== undefined) updateData.clientId = clientId || null;
+    if (!tenantCtx.isClientUser && projectId !== undefined) updateData.projectId = projectId || null;
 
     const updated = await prisma.task.update({
       where: { id: task.id },
-      data: {
-        title: title ?? task.title,
-        description: description !== undefined ? description : task.description,
-        dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : task.dueDate,
-        priority: priority ?? task.priority,
-        status: status ?? task.status,
-        assignedToId: assignedToId !== undefined ? assignedToId : task.assignedToId,
-      },
+      data: updateData,
       include: {
         assignedTo: { select: { id: true, fullName: true, email: true } },
+        client: { select: { id: true, name: true, brandName: true } },
+        project: { select: { id: true, name: true } },
       },
     });
 

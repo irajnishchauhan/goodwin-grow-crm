@@ -14,17 +14,28 @@ export async function GET(req: Request) {
 
   const whereClause: any = { tenantId: tenantCtx.tenant.id };
 
-  if (status && status !== "ALL") {
-    whereClause.status = status;
-  }
+  // Client Isolation: Client user can only see their own client profile
+  if (tenantCtx.isClientUser) {
+    if (!tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: No client associated with account" },
+        { status: 403 }
+      );
+    }
+    whereClause.id = tenantCtx.agencyClientId;
+  } else {
+    if (status && status !== "ALL") {
+      whereClause.status = status;
+    }
 
-  if (q) {
-    whereClause.OR = [
-      { name: { contains: q, mode: "insensitive" } },
-      { brandName: { contains: q, mode: "insensitive" } },
-      { industry: { contains: q, mode: "insensitive" } },
-      { accountManagerName: { contains: q, mode: "insensitive" } },
-    ];
+    if (q) {
+      whereClause.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { brandName: { contains: q, mode: "insensitive" } },
+        { industry: { contains: q, mode: "insensitive" } },
+        { accountManagerName: { contains: q, mode: "insensitive" } },
+      ];
+    }
   }
 
   const clients = await prisma.agencyClient.findMany({
@@ -52,6 +63,13 @@ export async function POST(req: Request) {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot create agency clients" },
+        { status: 403 }
+      );
     }
 
     const tenantId = tenantCtx.tenant.id;

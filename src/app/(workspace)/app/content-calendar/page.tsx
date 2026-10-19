@@ -22,7 +22,14 @@ import {
   Trash2,
   Loader2,
   Save,
+  AlertTriangle,
+  UserCheck,
+  LayoutGrid,
+  List,
+  Search,
+  Check,
 } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 interface ContentPost {
   id: string;
@@ -33,6 +40,10 @@ interface ContentPost {
   postType: string;
   scheduledDate?: string | null;
   status: string;
+  ownerName?: string | null;
+  deadline?: string | null;
+  approvalStatus?: string | null;
+  isOverdueApproval?: boolean;
   festivalOrEvent?: string | null;
   mediaUrl?: string | null;
   reach: number;
@@ -61,6 +72,9 @@ export default function ContentCalendarPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState("ALL");
   const [selectedPlatform, setSelectedPlatform] = useState("ALL");
+  const [selectedApprovalStatus, setSelectedApprovalStatus] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewFormat, setViewFormat] = useState<"GRID" | "LIST">("GRID");
   const [composerOpen, setComposerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -72,6 +86,9 @@ export default function ContentCalendarPage() {
   const [clientId, setClientId] = useState("");
   const [platform, setPlatform] = useState("INSTAGRAM");
   const [postType, setPostType] = useState("Carousel");
+  const [ownerName, setOwnerName] = useState("Kunal Sharma");
+  const [deadline, setDeadline] = useState("2026-10-24T18:00");
+  const [approvalStatus, setApprovalStatus] = useState("DRAFT");
   const [scheduledDate, setScheduledDate] = useState("2026-10-25T11:00");
   const [festivalOrEvent, setFestivalOrEvent] = useState("Diwali Festive Campaign");
   const [mediaUrl, setMediaUrl] = useState("https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800");
@@ -85,6 +102,9 @@ export default function ContentCalendarPage() {
   const [editClientId, setEditClientId] = useState("");
   const [editPlatform, setEditPlatform] = useState("INSTAGRAM");
   const [editPostType, setEditPostType] = useState("Carousel");
+  const [editOwnerName, setEditOwnerName] = useState("");
+  const [editDeadline, setEditDeadline] = useState("");
+  const [editApprovalStatus, setEditApprovalStatus] = useState("DRAFT");
   const [editScheduledDate, setEditScheduledDate] = useState("");
   const [editStatus, setEditStatus] = useState("SCHEDULED");
   const [editFestival, setEditFestival] = useState("");
@@ -138,6 +158,9 @@ export default function ContentCalendarPage() {
           clientId: clientId || null,
           platform,
           postType,
+          ownerName,
+          deadline: deadline ? new Date(deadline) : null,
+          approvalStatus,
           scheduledDate: new Date(scheduledDate),
           festivalOrEvent,
           mediaUrl,
@@ -168,6 +191,11 @@ export default function ContentCalendarPage() {
     setEditClientId(post.client?.id || "");
     setEditPlatform(post.platform);
     setEditPostType(post.postType);
+    setEditOwnerName(post.ownerName || "");
+    setEditDeadline(
+      post.deadline ? new Date(post.deadline).toISOString().slice(0, 16) : ""
+    );
+    setEditApprovalStatus(post.approvalStatus || "DRAFT");
     setEditScheduledDate(
       post.scheduledDate ? new Date(post.scheduledDate).toISOString().slice(0, 16) : ""
     );
@@ -182,26 +210,6 @@ export default function ContentCalendarPage() {
     if (!editingPost) return;
     setSaving(true);
 
-    // Optimistic UI update
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === editingPost.id
-          ? {
-              ...p,
-              title: editTitle,
-              caption: editCaption,
-              hashtags: editHashtags,
-              platform: editPlatform,
-              postType: editPostType,
-              status: editStatus,
-              festivalOrEvent: editFestival,
-              mediaUrl: editMediaUrl,
-              scheduledDate: editScheduledDate || null,
-            }
-          : p
-      )
-    );
-
     try {
       const res = await fetch(`/api/agency/calendar/${editingPost.id}`, {
         method: "PUT",
@@ -213,6 +221,9 @@ export default function ContentCalendarPage() {
           clientId: editClientId || null,
           platform: editPlatform,
           postType: editPostType,
+          ownerName: editOwnerName || null,
+          deadline: editDeadline ? new Date(editDeadline) : null,
+          approvalStatus: editApprovalStatus,
           status: editStatus,
           festivalOrEvent: editFestival || null,
           mediaUrl: editMediaUrl || null,
@@ -237,18 +248,18 @@ export default function ContentCalendarPage() {
     }
   }
 
-  async function handleQuickStatusChange(postId: string, newStatus: string) {
-    // Optimistic update
+  async function handleQuickStatusChange(postId: string, newApprovalStatus: string) {
     setPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, status: newStatus } : p))
+      prev.map((p) => (p.id === postId ? { ...p, approvalStatus: newApprovalStatus } : p))
     );
 
     try {
       await fetch(`/api/agency/calendar/${postId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ approvalStatus: newApprovalStatus }),
       });
+      fetchPosts();
     } catch (err) {
       console.error(err);
       fetchPosts();
@@ -259,7 +270,6 @@ export default function ContentCalendarPage() {
     if (!confirm(`Are you sure you want to delete post "${postTitle}"?`)) return;
 
     setDeletingId(postId);
-    // Optimistic remove
     setPosts((prev) => prev.filter((p) => p.id !== postId));
 
     try {
@@ -282,17 +292,56 @@ export default function ContentCalendarPage() {
   function getPlatformIcon(p: string) {
     switch (p) {
       case "INSTAGRAM":
-        return <Instagram className="w-4 h-4 text-pink-600" />;
+        return <Instagram className="w-3.5 h-3.5 text-pink-600" />;
       case "LINKEDIN":
-        return <Linkedin className="w-4 h-4 text-blue-700" />;
+        return <Linkedin className="w-3.5 h-3.5 text-blue-700" />;
       case "FACEBOOK":
-        return <Facebook className="w-4 h-4 text-blue-600" />;
+        return <Facebook className="w-3.5 h-3.5 text-blue-600" />;
       case "YOUTUBE":
-        return <Youtube className="w-4 h-4 text-red-600" />;
+        return <Youtube className="w-3.5 h-3.5 text-red-600" />;
       default:
-        return <Share2 className="w-4 h-4 text-slate-600" />;
+        return <Share2 className="w-3.5 h-3.5 text-slate-600" />;
     }
   }
+
+  function getApprovalBadge(status?: string | null) {
+    switch (status) {
+      case "DRAFT":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">Draft</span>;
+      case "INTERNAL_REVIEW":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">Internal Review</span>;
+      case "CLIENT_REVIEW":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">Client Review</span>;
+      case "CHANGES_REQUESTED":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200">Changes Requested</span>;
+      case "APPROVED":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">Approved</span>;
+      case "SCHEDULED":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200">Scheduled</span>;
+      case "PUBLISHED":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">Published</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">{status || "Scheduled"}</span>;
+    }
+  }
+
+  // Filter posts based on search and status
+  const filteredPosts = posts.filter((p) => {
+    if (selectedApprovalStatus !== "ALL" && (p.approvalStatus || p.status) !== selectedApprovalStatus) {
+      return false;
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = p.title.toLowerCase().includes(q);
+      const matchClient = p.client?.name.toLowerCase().includes(q);
+      const matchCaption = p.caption?.toLowerCase().includes(q);
+      const matchOwner = p.ownerName?.toLowerCase().includes(q);
+      return matchTitle || matchClient || matchCaption || matchOwner;
+    }
+    return true;
+  });
+
+  const overdueCount = posts.filter((p) => p.isOverdueApproval).length;
 
   return (
     <div className="space-y-6">
@@ -304,21 +353,51 @@ export default function ContentCalendarPage() {
               Marketing Content & Festival Calendar
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              Agency Operating System
+              Full Deliverable Audit View
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Pre-scheduled Indian festivals, national brand campaigns, multi-client social scheduling, and deliverable tracking.
+            Displaying client, platform, format, caption, owner, deadline, approval status, and scheduled date together.
           </p>
         </div>
 
-        <button
-          onClick={() => setComposerOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm shadow-emerald-600/20 transition cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Compose & Schedule Post</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {overdueCount > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold animate-pulse">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>{overdueCount} Overdue Approval{overdueCount > 1 ? "s" : ""}</span>
+            </div>
+          )}
+
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setViewFormat("GRID")}
+              className={`p-1.5 rounded-lg text-xs font-medium transition ${
+                viewFormat === "GRID" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-900"
+              }`}
+              title="Card Grid View"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewFormat("LIST")}
+              className={`p-1.5 rounded-lg text-xs font-medium transition ${
+                viewFormat === "LIST" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-900"
+              }`}
+              title="Detailed Table View"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => setComposerOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm shadow-emerald-600/20 transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Compose & Schedule Post</span>
+          </button>
+        </div>
       </div>
 
       {/* Upcoming Indian Festivals & Cultural Events 2026 */}
@@ -351,26 +430,60 @@ export default function ContentCalendarPage() {
         </div>
       </div>
 
-      {/* Filter Bar */}
+      {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/70 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <Building2 className="w-4 h-4 text-slate-400" />
-          <span className="text-xs font-medium text-slate-500">Filter Client:</span>
-          <select
-            value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
-            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-semibold text-slate-800"
-          >
-            <option value="ALL">All Agency Clients ({clients.length})</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+          {/* Search Box */}
+          <div className="relative min-w-[200px]">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search title, caption, owner..."
+              className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none w-full"
+            />
+          </div>
+
+          {/* Client Filter */}
+          <div className="flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-semibold text-slate-800"
+            >
+              <option value="ALL">All Clients ({clients.length})</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Approval Status Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-400">Approval:</span>
+            <select
+              value={selectedApprovalStatus}
+              onChange={(e) => setSelectedApprovalStatus(e.target.value)}
+              className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-semibold text-slate-800"
+            >
+              <option value="ALL">All Stages</option>
+              <option value="DRAFT">Draft</option>
+              <option value="INTERNAL_REVIEW">Internal Review</option>
+              <option value="CLIENT_REVIEW">Client Review</option>
+              <option value="CHANGES_REQUESTED">Changes Requested</option>
+              <option value="APPROVED">Approved</option>
+              <option value="SCHEDULED">Scheduled</option>
+              <option value="PUBLISHED">Published</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+        {/* Platform Buttons */}
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
           <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           {["ALL", "INSTAGRAM", "FACEBOOK", "LINKEDIN", "YOUTUBE"].map((plat) => (
             <button
@@ -388,114 +501,273 @@ export default function ContentCalendarPage() {
         </div>
       </div>
 
-      {/* Posts Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        {loading ? (
-          <div className="col-span-4 text-center py-12 text-slate-400">Loading scheduled posts...</div>
-        ) : posts.length === 0 ? (
-          <div className="col-span-4 text-center py-12 text-slate-400">No content posts found for this view.</div>
-        ) : (
-          posts.map((post) => (
-            <div
-              key={post.id}
-              className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs hover:border-slate-300 transition flex flex-col justify-between group"
-            >
-              <div>
-                {/* Media Preview Thumbnail */}
-                <div className="relative aspect-video bg-slate-100 overflow-hidden">
-                  <img
-                    src={post.mediaUrl || "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=600"}
-                    alt={post.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                  />
-                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/90 backdrop-blur-xs text-[10px] font-bold text-slate-800 shadow-xs">
-                    {getPlatformIcon(post.platform)}
-                    <span>{post.postType}</span>
-                  </div>
-                  <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-slate-900/80 text-white text-[10px] font-medium">
-                    {post.scheduledDate ? new Date(post.scheduledDate).toLocaleDateString() : "Scheduled"}
-                  </div>
-                </div>
+      {/* Overdue Warning Alert Box (if any) */}
+      {overdueCount > 0 && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-rose-950">
+                Action Required: {overdueCount} Content Deliverable Approvals are Overdue
+              </h4>
+              <p className="text-[11px] text-rose-700">
+                The scheduled review deadline has passed without client or internal approval. Expedite reviews to avoid publishing delays.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSelectedApprovalStatus("CLIENT_REVIEW")}
+            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition shrink-0"
+          >
+            Review Pending Posts
+          </button>
+        </div>
+      )}
 
-                <div className="p-4">
-                  {post.client && (
-                    <div className="text-[11px] font-bold text-emerald-700 mb-1 truncate">
-                      {post.client.name}
+      {/* Content Posts: CARD GRID VIEW */}
+      {viewFormat === "GRID" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {loading ? (
+            <div className="col-span-3 text-center py-16 text-slate-400">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
+              <span>Loading scheduled marketing content...</span>
+            </div>
+          ) : filteredPosts.length === 0 ? (
+            <div className="col-span-3 text-center py-16 text-slate-400">
+              No content posts match the selected filters.
+            </div>
+          ) : (
+            filteredPosts.map((post) => (
+              <div
+                key={post.id}
+                className={`bg-white rounded-2xl border ${
+                  post.isOverdueApproval
+                    ? "border-rose-400 ring-2 ring-rose-200 shadow-md"
+                    : "border-slate-200/80 shadow-xs"
+                } overflow-hidden hover:border-slate-300 transition flex flex-col justify-between group`}
+              >
+                <div>
+                  {/* Thumbnail / Header */}
+                  <div className="relative aspect-video bg-slate-100 overflow-hidden">
+                    <img
+                      src={post.mediaUrl || "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=600"}
+                      alt={post.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+
+                    {/* Platform & Format Tag */}
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/95 backdrop-blur-xs text-[10px] font-bold text-slate-800 shadow-xs">
+                      {getPlatformIcon(post.platform)}
+                      <span>{post.platform} • {post.postType}</span>
                     </div>
-                  )}
 
-                  <h3 className="text-xs font-bold text-slate-900 leading-snug line-clamp-1">
-                    {post.title}
-                  </h3>
+                    {/* Overdue Badge */}
+                    {post.isOverdueApproval && (
+                      <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-1 rounded-md bg-rose-600 text-white text-[10px] font-bold shadow-xs animate-bounce">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span>OVERDUE APPROVAL</span>
+                      </div>
+                    )}
 
-                  {post.festivalOrEvent && (
-                    <span className="inline-block mt-1.5 px-2 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-semibold border border-amber-200">
-                      {post.festivalOrEvent}
-                    </span>
-                  )}
+                    {/* Scheduled Date Pill */}
+                    <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-slate-900/80 text-white text-[10px] font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      <span>{post.scheduledDate ? formatDate(post.scheduledDate) : "Scheduled"}</span>
+                    </div>
+                  </div>
 
-                  {post.caption && (
-                    <p className="text-[11px] text-slate-500 mt-2 line-clamp-2 leading-relaxed">
-                      {post.caption}
-                    </p>
-                  )}
+                  <div className="p-4 space-y-2.5">
+                    {/* Client & Approval Status Row */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] font-bold text-emerald-700 truncate">
+                        {post.client ? post.client.name : "Agency Brand"}
+                      </div>
+                      <div>{getApprovalBadge(post.approvalStatus || post.status)}</div>
+                    </div>
+
+                    {/* Post Title */}
+                    <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-1">
+                      {post.title}
+                    </h3>
+
+                    {/* Festival tag if present */}
+                    {post.festivalOrEvent && (
+                      <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-semibold border border-amber-200">
+                        {post.festivalOrEvent}
+                      </span>
+                    )}
+
+                    {/* Caption */}
+                    {post.caption && (
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600 line-clamp-2 italic leading-relaxed">
+                        "{post.caption}"
+                      </div>
+                    )}
+
+                    {/* Owner & Deadline Row */}
+                    <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Owner:</span>
+                        <span className="font-semibold text-slate-800 flex items-center gap-1 truncate">
+                          <UserCheck className="w-3 h-3 text-slate-400" />
+                          {post.ownerName || "Unassigned"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Deadline:</span>
+                        <span
+                          className={`font-semibold flex items-center gap-1 truncate ${
+                            post.isOverdueApproval ? "text-rose-600 font-bold" : "text-slate-800"
+                          }`}
+                        >
+                          <CalendarIcon className="w-3 h-3 text-slate-400" />
+                          {post.deadline ? formatDate(post.deadline) : "None"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              {/* Status and Action Controls */}
-              <div className="p-4 pt-2 border-t border-slate-100 mt-2 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  {/* Quick Status Selector */}
+                {/* Footer Controls */}
+                <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-2">
                   <select
-                    value={post.status}
+                    value={post.approvalStatus || post.status}
                     onChange={(e) => handleQuickStatusChange(post.id, e.target.value)}
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer focus:outline-none ${
-                      post.status === "PUBLISHED"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : post.status === "SCHEDULED"
-                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                        : post.status === "ARCHIVED"
-                        ? "bg-slate-100 text-slate-600 border-slate-200"
-                        : "bg-amber-50 text-amber-700 border-amber-200"
-                    }`}
+                    className="text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-200 bg-white cursor-pointer focus:outline-none"
                   >
-                    <option value="DRAFT">DRAFT</option>
-                    <option value="SCHEDULED">SCHEDULED</option>
-                    <option value="PUBLISHED">PUBLISHED</option>
-                    <option value="ARCHIVED">ARCHIVED</option>
+                    <option value="DRAFT">Draft</option>
+                    <option value="INTERNAL_REVIEW">Internal Review</option>
+                    <option value="CLIENT_REVIEW">Client Review</option>
+                    <option value="CHANGES_REQUESTED">Changes Requested</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="SCHEDULED">Scheduled</option>
+                    <option value="PUBLISHED">Published</option>
                   </select>
 
-                  <span className="text-[10px] font-medium text-slate-400">
-                    {post.reach > 0 ? `${post.reach.toLocaleString()} reach` : "Ready"}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-end gap-1.5 pt-1">
-                  <button
-                    onClick={() => openEditModal(post)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
-                    title="Edit Post"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeletePost(post.id, post.title)}
-                    disabled={deletingId === post.id}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
-                    title="Delete Post"
-                  >
-                    {deletingId === post.id ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
-                    ) : (
-                      <Trash2 className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => openEditModal(post)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
+                      title="Edit Post"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeletePost(post.id, post.title)}
+                      disabled={deletingId === post.id}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
+                      title="Delete Post"
+                    >
+                      {deletingId === post.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
-        )}
-      </div>
+            ))
+          )}
+        </div>
+      ) : (
+        /* Content Posts: AUDIT TABLE VIEW */
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
+                  <th className="py-3 px-4">Client</th>
+                  <th className="py-3 px-3">Platform</th>
+                  <th className="py-3 px-3">Format</th>
+                  <th className="py-3 px-4">Post & Caption</th>
+                  <th className="py-3 px-3">Owner</th>
+                  <th className="py-3 px-3">Deadline</th>
+                  <th className="py-3 px-3">Approval Status</th>
+                  <th className="py-3 px-3">Scheduled Date</th>
+                  <th className="py-3 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredPosts.map((post) => (
+                  <tr
+                    key={post.id}
+                    className={`hover:bg-slate-50/80 transition ${
+                      post.isOverdueApproval ? "bg-rose-50/40" : ""
+                    }`}
+                  >
+                    <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
+                      {post.client?.name || "General"}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        {getPlatformIcon(post.platform)}
+                        <span className="font-medium text-slate-700">{post.platform}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 font-semibold text-slate-700 text-[10px]">
+                        {post.postType}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 max-w-xs">
+                      <div className="font-bold text-slate-900 truncate">{post.title}</div>
+                      {post.caption && (
+                        <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {post.caption}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap text-slate-700 font-medium">
+                      {post.ownerName || "—"}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <div className={post.isOverdueApproval ? "text-rose-600 font-bold flex items-center gap-1" : "text-slate-600"}>
+                        {post.isOverdueApproval && <AlertTriangle className="w-3 h-3 text-rose-600" />}
+                        <span>{post.deadline ? formatDate(post.deadline) : "—"}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <div className="flex flex-col gap-1">
+                        {getApprovalBadge(post.approvalStatus || post.status)}
+                        {post.isOverdueApproval && (
+                          <span className="text-[9px] font-black text-rose-600 uppercase tracking-tighter">
+                            Overdue Review
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap font-medium text-slate-800">
+                      {post.scheduledDate ? formatDate(post.scheduledDate) : "—"}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEditModal(post)}
+                          className="p-1 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition"
+                          title="Edit Post"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeletePost(post.id, post.title)}
+                          disabled={deletingId === post.id}
+                          className="p-1 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
+                          title="Delete Post"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Post Composer Modal (Create) */}
       {composerOpen && (
@@ -504,9 +776,9 @@ export default function ContentCalendarPage() {
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Compose & Schedule Post</h3>
-                <p className="text-xs text-slate-500">Multi-channel creative delivery for agency clients.</p>
+                <p className="text-xs text-slate-500">Includes client, format, owner, deadline, and approval lifecycle.</p>
               </div>
-              <button onClick={() => setComposerOpen(false)} className="p-1.5 rounded-lg text-slate-400">
+              <button onClick={() => setComposerOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -557,7 +829,7 @@ export default function ContentCalendarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Post Type</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Format (Post Type)</label>
                   <select
                     value={postType}
                     onChange={(e) => setPostType(e.target.value)}
@@ -573,22 +845,50 @@ export default function ContentCalendarPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Schedule Date & Time</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Content Owner</label>
                   <input
-                    type="datetime-local"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
+                    type="text"
+                    value={ownerName}
+                    onChange={(e) => setOwnerName(e.target.value)}
+                    placeholder="e.g. Kunal Sharma"
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Festival / Campaign Tag</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Approval Stage</label>
+                  <select
+                    value={approvalStatus}
+                    onChange={(e) => setApprovalStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="DRAFT">Draft</option>
+                    <option value="INTERNAL_REVIEW">Internal Review</option>
+                    <option value="CLIENT_REVIEW">Client Review</option>
+                    <option value="CHANGES_REQUESTED">Changes Requested</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="SCHEDULED">Scheduled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Approval Deadline</label>
                   <input
-                    type="text"
-                    value={festivalOrEvent}
-                    onChange={(e) => setFestivalOrEvent(e.target.value)}
-                    placeholder="e.g. Dhanteras 2026 Special"
+                    type="datetime-local"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Scheduled Publish Date</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>
@@ -601,6 +901,17 @@ export default function ContentCalendarPage() {
                   value={caption}
                   onChange={(e) => setCaption(e.target.value)}
                   placeholder="Compelling marketing copy with offer call to action..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Festival / Campaign Tag</label>
+                <input
+                  type="text"
+                  value={festivalOrEvent}
+                  onChange={(e) => setFestivalOrEvent(e.target.value)}
+                  placeholder="e.g. Dhanteras 2026 Special"
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                 />
               </div>
@@ -656,9 +967,9 @@ export default function ContentCalendarPage() {
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Edit Scheduled Post</h3>
-                <p className="text-xs text-slate-500">Update creative copy, platform, timing, or status.</p>
+                <p className="text-xs text-slate-500">Update creative copy, platform, timing, owner, or approval stage.</p>
               </div>
-              <button onClick={() => setEditModalOpen(false)} className="p-1.5 rounded-lg text-slate-400">
+              <button onClick={() => setEditModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -677,16 +988,19 @@ export default function ContentCalendarPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Approval Stage</label>
                   <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
+                    value={editApprovalStatus}
+                    onChange={(e) => setEditApprovalStatus(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-emerald-800"
                   >
                     <option value="DRAFT">DRAFT</option>
+                    <option value="INTERNAL_REVIEW">INTERNAL_REVIEW</option>
+                    <option value="CLIENT_REVIEW">CLIENT_REVIEW</option>
+                    <option value="CHANGES_REQUESTED">CHANGES_REQUESTED</option>
+                    <option value="APPROVED">APPROVED</option>
                     <option value="SCHEDULED">SCHEDULED</option>
                     <option value="PUBLISHED">PUBLISHED</option>
-                    <option value="ARCHIVED">ARCHIVED</option>
                   </select>
                 </div>
 
@@ -723,7 +1037,7 @@ export default function ContentCalendarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Post Type</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Format (Post Type)</label>
                   <select
                     value={editPostType}
                     onChange={(e) => setEditPostType(e.target.value)}
@@ -734,6 +1048,28 @@ export default function ContentCalendarPage() {
                     <option value="Static Graphic">Static Square (1080x1080)</option>
                     <option value="Story Offer">Story Limited Offer</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Owner Name</label>
+                  <input
+                    type="text"
+                    value={editOwnerName}
+                    onChange={(e) => setEditOwnerName(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Approval Deadline</label>
+                  <input
+                    type="datetime-local"
+                    value={editDeadline}
+                    onChange={(e) => setEditDeadline(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
                 </div>
               </div>
 
