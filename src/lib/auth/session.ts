@@ -41,31 +41,33 @@ export async function createSession(
 }
 
 export async function getSessionByToken(token: string) {
-  if (!token) return null;
+  if (!token || !process.env.DATABASE_URL) return null;
 
-  const session = await prisma.session.findUnique({
-    where: { token },
-    include: {
-      user: {
-        include: {
-          memberships: {
-            where: { status: "ACTIVE" },
-            include: {
-              tenant: {
-                select: {
-                  id: true,
-                  name: true,
-                  code: true,
-                  status: true,
+  try {
+    const session = await prisma.session.findUnique({
+      where: { token },
+      include: {
+        user: {
+          include: {
+            memberships: {
+              where: { status: "ACTIVE" },
+              include: {
+                tenant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    status: true,
+                  },
                 },
-              },
-              roles: {
-                include: {
-                  role: {
-                    include: {
-                      permissions: {
-                        include: {
-                          permission: true,
+                roles: {
+                  include: {
+                    role: {
+                      include: {
+                        permissions: {
+                          include: {
+                            permission: true,
+                          },
                         },
                       },
                     },
@@ -76,19 +78,22 @@ export async function getSessionByToken(token: string) {
           },
         },
       },
-    },
-  });
+    });
 
-  if (!session) return null;
-  if (session.expiresAt < new Date()) {
-    await prisma.session.delete({ where: { token } }).catch(() => {});
+    if (!session) return null;
+    if (session.expiresAt < new Date()) {
+      await prisma.session.delete({ where: { token } }).catch(() => {});
+      return null;
+    }
+    if (!session.user.isActive) {
+      return null;
+    }
+
+    return session;
+  } catch (error) {
+    console.error("Session verification error (database unavailable):", error);
     return null;
   }
-  if (!session.user.isActive) {
-    return null;
-  }
-
-  return session;
 }
 
 export async function getCurrentSession() {

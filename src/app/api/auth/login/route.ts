@@ -6,6 +6,16 @@ import { createSession, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
 export async function POST(req: Request) {
   try {
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "DATABASE_URL is not configured on Vercel. Please add your PostgreSQL connection string (from Supabase or Neon) in Vercel Project Settings > Environment Variables.",
+        },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
     const { email, password, targetTenantId } = body;
 
