@@ -11,5 +11,5 @@ export default async function RootPage() {
     redirect("/app/dashboard");
   }
 
-  redirect("/login");
+  redirect("/platform");
 }

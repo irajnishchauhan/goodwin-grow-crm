@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth/session";
 import { switchActiveTenant } from "@/lib/tenant/context";
 
@@ -7,25 +8,41 @@ export async function POST(req: Request) {
     const session = await getCurrentSession();
     if (!session || !session.user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        { success: false, error: "Unauthorized: Please log in to switch workspaces" },
         { status: 401 }
       );
     }
 
-    const { tenantId } = await req.json();
-    if (!tenantId) {
+    const body = await req.json();
+    let targetTenantId = body.tenantId;
+
+    if (!targetTenantId && body.code) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { code: body.code.toLowerCase().trim() },
+        select: { id: true },
+      });
+      if (tenant) {
+        targetTenantId = tenant.id;
+      }
+    }
+
+    if (!targetTenantId) {
       return NextResponse.json(
-        { success: false, error: "tenantId is required" },
+        { success: false, error: "Valid tenantId or code is required" },
         { status: 400 }
       );
     }
 
-    await switchActiveTenant(session.user.id, tenantId, session.token);
+    const result = await switchActiveTenant(session.user.id, targetTenantId, session.token);
 
     return NextResponse.json({
       success: true,
-      message: "Workspace switched successfully",
-      activeTenantId: tenantId,
+      message: `Switched to workspace: ${result.tenantName}`,
+      data: {
+        activeTenantId: targetTenantId,
+        tenantName: result.tenantName,
+        tenantCode: result.tenantCode,
+      },
     });
   } catch (err: any) {
     return NextResponse.json(
@@ -34,3 +51,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

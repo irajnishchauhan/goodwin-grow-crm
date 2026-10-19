@@ -58,25 +58,90 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
     return null;
   }
 
-  const membership = session.user.memberships.find(
+  let membership = session.user.memberships.find(
     (m: any) => m.tenantId === activeTenantId && m.status === "ACTIVE"
   );
+
+  // If user is a platform super admin and switched to a workspace where they aren't explicitly loaded in session
+  if (!membership && session.user.isPlatformAdmin) {
+    const targetTenant = await prisma.tenant.findUnique({
+      where: { id: activeTenantId },
+    });
+
+    if (targetTenant) {
+      let dbMembership = await prisma.tenantMembership.findUnique({
+        where: {
+          tenantId_userId: {
+            tenantId: activeTenantId,
+            userId: session.user.id,
+          },
+        },
+        include: {
+          roles: {
+            include: {
+              role: {
+                include: {
+                  permissions: {
+                    include: {
+                      permission: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!dbMembership) {
+        dbMembership = await prisma.tenantMembership.create({
+          data: {
+            tenantId: activeTenantId,
+            userId: session.user.id,
+            status: "ACTIVE",
+            isOwner: true,
+          },
+          include: {
+            roles: {
+              include: {
+                role: {
+                  include: {
+                    permissions: {
+                      include: {
+                        permission: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      membership = {
+        ...dbMembership,
+        tenant: targetTenant,
+      };
+    }
+  }
 
   if (!membership) {
     return null;
   }
 
-  const roles = membership.roles.map((mr: any) => mr.role.name);
+  const roles = (membership.roles || []).map((mr: any) => mr.role?.name).filter(Boolean);
   const permissionSet = new Set<string>();
 
-  membership.roles.forEach((mr: any) => {
-    mr.role.permissions.forEach((rp: any) => {
+  (membership.roles || []).forEach((mr: any) => {
+    mr.role?.permissions?.forEach((rp: any) => {
       permissionSet.add(rp.permission.code);
     });
   });
 
-  // If owner or company admin or agency admin, grant wildcard permissions
+  // If owner or company admin or agency admin or platform admin, grant wildcard permissions
   const isAgencyAdmin =
+    session.user.isPlatformAdmin ||
     membership.isOwner ||
     roles.includes("Agency Admin") ||
     roles.includes("Company Admin") ||
@@ -90,8 +155,8 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
 
   // Determine client role status and primary role
   const isClientUser = Boolean(
-    roles.includes("Client") ||
-    membership.agencyClientId
+    !session.user.isPlatformAdmin &&
+    (roles.includes("Client") || membership.agencyClientId)
   );
   const agencyClientId = membership.agencyClientId || null;
 
@@ -162,7 +227,52 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
 }
 
 export async function switchActiveTenant(userId: string, targetTenantId: string, sessionToken: string) {
-  // Validate that user is actually an active member of this target tenant
+  // Check if target tenant exists
+  const targetTenant = await prisma.tenant.findUnique({
+    where: { id: targetTenantId },
+  });
+
+  if (!targetTenant) {
+    throw new Error("Target company workspace does not exist");
+  }
+
+  // Check if user is a platform admin
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, isPlatformAdmin: true },
+  });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  if (user.isPlatformAdmin) {
+    // Platform super admin can switch to ANY tenant in the fleet
+    // Ensure membership exists so queries succeed
+    await prisma.tenantMembership.upsert({
+      where: {
+        tenantId_userId: {
+          tenantId: targetTenantId,
+          userId: userId,
+        },
+      },
+      update: {
+        status: "ACTIVE",
+        isOwner: true,
+      },
+      create: {
+        tenantId: targetTenantId,
+        userId: userId,
+        status: "ACTIVE",
+        isOwner: true,
+      },
+    });
+
+    await updateSessionActiveTenant(sessionToken, targetTenantId);
+    return { success: true, targetTenantId, tenantName: targetTenant.name, tenantCode: targetTenant.code };
+  }
+
+  // Validate that regular user is actually an active member of this target tenant
   const membership = await prisma.tenantMembership.findUnique({
     where: {
       tenantId_userId: {
@@ -177,5 +287,5 @@ export async function switchActiveTenant(userId: string, targetTenantId: string,
   }
 
   await updateSessionActiveTenant(sessionToken, targetTenantId);
-  return { success: true, targetTenantId };
+  return { success: true, targetTenantId, tenantName: targetTenant.name, tenantCode: targetTenant.code };
 }

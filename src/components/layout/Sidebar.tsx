@@ -220,18 +220,28 @@ export function Sidebar({ isPlatformAdmin, activeTenant }: SidebarProps) {
         ))}
       </div>
 
-      {/* Platform Super Admin Quick Link */}
+      {/* Platform Super Admin Quick Links */}
       {isPlatformAdmin && (
-        <div className="p-3 border-t border-slate-100 bg-slate-50/70">
+        <div className="p-3 border-t border-slate-100 bg-slate-50/70 space-y-1.5">
           <Link
-            href="/platform"
-            className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs text-xs font-semibold transition"
+            href="/super-admin"
+            className="flex items-center justify-between p-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs text-xs font-semibold transition"
           >
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-200" />
-              <span>Platform Admin</span>
+              <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
+              <span>Super Admin Console</span>
             </div>
             <ChevronRight className="w-3.5 h-3.5 text-emerald-200" />
+          </Link>
+          <Link
+            href="/platform"
+            className="flex items-center justify-between p-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold transition"
+          >
+            <div className="flex items-center gap-2">
+              <Layers className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Platform Overview</span>
+            </div>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
           </Link>
         </div>
       )}

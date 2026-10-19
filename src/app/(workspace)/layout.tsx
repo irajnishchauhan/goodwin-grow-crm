@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import prisma from "@/lib/prisma";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getTenantContext } from "@/lib/tenant/context";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -27,12 +28,26 @@ export default async function WorkspaceLayout({
     redirect("/login");
   }
 
-  const formattedMemberships = session.user.memberships.map((m: any) => ({
+  let formattedMemberships = session.user.memberships.map((m: any) => ({
     tenantId: m.tenantId,
     tenantName: m.tenant?.name || "",
     tenantCode: m.tenant?.code || "",
     isOwner: m.isOwner,
   }));
+
+  if (session.user.isPlatformAdmin) {
+    const allTenants = await prisma.tenant.findMany({
+      where: { status: "ACTIVE" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, code: true },
+    });
+    formattedMemberships = allTenants.map((t) => ({
+      tenantId: t.id,
+      tenantName: t.name,
+      tenantCode: t.code,
+      isOwner: true,
+    }));
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">

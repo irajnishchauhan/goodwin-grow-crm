@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Kanban,
   X,
+  Sparkles,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -157,11 +158,19 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
 
           {/* Company Switcher Dropdown */}
           {companyMenuOpen && (
-            <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-100 p-2 z-50">
-              <div className="text-[11px] font-semibold text-slate-400 px-3 py-1 uppercase tracking-wider">
-                Switch Organization Workspace
+            <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 z-50 space-y-2">
+              <div className="flex items-center justify-between px-2 pt-1 pb-2 border-b border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Switch Organization Workspace
+                </span>
+                {user.isPlatformAdmin && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Fleet Super Admin
+                  </span>
+                )}
               </div>
-              <div className="mt-1 space-y-1">
+
+              <div className="mt-1 space-y-1 max-h-64 overflow-y-auto pr-1">
                 {memberships.map((m) => {
                   const isCurrent = m.tenantId === activeTenant?.id;
                   return (
@@ -169,26 +178,48 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
                       key={m.tenantId}
                       disabled={switching}
                       onClick={() => handleSwitchTenant(m.tenantId)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition text-left cursor-pointer ${
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium transition text-left cursor-pointer ${
                         isCurrent
-                          ? "bg-emerald-50 text-emerald-800 font-bold"
+                          ? "bg-emerald-50 text-emerald-900 font-bold border border-emerald-200/60"
                           : "text-slate-700 hover:bg-slate-50"
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
-                        <Building2
-                          className={`w-4 h-4 ${isCurrent ? "text-emerald-600" : "text-slate-400"}`}
-                        />
-                        <div>
-                          <div className="font-semibold text-slate-900">{m.tenantName}</div>
+                        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                          {m.tenantName.charAt(0)}
+                        </div>
+                        <div className="truncate">
+                          <div className="font-semibold text-slate-900 truncate">{m.tenantName}</div>
                           <div className="text-[10px] text-slate-400 font-mono">{m.tenantCode}</div>
                         </div>
                       </div>
-                      {isCurrent && <Check className="w-4 h-4 text-emerald-600" />}
+                      {isCurrent ? (
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-medium shrink-0">Switch →</span>
+                      )}
                     </button>
                   );
                 })}
               </div>
+
+              {user.isPlatformAdmin && (
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                  <a
+                    href="/super-admin"
+                    className="font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+                  >
+                    <Shield className="w-3 h-3" />
+                    <span>Super Admin Console</span>
+                  </a>
+                  <a
+                    href="/platform"
+                    className="font-semibold text-slate-600 hover:text-slate-900"
+                  >
+                    Platform Overview
+                  </a>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -334,13 +365,20 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
               </div>
 
               {user.isPlatformAdmin && (
-                <div className="py-1">
+                <div className="py-1 border-b border-slate-100 space-y-0.5">
+                  <a
+                    href="/super-admin"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Super Admin Console</span>
+                  </a>
                   <a
                     href="/platform"
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                   >
-                    <Shield className="w-3.5 h-3.5" />
-                    <span>Platform Admin Portal</span>
+                    <Shield className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Platform Overview</span>
                   </a>
                 </div>
               )}
