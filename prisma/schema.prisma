@@ -48,6 +48,17 @@ model Tenant {
   supportGrants        SupportAccessGrant[]
   roles                Role[]
 
+  // Agency Operating System Relations
+  agencyClients        AgencyClient[]
+  agencyProjects       AgencyProject[]
+  agencyTasks          AgencyTask[]
+  contentPosts         ContentPost[]
+  creativeAssets       CreativeAsset[]
+  adCampaigns          AdCampaign[]
+  seoTrackers          SeoTracker[]
+  agencyInvoices       AgencyInvoice[]
+  agencyExpenses       AgencyExpense[]
+
   @@map("tenants")
 }
 
@@ -716,3 +727,307 @@ model SupportAccessGrant {
 
   @@map("support_access_grants")
 }
+
+// -------------------------------------------------------------
+// 10. MARKETING AGENCY OPERATING SYSTEM (GOODWIN GROW AI)
+// -------------------------------------------------------------
+
+enum ClientStatus {
+  ONBOARDING
+  ACTIVE
+  PAUSED
+  CHURNED
+}
+
+model AgencyClient {
+  id                  String       @id @default(uuid())
+  tenantId            String       @map("tenant_id")
+  name                String
+  brandName           String?      @map("brand_name")
+  industry            String?
+  website             String?
+  phone               String?
+  email               String?
+  city                String?
+  state               String?
+  logoUrl             String?      @map("logo_url")
+  activePackage       String?      @map("active_package")
+  monthlyRetainer     Decimal      @default(0.00) @map("monthly_retainer") @db.Decimal(14, 2)
+  status              ClientStatus @default(ACTIVE)
+  onboardingProgress  Int          @default(100) @map("onboarding_progress")
+  postsPlanned        Int          @default(12) @map("posts_planned")
+  postsCompleted      Int          @default(0) @map("posts_completed")
+  accountManagerName  String?      @map("account_manager_name")
+  leadDesignerName    String?      @map("lead_designer_name")
+  contentWriterName   String?      @map("content_writer_name")
+  mediaBuyerName      String?      @map("media_buyer_name")
+  brandGuidelines     String?      @map("brand_guidelines")
+  contractStartDate   DateTime?    @map("contract_start_date")
+  contractRenewalDate DateTime?    @map("contract_renewal_date")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  projects       AgencyProject[]
+  tasks          AgencyTask[]
+  contentPosts   ContentPost[]
+  creativeAssets CreativeAsset[]
+  adCampaigns    AdCampaign[]
+  seoTrackers    SeoTracker[]
+  invoices       AgencyInvoice[]
+  expenses       AgencyExpense[]
+
+  @@index([tenantId, status])
+  @@map("agency_clients")
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+}
+
+model AgencyProject {
+  id              String        @id @default(uuid())
+  tenantId        String        @map("tenant_id")
+  clientId        String?       @map("client_id")
+  name            String
+  description     String?
+  deliverableType String        @default("Social Media Retainer") @map("deliverable_type")
+  status          ProjectStatus @default(IN_PROGRESS)
+  budget          Decimal       @default(0.00) @db.Decimal(14, 2)
+  startDate       DateTime?     @map("start_date")
+  dueDate         DateTime?     @map("due_date")
+  assigneeName    String?       @map("assignee_name")
+  progressPercent Int           @default(0) @map("progress_percent")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  tasks  AgencyTask[]
+
+  @@index([tenantId, status])
+  @@map("agency_projects")
+}
+
+enum AgencyWorkflowStage {
+  CONTENT_BRIEF
+  COPYWRITING
+  DESIGN
+  INTERNAL_REVIEW
+  CLIENT_APPROVAL
+  SCHEDULED
+  PUBLISHED
+}
+
+model AgencyTask {
+  id            String              @id @default(uuid())
+  tenantId      String              @map("tenant_id")
+  projectId     String?             @map("project_id")
+  clientId      String?             @map("client_id")
+  title         String
+  description   String?
+  stage         AgencyWorkflowStage @default(CONTENT_BRIEF)
+  priority      TaskPriority        @default(MEDIUM)
+  assigneeName  String?             @map("assignee_name")
+  assigneeRole  String?             @map("assignee_role")
+  dueDate       DateTime?           @map("due_date")
+  commentsCount Int                 @default(0) @map("comments_count")
+  assetPreview  String?             @map("asset_preview")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project AgencyProject? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client  AgencyClient?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, stage])
+  @@map("agency_tasks")
+}
+
+enum PostPlatform {
+  INSTAGRAM
+  LINKEDIN
+  FACEBOOK
+  YOUTUBE
+  TWITTER
+}
+
+enum PostStatus {
+  DRAFT
+  IN_REVIEW
+  CLIENT_APPROVED
+  SCHEDULED
+  PUBLISHED
+}
+
+model ContentPost {
+  id              String       @id @default(uuid())
+  tenantId        String       @map("tenant_id")
+  clientId        String?      @map("client_id")
+  platform        PostPlatform @default(INSTAGRAM)
+  postType        String       @default("Carousel") @map("post_type")
+  title           String
+  caption         String?
+  hashtags        String?
+  mediaUrl        String?      @map("media_url")
+  scheduledDate   DateTime?    @map("scheduled_date")
+  status          PostStatus   @default(SCHEDULED)
+  festivalOrEvent String?      @map("festival_or_event")
+  reach           Int          @default(0)
+  likes           Int          @default(0)
+  comments        Int          @default(0)
+  shares          Int          @default(0)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, scheduledDate])
+  @@map("content_posts")
+}
+
+enum CreativeReviewStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+model CreativeAsset {
+  id             String               @id @default(uuid())
+  tenantId       String               @map("tenant_id")
+  clientId       String?              @map("client_id")
+  title          String
+  assetType      String               @default("Social Graphic") @map("asset_type")
+  dimensions     String?              @default("1080x1080")
+  fileUrl        String?              @map("file_url")
+  version        Int                  @default(1)
+  reviewStatus   CreativeReviewStatus @default(PENDING) @map("review_status")
+  clientFeedback String?              @map("client_feedback")
+  submittedBy    String?              @map("submitted_by")
+  reviewedAt     DateTime?            @map("reviewed_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, reviewStatus])
+  @@map("creative_assets")
+}
+
+enum AdPlatform {
+  META
+  GOOGLE
+  LINKEDIN
+}
+
+enum AdStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model AdCampaign {
+  id           String     @id @default(uuid())
+  tenantId     String     @map("tenant_id")
+  clientId     String?    @map("client_id")
+  platform     AdPlatform @default(META)
+  campaignName String     @map("campaign_name")
+  objective    String     @default("Lead Generation")
+  budget       Decimal    @default(0.00) @db.Decimal(14, 2)
+  spent        Decimal    @default(0.00) @db.Decimal(14, 2)
+  leadsCount   Int        @default(0) @map("leads_count")
+  cpl          Decimal    @default(0.00) @db.Decimal(10, 2)
+  roas         Decimal    @default(0.00) @db.Decimal(6, 2)
+  impressions  Int        @default(0)
+  clicks       Int        @default(0)
+  status       AdStatus   @default(ACTIVE)
+  startDate    DateTime?  @map("start_date")
+  endDate      DateTime?  @map("end_date")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@map("ad_campaigns")
+}
+
+model SeoTracker {
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")
+  clientId       String?   @map("client_id")
+  keyword        String
+  targetUrl      String?   @map("target_url")
+  currentRank    Int       @default(0) @map("current_rank")
+  previousRank   Int       @default(0) @map("previous_rank")
+  searchVolume   Int       @default(0) @map("search_volume")
+  difficulty     Int       @default(0)
+  gbpScore       Int       @default(85) @map("gbp_score")
+  backlinksCount Int       @default(0) @map("backlinks_count")
+  lastAuditedAt  DateTime? @map("last_audited_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, keyword])
+  @@map("seo_trackers")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+}
+
+model AgencyInvoice {
+  id            String        @id @default(uuid())
+  tenantId      String        @map("tenant_id")
+  clientId      String?       @map("client_id")
+  invoiceNumber String        @map("invoice_number")
+  issueDate     DateTime      @default(now()) @map("issue_date")
+  dueDate       DateTime      @map("due_date")
+  subtotal      Decimal       @default(0.00) @db.Decimal(14, 2)
+  taxAmount     Decimal       @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
+  totalAmount   Decimal       @default(0.00) @map("total_amount") @db.Decimal(14, 2)
+  status        InvoiceStatus @default(DRAFT)
+  items         Json          @default("[]")
+  paymentMethod String?       @map("payment_method")
+  paidAt        DateTime?     @map("paid_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, invoiceNumber])
+  @@map("agency_invoices")
+}
+
+model AgencyExpense {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  clientId    String?  @map("client_id")
+  category    String   @default("Software Tools")
+  description String
+  amount      Decimal  @default(0.00) @db.Decimal(14, 2)
+  date        DateTime @default(now())
+  isBillable  Boolean  @default(false) @map("is_billable")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, date])
+  @@map("agency_expenses")
+}
+

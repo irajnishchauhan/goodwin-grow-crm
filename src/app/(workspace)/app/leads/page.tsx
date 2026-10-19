@@ -15,6 +15,10 @@ import {
   Upload,
   Filter,
   FileSpreadsheet,
+  Edit2,
+  Trash2,
+  User,
+  Save,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -24,6 +28,8 @@ export default function LeadsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
+  const [assignedOwnerFilter, setAssignedOwnerFilter] = useState("ALL");
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
   // Create Lead Modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -36,7 +42,23 @@ export default function LeadsPage() {
   const [source, setSource] = useState("Website Inbound");
   const [priority, setPriority] = useState("MEDIUM");
   const [score, setScore] = useState(50);
+  const [assignedOwnerId, setAssignedOwnerId] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+
+  // Edit Lead Modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingLead, setEditingLead] = useState<any | null>(null);
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editCompanyName, setEditCompanyName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editStatus, setEditStatus] = useState("NEW");
+  const [editPriority, setEditPriority] = useState("MEDIUM");
+  const [editScore, setEditScore] = useState(50);
+  const [editSource, setEditSource] = useState("");
+  const [editAssignedOwnerId, setEditAssignedOwnerId] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Convert Lead Modal
   const [convertModalOpen, setConvertModalOpen] = useState(false);
@@ -52,8 +74,24 @@ export default function LeadsPage() {
   const [importResult, setImportResult] = useState<any | null>(null);
 
   useEffect(() => {
+    fetchTeam();
+  }, []);
+
+  useEffect(() => {
     fetchLeads();
-  }, [statusFilter, priorityFilter]);
+  }, [statusFilter, priorityFilter, assignedOwnerFilter]);
+
+  async function fetchTeam() {
+    try {
+      const res = await fetch("/api/team");
+      const data = await res.json();
+      if (data.success) {
+        setTeamMembers(data.data || []);
+      }
+    } catch (err) {
+      console.error("Failed to load team members", err);
+    }
+  }
 
   async function fetchLeads() {
     try {
@@ -61,6 +99,7 @@ export default function LeadsPage() {
       const params = new URLSearchParams();
       if (statusFilter !== "ALL") params.set("status", statusFilter);
       if (priorityFilter !== "ALL") params.set("priority", priorityFilter);
+      if (assignedOwnerFilter !== "ALL") params.set("assignedOwnerId", assignedOwnerFilter);
 
       const res = await fetch(`/api/leads?${params.toString()}`);
       const data = await res.json();
@@ -90,13 +129,14 @@ export default function LeadsPage() {
         body: JSON.stringify({
           firstName,
           lastName,
-          companyName,
-          email,
-          phone,
+          companyName: companyName || null,
+          email: email || null,
+          phone: phone || null,
           source,
           priority,
           score,
           tags,
+          assignedOwnerId: assignedOwnerId || null,
         }),
       });
 
@@ -124,7 +164,86 @@ export default function LeadsPage() {
     setSource("Website Inbound");
     setPriority("MEDIUM");
     setScore(50);
+    setAssignedOwnerId("");
     setTagsInput("");
+  }
+
+  function openEdit(lead: any) {
+    setEditingLead(lead);
+    setEditFirstName(lead.firstName);
+    setEditLastName(lead.lastName);
+    setEditCompanyName(lead.companyName || "");
+    setEditEmail(lead.email || "");
+    setEditPhone(lead.phone || "");
+    setEditStatus(lead.status);
+    setEditPriority(lead.priority);
+    setEditScore(lead.score || 50);
+    setEditSource(lead.source || "");
+    setEditAssignedOwnerId(lead.assignedOwnerId || "");
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdateLead(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingLead) return;
+    setSavingEdit(true);
+
+    try {
+      const res = await fetch(`/api/leads/${editingLead.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: editFirstName,
+          lastName: editLastName,
+          companyName: editCompanyName || null,
+          email: editEmail || null,
+          phone: editPhone || null,
+          status: editStatus,
+          priority: editPriority,
+          score: editScore,
+          source: editSource,
+          assignedOwnerId: editAssignedOwnerId || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingLead(null);
+        fetchLeads();
+      } else {
+        alert(data.error || "Failed to update lead (RBAC verification error)");
+      }
+    } catch {
+      alert("Error updating lead");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDeleteLead(leadId: string, leadName: string) {
+    if (!confirm(`Are you sure you want to permanently delete lead "${leadName}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/leads/${leadId}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        if (editingLead && editingLead.id === leadId) {
+          setEditModalOpen(false);
+          setEditingLead(null);
+        }
+        fetchLeads();
+      } else {
+        alert(data.error || "Failed to delete lead (Insufficient permissions / RBAC)");
+      }
+    } catch {
+      alert("Error deleting lead");
+    }
   }
 
   function openConvert(lead: any) {
@@ -206,7 +325,7 @@ export default function LeadsPage() {
 
   function exportCSV() {
     if (leads.length === 0) return;
-    const headers = ["First Name", "Last Name", "Company", "Email", "Phone", "Status", "Priority", "Score", "Source"];
+    const headers = ["First Name", "Last Name", "Company", "Email", "Phone", "Status", "Priority", "Score", "Source", "Assigned Owner"];
     const rows = leads.map((l) => [
       l.firstName,
       l.lastName,
@@ -217,6 +336,7 @@ export default function LeadsPage() {
       l.priority,
       l.score,
       l.source || "",
+      l.assignedOwner?.fullName || "Unassigned",
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
@@ -244,7 +364,7 @@ export default function LeadsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Lead Management</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Capture, qualify, score, and convert prospect leads into active deals.
+            Capture, qualify, score, assign to sales team members, and convert prospects.
           </p>
         </div>
 
@@ -292,13 +412,30 @@ export default function LeadsPage() {
 
         <div className="flex items-center gap-3 overflow-x-auto pb-1 md:pb-0">
           <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
-            <Filter className="w-3.5 h-3.5" />
+            <Filter className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Assigned:</span>
+          </div>
+          <select
+            value={assignedOwnerFilter}
+            onChange={(e) => setAssignedOwnerFilter(e.target.value)}
+            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+          >
+            <option value="ALL">All Team Members</option>
+            <option value="me">👤 Assigned to Me</option>
+            {teamMembers.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.fullName} ({m.primaryRole})
+              </option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold ml-2">
             <span>Status:</span>
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
           >
             <option value="ALL">All Statuses</option>
             <option value="NEW">New</option>
@@ -315,7 +452,7 @@ export default function LeadsPage() {
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
           >
             <option value="ALL">All Priorities</option>
             <option value="URGENT">Urgent</option>
@@ -338,7 +475,7 @@ export default function LeadsPage() {
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4">Priority</th>
                 <th className="py-3.5 px-4">Score</th>
-                <th className="py-3.5 px-4">Source</th>
+                <th className="py-3.5 px-4">Assigned To</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -357,7 +494,7 @@ export default function LeadsPage() {
                 </tr>
               ) : (
                 filteredLeads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-slate-50/60 transition">
+                  <tr key={lead.id} className="hover:bg-slate-50/60 transition group">
                     <td className="py-3.5 px-4 font-bold text-slate-900">
                       {lead.firstName} {lead.lastName}
                     </td>
@@ -426,18 +563,37 @@ export default function LeadsPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-500">{lead.source || "Direct"}</td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{lead.assignedOwner?.fullName || "Unassigned"}</span>
+                      </div>
+                    </td>
                     <td className="py-3.5 px-4 text-right">
-                      {lead.status !== "CONVERTED" ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        {lead.status !== "CONVERTED" && (
+                          <button
+                            onClick={() => openConvert(lead)}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] transition cursor-pointer"
+                          >
+                            Convert
+                          </button>
+                        )}
                         <button
-                          onClick={() => openConvert(lead)}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] transition cursor-pointer"
+                          onClick={() => openEdit(lead)}
+                          title="Edit Lead"
+                          className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-emerald-600 cursor-pointer"
                         >
-                          Convert Lead
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
-                      ) : (
-                        <span className="text-teal-600 font-semibold text-[11px]">Converted</span>
-                      )}
+                        <button
+                          onClick={() => handleDeleteLead(lead.id, `${lead.firstName} ${lead.lastName}`)}
+                          title="Delete Lead"
+                          className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -452,11 +608,9 @@ export default function LeadsPage() {
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Bulk Import Leads via CSV</h2>
-                <p className="text-xs text-slate-500">
-                  Automatic duplicate detection: existing lead emails within this workspace will be skipped.
-                </p>
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <h2 className="text-base font-bold text-slate-900">Bulk CSV Lead Ingestion</h2>
               </div>
               <button
                 onClick={() => setImportModalOpen(false)}
@@ -466,30 +620,29 @@ export default function LeadsPage() {
               </button>
             </div>
 
-            {importResult && (
-              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Import Completed:</span>
-                </div>
-                <div>• {importResult.importedCount} new leads inserted.</div>
-                <div>• {importResult.skippedCount} duplicate emails skipped.</div>
-              </div>
-            )}
-
             <form onSubmit={handleCsvImport} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Paste CSV Data (First Name, Last Name, Company, Email, Phone, Source, Priority, Score)
+                  Paste Raw CSV Records (Header Row Required)
                 </label>
                 <textarea
                   rows={6}
                   required
                   value={importRawText}
                   onChange={(e) => setImportRawText(e.target.value)}
-                  className="w-full p-3 font-mono text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                />
+                  className="w-full font-mono text-[11px] p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                ></textarea>
               </div>
+
+              {importResult && (
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Import Completed</span>
+                  </div>
+                  <div>• Successfully Created: {importResult.count} leads</div>
+                </div>
+              )}
 
               <div className="pt-2 flex items-center justify-end gap-2">
                 <button
@@ -621,6 +774,24 @@ export default function LeadsPage() {
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Assigned Employee Owner
+                </label>
+                <select
+                  value={assignedOwnerId}
+                  onChange={(e) => setAssignedOwnerId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
+                >
+                  <option value="">Leave Unassigned</option>
+                  {teamMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.fullName} ({m.primaryRole})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Tags (Comma-separated)</label>
                 <input
                   type="text"
@@ -646,6 +817,179 @@ export default function LeadsPage() {
                 >
                   {creating ? "Saving..." : "Save Lead"}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Lead Modal */}
+      {editModalOpen && editingLead && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h2 className="text-base font-bold text-slate-900">Edit Lead Record</h2>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateLead} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">First Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFirstName}
+                    onChange={(e) => setEditFirstName(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Last Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editLastName}
+                    onChange={(e) => setEditLastName(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Company Name</label>
+                <input
+                  type="text"
+                  value={editCompanyName}
+                  onChange={(e) => setEditCompanyName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="NEW">New</option>
+                    <option value="CONTACTED">Contacted</option>
+                    <option value="QUALIFIED">Qualified</option>
+                    <option value="PROPOSAL">Proposal</option>
+                    <option value="CONVERTED">Converted</option>
+                    <option value="LOST">Lost</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Priority</label>
+                  <select
+                    value={editPriority}
+                    onChange={(e) => setEditPriority(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Score</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={editScore}
+                    onChange={(e) => setEditScore(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Source</label>
+                  <input
+                    type="text"
+                    value={editSource}
+                    onChange={(e) => setEditSource(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Assigned Employee Owner
+                  </label>
+                  <select
+                    value={editAssignedOwnerId}
+                    onChange={(e) => setEditAssignedOwnerId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
+                  >
+                    <option value="">Leave Unassigned</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.fullName} ({m.primaryRole})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteLead(editingLead.id, `${editingLead.firstName} ${editingLead.lastName}`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Lead</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingEdit ? "Saving..." : "Save Changes"}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>

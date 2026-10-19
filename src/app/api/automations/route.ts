@@ -92,3 +92,46 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!tenantCtx.hasPermission("automations:manage")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing automations:manage permission" }, { status: 403 });
+    }
+
+    const tenantId = tenantCtx.tenant.id;
+    const url = new URL(req.url);
+    let id = url.searchParams.get("id");
+    if (!id) {
+      try {
+        const body = await req.json();
+        id = body.id;
+      } catch {}
+    }
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Rule ID is required" }, { status: 400 });
+    }
+
+    const rule = await prisma.automationRule.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!rule) {
+      return NextResponse.json({ success: false, error: "Rule not found" }, { status: 404 });
+    }
+
+    await prisma.automationRule.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, message: "Automation rule deleted successfully" });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

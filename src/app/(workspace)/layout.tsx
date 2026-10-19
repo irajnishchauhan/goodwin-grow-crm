@@ -18,11 +18,9 @@ export default async function WorkspaceLayout({
   const tenantCtx = await getTenantContext();
 
   if (!tenantCtx) {
-    // If user has memberships, prompt company selector
     if (session.user.memberships.length > 0) {
       redirect("/select-company");
     }
-    // If platform admin without tenant, send to platform portal
     if (session.user.isPlatformAdmin) {
       redirect("/platform");
     }
@@ -38,7 +36,7 @@ export default async function WorkspaceLayout({
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
-      <Sidebar isPlatformAdmin={session.user.isPlatformAdmin} />
+      <Sidebar isPlatformAdmin={session.user.isPlatformAdmin} activeTenant={tenantCtx.tenant} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header
           user={{

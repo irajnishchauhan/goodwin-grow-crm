@@ -315,7 +315,7 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
             className="flex items-center gap-2.5 p-1 rounded-full hover:bg-slate-50 transition cursor-pointer"
           >
             <div className="w-8 h-8 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center">
-              {user.fullName.charAt(0)}
+              {user.fullName ? user.fullName.charAt(0) : "U"}
             </div>
             <div className="hidden sm:block text-left text-xs">
               <div className="font-semibold text-slate-800 leading-tight">{user.fullName}</div>
@@ -323,7 +323,7 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
                 {roles[0] || (user.isPlatformAdmin ? "Platform Owner" : "Member")}
               </div>
             </div>
-            <ChevronDown className="w-3 h-3 text-slate-400 hidden sm:block" />
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
           </button>
 
           {userMenuOpen && (

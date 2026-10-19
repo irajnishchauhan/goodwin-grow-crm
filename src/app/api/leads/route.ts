@@ -12,6 +12,7 @@ export async function GET(req: Request) {
   const q = searchParams.get("q");
   const status = searchParams.get("status");
   const priority = searchParams.get("priority");
+  const assignedOwnerId = searchParams.get("assignedOwnerId");
 
   const whereClause: any = {
     tenantId: tenantCtx.tenant.id,
@@ -23,6 +24,10 @@ export async function GET(req: Request) {
 
   if (priority && priority !== "ALL") {
     whereClause.priority = priority;
+  }
+
+  if (assignedOwnerId && assignedOwnerId !== "ALL") {
+    whereClause.assignedOwnerId = assignedOwnerId === "me" ? tenantCtx.user.id : assignedOwnerId;
   }
 
   if (q) {

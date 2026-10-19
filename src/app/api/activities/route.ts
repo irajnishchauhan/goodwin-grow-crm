@@ -10,10 +10,15 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const type = searchParams.get("type");
+  const performedById = searchParams.get("performedById");
 
   const whereClause: any = { tenantId: tenantCtx.tenant.id };
   if (type && type !== "ALL") {
     whereClause.type = type;
+  }
+
+  if (performedById && performedById !== "ALL") {
+    whereClause.performedById = performedById === "me" ? tenantCtx.user.id : performedById;
   }
 
   const activities = await prisma.activity.findMany({

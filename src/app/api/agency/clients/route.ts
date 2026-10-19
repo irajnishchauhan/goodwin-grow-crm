@@ -1,0 +1,119 @@
+import { NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import { getTenantContext } from "@/lib/tenant/context";
+
+export async function GET(req: Request) {
+  const tenantCtx = await getTenantContext();
+  if (!tenantCtx) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const q = searchParams.get("q");
+  const status = searchParams.get("status");
+
+  const whereClause: any = { tenantId: tenantCtx.tenant.id };
+
+  if (status && status !== "ALL") {
+    whereClause.status = status;
+  }
+
+  if (q) {
+    whereClause.OR = [
+      { name: { contains: q, mode: "insensitive" } },
+      { brandName: { contains: q, mode: "insensitive" } },
+      { industry: { contains: q, mode: "insensitive" } },
+      { accountManagerName: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  const clients = await prisma.agencyClient.findMany({
+    where: whereClause,
+    orderBy: { createdAt: "desc" },
+    include: {
+      _count: {
+        select: {
+          projects: true,
+          tasks: true,
+          contentPosts: true,
+          creativeAssets: true,
+          adCampaigns: true,
+          invoices: true,
+        },
+      },
+    },
+  });
+
+  return NextResponse.json({ success: true, data: clients });
+}
+
+export async function POST(req: Request) {
+  try {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const tenantId = tenantCtx.tenant.id;
+    const body = await req.json();
+    const {
+      name,
+      brandName,
+      industry,
+      website,
+      phone,
+      email,
+      city,
+      state,
+      activePackage,
+      monthlyRetainer,
+      status,
+      postsPlanned,
+      accountManagerName,
+      leadDesignerName,
+      contentWriterName,
+      mediaBuyerName,
+      brandGuidelines,
+      contractStartDate,
+      contractRenewalDate,
+    } = body;
+
+    if (!name) {
+      return NextResponse.json({ success: false, error: "Client name is required" }, { status: 400 });
+    }
+
+    const client = await prisma.agencyClient.create({
+      data: {
+        tenantId,
+        name,
+        brandName: brandName || null,
+        industry: industry || null,
+        website: website || null,
+        phone: phone || null,
+        email: email || null,
+        city: city || null,
+        state: state || null,
+        activePackage: activePackage || "Growth Retainer",
+        monthlyRetainer: monthlyRetainer ? Number(monthlyRetainer) : 0,
+        status: status || "ACTIVE",
+        onboardingProgress: 100,
+        postsPlanned: postsPlanned ? Number(postsPlanned) : 12,
+        postsCompleted: 0,
+        accountManagerName: accountManagerName || tenantCtx.user.fullName,
+        leadDesignerName: leadDesignerName || null,
+        contentWriterName: contentWriterName || null,
+        mediaBuyerName: mediaBuyerName || null,
+        brandGuidelines: brandGuidelines || null,
+        contractStartDate: contractStartDate ? new Date(contractStartDate) : new Date(),
+        contractRenewalDate: contractRenewalDate ? new Date(contractRenewalDate) : null,
+      },
+    });
+
+    return NextResponse.json({ success: true, data: client });
+  } catch (err: any) {
+    return NextResponse.json(
+      { success: false, error: err.message || "Failed to create client" },
+      { status: 500 }
+    );
+  }
+}

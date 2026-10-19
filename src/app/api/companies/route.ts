@@ -10,8 +10,14 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q");
+  const assignedOwnerId = searchParams.get("assignedOwnerId");
 
   const whereClause: any = { tenantId: tenantCtx.tenant.id };
+
+  if (assignedOwnerId && assignedOwnerId !== "ALL") {
+    whereClause.assignedOwnerId = assignedOwnerId === "me" ? tenantCtx.user.id : assignedOwnerId;
+  }
+
   if (q) {
     whereClause.OR = [
       { name: { contains: q, mode: "insensitive" } },

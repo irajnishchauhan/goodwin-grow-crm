@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, Plus, CheckCircle2, AlertCircle, Clock, Play, X, ArrowRight } from "lucide-react";
+import { Zap, Plus, CheckCircle2, AlertCircle, Clock, Play, X, ArrowRight, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
 
 export default function AutomationsPage() {
@@ -49,6 +49,27 @@ export default function AutomationsPage() {
       });
     } catch {
       fetchAutomations();
+    }
+  }
+
+  async function handleDeleteRule(ruleId: string, ruleName: string) {
+    if (!confirm(`Are you sure you want to delete automation rule "${ruleName}"?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/automations?id=${ruleId}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        fetchAutomations();
+      } else {
+        alert(data.error || "Failed to delete automation rule (RBAC permissions required)");
+      }
+    } catch {
+      alert("Error deleting automation rule");
     }
   }
 
@@ -155,16 +176,25 @@ export default function AutomationsPage() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => toggleRule(rule)}
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer ${
-                      rule.isActive
-                        ? "bg-emerald-600 text-white"
-                        : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                    }`}
-                  >
-                    {rule.isActive ? "Active" : "Paused"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleRule(rule)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold transition cursor-pointer ${
+                        rule.isActive
+                          ? "bg-emerald-600 text-white"
+                          : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                      }`}
+                    >
+                      {rule.isActive ? "Active" : "Paused"}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRule(rule.id, rule.name)}
+                      title="Delete Automation Rule"
+                      className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}

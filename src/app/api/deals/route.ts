@@ -10,6 +10,7 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const pipelineId = searchParams.get("pipelineId");
+  const assignedOwnerId = searchParams.get("assignedOwnerId");
 
   const whereClause: any = {
     tenantId: tenantCtx.tenant.id,
@@ -17,6 +18,10 @@ export async function GET(req: Request) {
 
   if (pipelineId) {
     whereClause.pipelineId = pipelineId;
+  }
+
+  if (assignedOwnerId && assignedOwnerId !== "ALL") {
+    whereClause.assignedOwnerId = assignedOwnerId === "me" ? tenantCtx.user.id : assignedOwnerId;
   }
 
   const deals = await prisma.deal.findMany({

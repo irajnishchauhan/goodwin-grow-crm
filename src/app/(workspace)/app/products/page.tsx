@@ -1,20 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Package, Plus, Search, Tag, X } from "lucide-react";
+import { Package, Plus, Search, Tag, X, Edit2, Trash2, Save } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
+  // Create Form State
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
   const [unitPrice, setUnitPrice] = useState(15000);
   const [creating, setCreating] = useState(false);
-  const [search, setSearch] = useState("");
+
+  // Edit Form State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editSku, setEditSku] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editUnitPrice, setEditUnitPrice] = useState(0);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -52,6 +62,7 @@ export default function ProductsPage() {
         setName("");
         setSku("");
         setDescription("");
+        setUnitPrice(15000);
         fetchProducts();
       } else {
         alert(data.error || "Failed to create product");
@@ -60,6 +71,72 @@ export default function ProductsPage() {
       alert("Error creating product");
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEdit(p: any) {
+    setEditingProduct(p);
+    setEditName(p.name);
+    setEditSku(p.sku || "");
+    setEditDescription(p.description || "");
+    setEditUnitPrice(Number(p.unitPrice) || 0);
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingProduct) return;
+    setSavingEdit(true);
+
+    try {
+      const res = await fetch(`/api/products/${editingProduct.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName,
+          sku: editSku || null,
+          description: editDescription || null,
+          unitPrice: editUnitPrice,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingProduct(null);
+        fetchProducts();
+      } else {
+        alert(data.error || "Failed to update product (RBAC check)");
+      }
+    } catch {
+      alert("Error updating product");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDelete(productId: string, productName: string) {
+    if (!confirm(`Are you sure you want to delete product "${productName}" from the catalog?`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        if (editingProduct && editingProduct.id === productId) {
+          setEditModalOpen(false);
+          setEditingProduct(null);
+        }
+        fetchProducts();
+      } else {
+        alert(data.error || "Failed to delete product (RBAC check)");
+      }
+    } catch {
+      alert("Error deleting product");
     }
   }
 
@@ -97,7 +174,7 @@ export default function ProductsPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by battery name, SKU, or competitor benchmark..."
+            placeholder="Search by battery name, SKU, or specification..."
             className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 focus:bg-white transition"
           />
         </div>
@@ -117,22 +194,23 @@ export default function ProductsPage() {
                 <th className="py-3.5 px-4">Unit Price</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4">Created Date</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">Loading catalog...</td>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">Loading catalog...</td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
-                    {search ? `No battery products matching "${search}"` : "No products added yet. Define standard items to use in quotations!"}
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    {search ? `No products matching "${search}"` : "No products added yet. Define standard items to use in quotations!"}
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/60 transition">
+                  <tr key={p.id} className="hover:bg-slate-50/60 transition group">
                     <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2">
                       <Package className="w-4 h-4 text-emerald-600" />
                       <span>{p.name}</span>
@@ -148,6 +226,24 @@ export default function ProductsPage() {
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-slate-400">{formatDate(p.createdAt)}</td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEdit(p)}
+                          title="Edit Product"
+                          className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-emerald-600 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(p.id, p.name)}
+                          title="Delete Product"
+                          className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -156,12 +252,13 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {/* Create Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h2 className="text-base font-bold text-slate-900">Add Catalog Product</h2>
-              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -215,17 +312,104 @@ export default function ProductsPage() {
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
                 >
                   {creating ? "Saving..." : "Save Product"}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editModalOpen && editingProduct && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h2 className="text-base font-bold text-slate-900">Edit Catalog Product</h2>
+              <button onClick={() => setEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdate} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">SKU Code</label>
+                <input
+                  type="text"
+                  value={editSku}
+                  onChange={(e) => setEditSku(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Unit Price (₹ INR) *</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  value={editUnitPrice}
+                  onChange={(e) => setEditUnitPrice(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => handleDelete(editingProduct.id, editingProduct.name)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingEdit ? "Saving..." : "Save Changes"}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
