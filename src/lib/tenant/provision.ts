@@ -313,5 +313,8 @@ export async function provisionTenant(input: ProvisionTenantInput) {
       isNewUser,
       pipeline,
     };
+  }, {
+    timeout: 60000,
+    maxWait: 20000,
   });
 }
