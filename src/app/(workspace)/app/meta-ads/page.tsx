@@ -14,6 +14,10 @@ import {
   Filter,
   Layers,
   X,
+  Edit2,
+  Trash2,
+  Loader2,
+  Save,
 } from "lucide-react";
 
 interface AdCampaign {
@@ -40,8 +44,10 @@ export default function MetaAdsPage() {
   const [campaigns, setCampaigns] = useState<AdCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Modal
+  // Create Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [campaignName, setCampaignName] = useState("");
   const [objective, setObjective] = useState("WhatsApp Direct Messages");
@@ -50,6 +56,18 @@ export default function MetaAdsPage() {
   const [leadsCount, setLeadsCount] = useState("120");
   const [roas, setRoas] = useState("4.8");
   const [clientId, setClientId] = useState("");
+
+  // Edit Modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<AdCampaign | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editObjective, setEditObjective] = useState("");
+  const [editBudget, setEditBudget] = useState("");
+  const [editSpent, setEditSpent] = useState("");
+  const [editLeads, setEditLeads] = useState("");
+  const [editRoas, setEditRoas] = useState("");
+  const [editStatus, setEditStatus] = useState("ACTIVE");
+  const [editClientId, setEditClientId] = useState("");
 
   useEffect(() => {
     fetchCampaigns();
@@ -83,6 +101,7 @@ export default function MetaAdsPage() {
 
   async function handleCreateCampaign(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     try {
       const res = await fetch("/api/agency/ads", {
         method: "POST",
@@ -104,9 +123,128 @@ export default function MetaAdsPage() {
         setModalOpen(false);
         setCampaignName("");
         fetchCampaigns();
+      } else {
+        alert(data.error || "Failed to create campaign");
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEditModal(c: AdCampaign) {
+    setEditingCampaign(c);
+    setEditName(c.campaignName);
+    setEditObjective(c.objective);
+    setEditBudget(String(c.budget));
+    setEditSpent(String(c.spent));
+    setEditLeads(String(c.leadsCount));
+    setEditRoas(String(c.roas));
+    setEditStatus(c.status);
+    setEditClientId(c.client?.id || "");
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdateCampaign(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingCampaign) return;
+    setSaving(true);
+
+    const calcCpl = Number(editLeads) > 0 ? Number(editSpent) / Number(editLeads) : 0;
+
+    // Optimistic UI update
+    setCampaigns((prev) =>
+      prev.map((c) =>
+        c.id === editingCampaign.id
+          ? {
+              ...c,
+              campaignName: editName,
+              objective: editObjective,
+              budget: Number(editBudget),
+              spent: Number(editSpent),
+              leadsCount: Number(editLeads),
+              cpl: calcCpl,
+              roas: Number(editRoas),
+              status: editStatus,
+            }
+          : c
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/agency/ads/${editingCampaign.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignName: editName,
+          objective: editObjective,
+          budget: editBudget,
+          spent: editSpent,
+          leadsCount: editLeads,
+          cpl: calcCpl,
+          roas: editRoas,
+          status: editStatus,
+          clientId: editClientId || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingCampaign(null);
+        fetchCampaigns();
+      } else {
+        alert(data.error || "Failed to update campaign");
+        fetchCampaigns();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchCampaigns();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleQuickStatusChange(campaignId: string, newStatus: string) {
+    // Optimistic update
+    setCampaigns((prev) =>
+      prev.map((c) => (c.id === campaignId ? { ...c, status: newStatus } : c))
+    );
+
+    try {
+      await fetch(`/api/agency/ads/${campaignId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (err) {
+      console.error(err);
+      fetchCampaigns();
+    }
+  }
+
+  async function handleDeleteCampaign(id: string, name: string) {
+    if (!confirm(`Are you sure you want to delete campaign "${name}"?`)) return;
+
+    setDeletingId(id);
+    // Optimistic remove
+    setCampaigns((prev) => prev.filter((c) => c.id !== id));
+
+    try {
+      const res = await fetch(`/api/agency/ads/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to delete campaign");
+        fetchCampaigns();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchCampaigns();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -163,13 +301,13 @@ export default function MetaAdsPage() {
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/70 shadow-xs">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Qualified Leads Captured
+            Verified Leads Generated
           </div>
-          <div className="text-2xl font-black text-blue-700 mt-1">
+          <div className="text-2xl font-black text-emerald-700 mt-1">
             {totalLeads} Leads
           </div>
           <div className="text-[11px] text-emerald-600 font-medium mt-0.5">
-            Synced directly to CRM Leads
+            Instant WhatsApp & Form Submissions
           </div>
         </div>
 
@@ -177,23 +315,23 @@ export default function MetaAdsPage() {
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Average Cost Per Lead (CPL)
           </div>
-          <div className="text-2xl font-black text-emerald-700 mt-1">
+          <div className="text-2xl font-black text-indigo-700 mt-1">
             ₹{avgCPL}
           </div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-0.5">
-            -22% lower than industry avg
+          <div className="text-[11px] text-indigo-600 font-medium mt-0.5">
+            Target benchmark: &lt;₹120/lead
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/70 shadow-xs">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Average Meta ROAS
+            Blended ROAS Return
           </div>
           <div className="text-2xl font-black text-purple-700 mt-1">
             {avgROAS}x
           </div>
           <div className="text-[11px] text-purple-600 font-medium mt-0.5">
-            Direct revenue multiplier
+            ₹{((totalSpent * Number(avgROAS)) || 0).toLocaleString("en-IN")} generated revenue
           </div>
         </div>
       </div>
@@ -202,10 +340,10 @@ export default function MetaAdsPage() {
       <div className="bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Active Client Campaigns on Meta Ad Network
+            Active Meta Campaigns & Conversion Metrics
           </h3>
           <span className="text-xs font-semibold text-blue-600">
-            {campaigns.length} Active Campaigns
+            {campaigns.length} Tracked Sets
           </span>
         </div>
 
@@ -217,27 +355,28 @@ export default function MetaAdsPage() {
                 <th className="py-3.5 px-4">Objective</th>
                 <th className="py-3.5 px-4">Spent / Budget</th>
                 <th className="py-3.5 px-4">Leads</th>
-                <th className="py-3.5 px-4">Cost Per Lead (CPL)</th>
+                <th className="py-3.5 px-4">CPL</th>
                 <th className="py-3.5 px-4">ROAS</th>
                 <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     Loading Meta campaigns...
                   </td>
                 </tr>
               ) : campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    No active Meta campaigns found.
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    No active Meta campaigns recorded.
                   </td>
                 </tr>
               ) : (
                 campaigns.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                  <tr key={c.id} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="py-3.5 px-5">
                       <div className="font-bold text-slate-900">{c.campaignName}</div>
                       {c.client && (
@@ -272,9 +411,44 @@ export default function MetaAdsPage() {
                       </span>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        {c.status}
-                      </span>
+                      <select
+                        value={c.status}
+                        onChange={(e) => handleQuickStatusChange(c.id, e.target.value)}
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border cursor-pointer focus:outline-none ${
+                          c.status === "ACTIVE"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                            : c.status === "PAUSED"
+                            ? "bg-amber-50 text-amber-800 border-amber-200"
+                            : "bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
+                      >
+                        <option value="ACTIVE">ACTIVE</option>
+                        <option value="PAUSED">PAUSED</option>
+                        <option value="COMPLETED">COMPLETED</option>
+                      </select>
+                    </td>
+                    <td className="py-3.5 px-5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openEditModal(c)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-700 hover:bg-blue-50 transition cursor-pointer"
+                          title="Edit Campaign"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCampaign(c.id, c.campaignName)}
+                          disabled={deletingId === c.id}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
+                          title="Delete Campaign"
+                        >
+                          {deletingId === c.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -284,7 +458,7 @@ export default function MetaAdsPage() {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Create Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
@@ -387,7 +561,7 @@ export default function MetaAdsPage() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
@@ -397,9 +571,149 @@ export default function MetaAdsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
                 >
-                  Save Campaign
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Launch Campaign</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editModalOpen && editingCampaign && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Meta Campaign</h3>
+                <p className="text-xs text-slate-500">Update ad spend, lead conversions, or objectives.</p>
+              </div>
+              <button onClick={() => setEditModalOpen(false)} className="p-1.5 rounded-lg text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCampaign} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Campaign Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-blue-800"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="PAUSED">PAUSED</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Client</label>
+                  <select
+                    value={editClientId}
+                    onChange={(e) => setEditClientId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">No Client / General</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Objective</label>
+                  <select
+                    value={editObjective}
+                    onChange={(e) => setEditObjective(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="WhatsApp Direct Messages">WhatsApp Direct Messages</option>
+                    <option value="Instant Lead Forms">Instant Lead Forms</option>
+                    <option value="Website Conversions">Website Conversions</option>
+                    <option value="Video Views & Brand Awareness">Video Views & Brand Awareness</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Budget (₹)</label>
+                  <input
+                    type="number"
+                    value={editBudget}
+                    onChange={(e) => setEditBudget(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Spent (₹)</label>
+                  <input
+                    type="number"
+                    value={editSpent}
+                    onChange={(e) => setEditSpent(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Leads Count</label>
+                  <input
+                    type="number"
+                    value={editLeads}
+                    onChange={(e) => setEditLeads(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Target ROAS</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editRoas}
+                    onChange={(e) => setEditRoas(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>

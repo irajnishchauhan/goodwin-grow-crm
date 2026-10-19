@@ -11,6 +11,10 @@ import {
   CheckCircle2,
   Tag,
   X,
+  Edit2,
+  Trash2,
+  Loader2,
+  Save,
 } from "lucide-react";
 
 interface AgencyExpense {
@@ -30,14 +34,25 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<AgencyExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Modal
+  // Create Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [category, setCategory] = useState("Creative Production");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [clientId, setClientId] = useState("");
   const [isBillable, setIsBillable] = useState(false);
+
+  // Edit Modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<AgencyExpense | null>(null);
+  const [editCategory, setEditCategory] = useState("Creative Production");
+  const [editDescription, setEditDescription] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editClientId, setEditClientId] = useState("");
+  const [editIsBillable, setEditIsBillable] = useState(false);
 
   useEffect(() => {
     fetchExpenses();
@@ -71,6 +86,7 @@ export default function ExpensesPage() {
 
   async function handleCreateExpense(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     try {
       const res = await fetch("/api/agency/expenses", {
         method: "POST",
@@ -90,13 +106,107 @@ export default function ExpensesPage() {
         setDescription("");
         setAmount("");
         fetchExpenses();
+      } else {
+        alert(data.error || "Failed to log expense");
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEditModal(exp: AgencyExpense) {
+    setEditingExpense(exp);
+    setEditCategory(exp.category);
+    setEditDescription(exp.description);
+    setEditAmount(String(exp.amount));
+    setEditClientId(exp.client?.id || "");
+    setEditIsBillable(exp.isBillable);
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdateExpense(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingExpense) return;
+    setSaving(true);
+
+    const numAmount = Number(editAmount);
+
+    // Optimistic UI update
+    setExpenses((prev) =>
+      prev.map((exp) =>
+        exp.id === editingExpense.id
+          ? {
+              ...exp,
+              category: editCategory,
+              description: editDescription,
+              amount: numAmount,
+              isBillable: editIsBillable,
+            }
+          : exp
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/agency/expenses/${editingExpense.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: editCategory,
+          description: editDescription,
+          amount: numAmount,
+          clientId: editClientId || null,
+          isBillable: editIsBillable,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingExpense(null);
+        fetchExpenses();
+      } else {
+        alert(data.error || "Failed to update expense");
+        fetchExpenses();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchExpenses();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteExpense(id: string, desc: string) {
+    if (!confirm(`Are you sure you want to delete expense "${desc}"?`)) return;
+
+    setDeletingId(id);
+    // Optimistic remove
+    setExpenses((prev) => prev.filter((exp) => exp.id !== id));
+
+    try {
+      const res = await fetch(`/api/agency/expenses/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to delete expense");
+        fetchExpenses();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchExpenses();
+    } finally {
+      setDeletingId(null);
     }
   }
 
   const totalExpenses = expenses.reduce((acc, exp) => acc + Number(exp.amount), 0);
+  const billableCosts = expenses
+    .filter((e) => e.isBillable)
+    .reduce((acc, e) => acc + Number(e.amount), 0);
+  const overheadRatio = totalExpenses > 0 ? (((totalExpenses - billableCosts) / totalExpenses) * 100).toFixed(0) : "0";
 
   return (
     <div className="space-y-6">
@@ -143,11 +253,7 @@ export default function ExpensesPage() {
             Billable Pass-Through Costs
           </div>
           <div className="text-2xl font-black text-indigo-700 mt-1">
-            ₹
-            {expenses
-              .filter((e) => e.isBillable)
-              .reduce((acc, e) => acc + Number(e.amount), 0)
-              .toLocaleString("en-IN")}
+            ₹{billableCosts.toLocaleString("en-IN")}
           </div>
           <div className="text-[11px] text-indigo-600 font-medium mt-0.5">
             Directly reimbursed by clients
@@ -158,11 +264,11 @@ export default function ExpensesPage() {
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Agency Overhead Ratio
           </div>
-          <div className="text-2xl font-black text-emerald-700 mt-1">
-            18.2%
+          <div className="text-2xl font-black text-amber-700 mt-1">
+            {overheadRatio}%
           </div>
-          <div className="text-[11px] text-emerald-600 font-medium mt-0.5">
-            Industry best practice: &lt; 25%
+          <div className="text-[11px] text-amber-600 font-medium mt-0.5">
+            Internal tools and software licenses
           </div>
         </div>
       </div>
@@ -171,33 +277,42 @@ export default function ExpensesPage() {
       <div className="bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Delivery Costs & Subcontractors Log
+            Recorded Expenditure Ledger
           </h3>
-          <span className="text-xs font-semibold text-slate-500">{expenses.length} Records</span>
+          <span className="text-xs font-semibold text-emerald-600">
+            {expenses.length} Logged Entries
+          </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                <th className="py-3.5 px-5">Expense Description</th>
+                <th className="py-3.5 px-5">Description</th>
                 <th className="py-3.5 px-4">Category</th>
-                <th className="py-3.5 px-4">Client Allocated</th>
+                <th className="py-3.5 px-4">Client Allocation</th>
                 <th className="py-3.5 px-4">Amount</th>
                 <th className="py-3.5 px-4">Date</th>
-                <th className="py-3.5 px-4">Billable</th>
+                <th className="py-3.5 px-4">Classification</th>
+                <th className="py-3.5 px-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     Loading expenses...
+                  </td>
+                </tr>
+              ) : expenses.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    No operating expenses recorded yet.
                   </td>
                 </tr>
               ) : (
                 expenses.map((exp) => (
-                  <tr key={exp.id} className="hover:bg-slate-50/70 transition-colors">
+                  <tr key={exp.id} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="py-3.5 px-5 font-semibold text-slate-900">{exp.description}</td>
                     <td className="py-3.5 px-4">
                       <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium text-[11px]">
@@ -226,6 +341,29 @@ export default function ExpensesPage() {
                         {exp.isBillable ? "Billable" : "Non-Billable"}
                       </span>
                     </td>
+                    <td className="py-3.5 px-5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openEditModal(exp)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-slate-100 transition cursor-pointer"
+                          title="Edit Expense"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteExpense(exp.id, exp.description)}
+                          disabled={deletingId === exp.id}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
+                          title="Delete Expense"
+                        >
+                          {deletingId === exp.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -234,7 +372,7 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Create Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
@@ -306,7 +444,20 @@ export default function ExpensesPage() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="billable"
+                  checked={isBillable}
+                  onChange={(e) => setIsBillable(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor="billable" className="text-xs font-medium text-slate-700">
+                  Billable back to client (Pass-through cost)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
@@ -316,9 +467,116 @@ export default function ExpensesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
                 >
-                  Save Expense
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Expense</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editModalOpen && editingExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Operating Expense</h3>
+                <p className="text-xs text-slate-500">Update cost, category, or client allocation.</p>
+              </div>
+              <button onClick={() => setEditModalOpen(false)} className="p-1 rounded-lg text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateExpense} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Expense Description *</label>
+                <input
+                  type="text"
+                  required
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                >
+                  <option value="Creative Production">Creative Production</option>
+                  <option value="Software Tools">Software Tools / MarTech</option>
+                  <option value="Subcontractor">Subcontractor / Translators</option>
+                  <option value="Media Spend">Media Spend / Conversions API</option>
+                  <option value="Agency Overhead">Agency Overhead</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Amount (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Client Allocation</label>
+                  <select
+                    value={editClientId}
+                    onChange={(e) => setEditClientId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">General Overhead</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="editBillable"
+                  checked={editIsBillable}
+                  onChange={(e) => setEditIsBillable(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor="editBillable" className="text-xs font-medium text-slate-700">
+                  Billable back to client (Pass-through cost)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>

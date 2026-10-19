@@ -15,6 +15,9 @@ import {
   Sparkles,
   Building2,
   X,
+  Edit2,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 
 interface Project {
@@ -44,7 +47,7 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState("");
   const [clients, setClients] = useState<any[]>([]);
 
-  // Modal
+  // Create Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -53,6 +56,22 @@ export default function ProjectsPage() {
   const [budget, setBudget] = useState("50000");
   const [dueDate, setDueDate] = useState("");
   const [assigneeName, setAssigneeName] = useState("Kunal Sharma");
+
+  // Edit Modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editClientId, setEditClientId] = useState("");
+  const [editStatus, setEditStatus] = useState("IN_PROGRESS");
+  const [editBudget, setEditBudget] = useState("50000");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editAssignee, setEditAssignee] = useState("");
+  const [editProgress, setEditProgress] = useState(50);
+
+  // Deleting State
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -86,6 +105,7 @@ export default function ProjectsPage() {
 
   async function handleCreateProject(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     try {
       const res = await fetch("/api/agency/projects", {
         method: "POST",
@@ -112,6 +132,128 @@ export default function ProjectsPage() {
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEditModal(p: Project) {
+    setEditingProject(p);
+    setEditName(p.name);
+    setEditDesc(p.description || "");
+    setEditClientId(p.client?.id || "");
+    setEditStatus(p.status);
+    setEditBudget(String(p.budget));
+    setEditDueDate(p.dueDate ? p.dueDate.slice(0, 10) : "");
+    setEditAssignee(p.assigneeName || "");
+    setEditProgress(p.progressPercent);
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdateProject(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingProject) return;
+    setSaving(true);
+
+    // Optimistic UI update
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.id === editingProject.id
+          ? {
+              ...p,
+              name: editName,
+              description: editDesc,
+              status: editStatus,
+              budget: Number(editBudget),
+              assigneeName: editAssignee,
+              progressPercent: editProgress,
+              dueDate: editDueDate || null,
+            }
+          : p
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/agency/projects/${editingProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName,
+          description: editDesc,
+          clientId: editClientId,
+          status: editStatus,
+          budget: editBudget,
+          progressPercent: editProgress,
+          assigneeName: editAssignee,
+          dueDate: editDueDate || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingProject(null);
+        fetchProjects();
+      } else {
+        alert(data.error || "Failed to update project");
+        fetchProjects();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchProjects();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteProject(id: string, name: string) {
+    if (!confirm(`Are you sure you want to delete project "${name}"?`)) return;
+
+    setDeletingId(id);
+    // Optimistic remove
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+
+    try {
+      const res = await fetch(`/api/agency/projects/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to delete project");
+        fetchProjects();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchProjects();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleQuickStatus(id: string, newStatus: string) {
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              status: newStatus,
+              progressPercent: newStatus === "COMPLETED" ? 100 : p.progressPercent,
+            }
+          : p
+      )
+    );
+
+    try {
+      await fetch(`/api/agency/projects/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: newStatus,
+          progressPercent: newStatus === "COMPLETED" ? 100 : undefined,
+        }),
+      });
+    } catch (e) {
+      console.error(e);
+      fetchProjects();
     }
   }
 
@@ -160,56 +302,105 @@ export default function ProjectsPage() {
             className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
           />
         </div>
-        <span className="text-xs text-slate-400 font-medium">{filteredProjects.length} projects active</span>
+        <div className="text-xs text-slate-500 font-medium hidden sm:block">
+          Showing <span className="font-semibold text-slate-800">{filteredProjects.length}</span> active projects
+        </div>
       </div>
 
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {/* Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {loading ? (
-          <div className="col-span-2 text-center py-12 text-slate-400">Loading projects...</div>
+          <div className="col-span-full py-16 text-center text-slate-400 text-sm">
+            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-600" />
+            Loading agency projects...
+          </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="col-span-2 text-center py-12 text-slate-400">No projects found.</div>
+          <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-slate-300">
+            <FolderKanban className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <h3 className="text-sm font-bold text-slate-700">No projects found</h3>
+            <p className="text-xs text-slate-400 mt-1">Get started by creating a new client project.</p>
+          </div>
         ) : (
           filteredProjects.map((p) => (
             <div
               key={p.id}
-              className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs hover:border-slate-300 transition flex flex-col justify-between"
+              className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group relative"
             >
               <div>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[10px] uppercase tracking-wider">
-                    {p.deliverableType}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                    {p.status}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+                      <FolderKanban className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block">
+                        {p.client?.name || "Goodwin Agency"}
+                      </span>
+                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition">
+                        {p.name}
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1 opacity-90 group-hover:opacity-100 transition">
+                    <button
+                      onClick={() => openEditModal(p)}
+                      title="Edit Project"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteProject(p.id, p.name)}
+                      disabled={deletingId === p.id}
+                      title="Delete Project"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 mb-3">
+                  <select
+                    value={p.status}
+                    onChange={(e) => handleQuickStatus(p.id, e.target.value)}
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border cursor-pointer ${
+                      p.status === "COMPLETED"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : p.status === "IN_PROGRESS"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}
+                  >
+                    <option value="PLANNING">Planning</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+
+                  <span className="text-xs text-slate-400">•</span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    ₹{Number(p.budget).toLocaleString("en-IN")}
                   </span>
                 </div>
 
-                <h3 className="text-base font-bold text-slate-900 leading-snug">
-                  {p.name}
-                </h3>
-                {p.client && (
-                  <div className="text-xs font-semibold text-emerald-700 mt-1 flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5" />
-                    <span>{p.client.name}</span>
-                  </div>
-                )}
                 {p.description && (
-                  <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
+                  <p className="text-xs text-slate-500 line-clamp-2 mb-3">
                     {p.description}
                   </p>
                 )}
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 space-y-3">
+              <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
                 <div>
                   <div className="flex items-center justify-between text-xs font-semibold mb-1">
                     <span className="text-slate-600">Completion</span>
-                    <span className="text-emerald-600">{p.progressPercent}%</span>
+                    <span className="text-emerald-600 font-bold">{p.progressPercent}%</span>
                   </div>
                   <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full"
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300"
                       style={{ width: `${p.progressPercent}%` }}
                     />
                   </div>
@@ -218,7 +409,7 @@ export default function ProjectsPage() {
                 <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
                   <div className="flex items-center gap-1.5">
                     <User className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="font-medium text-slate-700">{p.assigneeName || "Lead Lead"}</span>
+                    <span className="font-medium text-slate-700">{p.assigneeName || "Unassigned"}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -327,6 +518,18 @@ export default function ProjectsPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Budget (INR)
+                </label>
+                <input
+                  type="number"
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Scope & Deliverable Description
                 </label>
                 <textarea
@@ -342,15 +545,152 @@ export default function ProjectsPage() {
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 cursor-pointer"
                 >
-                  Create Project
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Create Project</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Modal */}
+      {editModalOpen && editingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Project</h3>
+                <p className="text-xs text-slate-500">Update project scope, progress, or assignment.</p>
+              </div>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateProject} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Project Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  >
+                    <option value="PLANNING">Planning</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="COMPLETED">Completed</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Progress ({editProgress}%)
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={editProgress}
+                    onChange={(e) => setEditProgress(Number(e.target.value))}
+                    className="w-full h-2 mt-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Assignee
+                  </label>
+                  <input
+                    type="text"
+                    value={editAssignee}
+                    onChange={(e) => setEditAssignee(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Budget (INR)
+                </label>
+                <input
+                  type="number"
+                  value={editBudget}
+                  onChange={(e) => setEditBudget(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>

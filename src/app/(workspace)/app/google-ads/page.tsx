@@ -14,6 +14,10 @@ import {
   Filter,
   Layers,
   X,
+  Edit2,
+  Trash2,
+  Loader2,
+  Save,
 } from "lucide-react";
 
 interface AdCampaign {
@@ -38,10 +42,48 @@ interface AdCampaign {
 export default function GoogleAdsPage() {
   const [campaigns, setCampaigns] = useState<AdCampaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clients, setClients] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Create Modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [campaignName, setCampaignName] = useState("");
+  const [objective, setObjective] = useState("High-Intent Search Ads");
+  const [budget, setBudget] = useState("30000");
+  const [spent, setSpent] = useState("14500");
+  const [clicks, setClicks] = useState("1600");
+  const [leadsCount, setLeadsCount] = useState("85");
+  const [roas, setRoas] = useState("4.2");
+  const [clientId, setClientId] = useState("");
+
+  // Edit Modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<AdCampaign | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editObjective, setEditObjective] = useState("");
+  const [editBudget, setEditBudget] = useState("");
+  const [editSpent, setEditSpent] = useState("");
+  const [editClicks, setEditClicks] = useState("");
+  const [editLeads, setEditLeads] = useState("");
+  const [editRoas, setEditRoas] = useState("");
+  const [editStatus, setEditStatus] = useState("ACTIVE");
+  const [editClientId, setEditClientId] = useState("");
 
   useEffect(() => {
     fetchCampaigns();
+    fetchClients();
   }, []);
+
+  async function fetchClients() {
+    try {
+      const res = await fetch("/api/agency/clients");
+      const data = await res.json();
+      if (data.success) setClients(data.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   async function fetchCampaigns() {
     try {
@@ -55,6 +97,159 @@ export default function GoogleAdsPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCreateCampaign(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await fetch("/api/agency/ads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignName,
+          platform: "GOOGLE",
+          objective,
+          budget,
+          spent,
+          clicks,
+          leadsCount,
+          roas,
+          clientId: clientId || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setModalOpen(false);
+        setCampaignName("");
+        fetchCampaigns();
+      } else {
+        alert(data.error || "Failed to create campaign");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEditModal(c: AdCampaign) {
+    setEditingCampaign(c);
+    setEditName(c.campaignName);
+    setEditObjective(c.objective);
+    setEditBudget(String(c.budget));
+    setEditSpent(String(c.spent));
+    setEditClicks(String(c.clicks || 0));
+    setEditLeads(String(c.leadsCount));
+    setEditRoas(String(c.roas));
+    setEditStatus(c.status);
+    setEditClientId(c.client?.id || "");
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdateCampaign(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingCampaign) return;
+    setSaving(true);
+
+    const calcCpl = Number(editLeads) > 0 ? Number(editSpent) / Number(editLeads) : 0;
+
+    // Optimistic UI update
+    setCampaigns((prev) =>
+      prev.map((c) =>
+        c.id === editingCampaign.id
+          ? {
+              ...c,
+              campaignName: editName,
+              objective: editObjective,
+              budget: Number(editBudget),
+              spent: Number(editSpent),
+              clicks: Number(editClicks),
+              leadsCount: Number(editLeads),
+              cpl: calcCpl,
+              roas: Number(editRoas),
+              status: editStatus,
+            }
+          : c
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/agency/ads/${editingCampaign.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignName: editName,
+          objective: editObjective,
+          budget: editBudget,
+          spent: editSpent,
+          clicks: editClicks,
+          leadsCount: editLeads,
+          cpl: calcCpl,
+          roas: editRoas,
+          status: editStatus,
+          clientId: editClientId || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingCampaign(null);
+        fetchCampaigns();
+      } else {
+        alert(data.error || "Failed to update campaign");
+        fetchCampaigns();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchCampaigns();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleQuickStatusChange(campaignId: string, newStatus: string) {
+    // Optimistic update
+    setCampaigns((prev) =>
+      prev.map((c) => (c.id === campaignId ? { ...c, status: newStatus } : c))
+    );
+
+    try {
+      await fetch(`/api/agency/ads/${campaignId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (err) {
+      console.error(err);
+      fetchCampaigns();
+    }
+  }
+
+  async function handleDeleteCampaign(id: string, name: string) {
+    if (!confirm(`Are you sure you want to delete campaign "${name}"?`)) return;
+
+    setDeletingId(id);
+    // Optimistic remove
+    setCampaigns((prev) => prev.filter((c) => c.id !== id));
+
+    try {
+      const res = await fetch(`/api/agency/ads/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to delete campaign");
+        fetchCampaigns();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchCampaigns();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -80,6 +275,14 @@ export default function GoogleAdsPage() {
             Google Search Ads, Performance Max, YouTube video ads, keyword bidding, and client lead conversions.
           </p>
         </div>
+
+        <button
+          onClick={() => setModalOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm shadow-emerald-600/20 transition cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>New Google Campaign</span>
+        </button>
       </div>
 
       {/* KPI Cards */}
@@ -155,24 +358,25 @@ export default function GoogleAdsPage() {
                 <th className="py-3.5 px-4">Conversions</th>
                 <th className="py-3.5 px-4">ROAS</th>
                 <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     Loading Google campaigns...
                   </td>
                 </tr>
               ) : campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     No active Google campaigns found.
                   </td>
                 </tr>
               ) : (
                 campaigns.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                  <tr key={c.id} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="py-3.5 px-5">
                       <div className="font-bold text-slate-900">{c.campaignName}</div>
                       {c.client && (
@@ -207,9 +411,44 @@ export default function GoogleAdsPage() {
                       </span>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        {c.status}
-                      </span>
+                      <select
+                        value={c.status}
+                        onChange={(e) => handleQuickStatusChange(c.id, e.target.value)}
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border cursor-pointer focus:outline-none ${
+                          c.status === "ACTIVE"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                            : c.status === "PAUSED"
+                            ? "bg-amber-50 text-amber-800 border-amber-200"
+                            : "bg-slate-100 text-slate-700 border-slate-200"
+                        }`}
+                      >
+                        <option value="ACTIVE">ACTIVE</option>
+                        <option value="PAUSED">PAUSED</option>
+                        <option value="COMPLETED">COMPLETED</option>
+                      </select>
+                    </td>
+                    <td className="py-3.5 px-5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openEditModal(c)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
+                          title="Edit Campaign"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCampaign(c.id, c.campaignName)}
+                          disabled={deletingId === c.id}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
+                          title="Delete Campaign"
+                        >
+                          {deletingId === c.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -218,6 +457,267 @@ export default function GoogleAdsPage() {
           </table>
         </div>
       </div>
+
+      {/* Create Modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">New Google Ad Campaign</h3>
+                <p className="text-xs text-slate-500">Record a high-intent Google Search or Performance Max campaign.</p>
+              </div>
+              <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCampaign} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Campaign Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={campaignName}
+                  onChange={(e) => setCampaignName(e.target.value)}
+                  placeholder="e.g. Lithium Inverter Batteries — Google Search High Intent"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Client *</label>
+                <select
+                  required
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                >
+                  <option value="">Select an enrolled client</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Objective / Type</label>
+                  <select
+                    value={objective}
+                    onChange={(e) => setObjective(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="High-Intent Search Ads">High-Intent Search Ads</option>
+                    <option value="Performance Max (PMax)">Performance Max (PMax)</option>
+                    <option value="YouTube Video Action">YouTube Video Action</option>
+                    <option value="Google Local Maps Pack Ads">Google Local Maps Pack Ads</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Budget (₹)</label>
+                  <input
+                    type="number"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Spent (₹)</label>
+                  <input
+                    type="number"
+                    value={spent}
+                    onChange={(e) => setSpent(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Clicks</label>
+                  <input
+                    type="number"
+                    value={clicks}
+                    onChange={(e) => setClicks(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Conversions</label>
+                  <input
+                    type="number"
+                    value={leadsCount}
+                    onChange={(e) => setLeadsCount(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                >
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Launch Google Ad</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editModalOpen && editingCampaign && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Google Ad Campaign</h3>
+                <p className="text-xs text-slate-500">Update budget, clicks, conversions, or target status.</p>
+              </div>
+              <button onClick={() => setEditModalOpen(false)} className="p-1.5 rounded-lg text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCampaign} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Campaign Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-emerald-800"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="PAUSED">PAUSED</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Client</label>
+                  <select
+                    value={editClientId}
+                    onChange={(e) => setEditClientId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">No Client / General</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Objective / Type</label>
+                  <select
+                    value={editObjective}
+                    onChange={(e) => setEditObjective(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="High-Intent Search Ads">High-Intent Search Ads</option>
+                    <option value="Performance Max (PMax)">Performance Max (PMax)</option>
+                    <option value="YouTube Video Action">YouTube Video Action</option>
+                    <option value="Google Local Maps Pack Ads">Google Local Maps Pack Ads</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Budget (₹)</label>
+                  <input
+                    type="number"
+                    value={editBudget}
+                    onChange={(e) => setEditBudget(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Spent (₹)</label>
+                  <input
+                    type="number"
+                    value={editSpent}
+                    onChange={(e) => setEditSpent(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Clicks</label>
+                  <input
+                    type="number"
+                    value={editClicks}
+                    onChange={(e) => setEditClicks(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Conversions</label>
+                  <input
+                    type="number"
+                    value={editLeads}
+                    onChange={(e) => setEditLeads(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

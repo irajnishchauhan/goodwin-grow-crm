@@ -809,6 +809,7 @@ model AgencyProject {
   tasks  AgencyTask[]
 
   @@index([tenantId, status])
+  @@index([tenantId, clientId])
   @@map("agency_projects")
 }
 
@@ -844,6 +845,8 @@ model AgencyTask {
   client  AgencyClient?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, stage])
+  @@index([tenantId, clientId])
+  @@index([tenantId, projectId])
   @@map("agency_tasks")
 }
 
@@ -887,6 +890,8 @@ model ContentPost {
   client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, scheduledDate])
+  @@index([tenantId, status])
+  @@index([tenantId, clientId])
   @@map("content_posts")
 }
 
@@ -916,6 +921,7 @@ model CreativeAsset {
   client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, reviewStatus])
+  @@index([tenantId, clientId])
   @@map("creative_assets")
 }
 
@@ -955,6 +961,8 @@ model AdCampaign {
   client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status])
+  @@index([tenantId, platform])
+  @@index([tenantId, clientId])
   @@map("ad_campaigns")
 }
 
@@ -978,6 +986,7 @@ model SeoTracker {
   client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, keyword])
+  @@index([tenantId, clientId])
   @@map("seo_trackers")
 }
 
@@ -1009,6 +1018,8 @@ model AgencyInvoice {
   client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, clientId])
   @@map("agency_invoices")
 }
 
@@ -1028,6 +1039,7 @@ model AgencyExpense {
   client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, date])
+  @@index([tenantId, clientId])
   @@map("agency_expenses")
 }
 

@@ -40,8 +40,21 @@ export async function createSession(
   return session;
 }
 
+interface CachedSession {
+  data: any;
+  cachedAt: number;
+}
+const sessionMemoryCache = new Map<string, CachedSession>();
+const CACHE_TTL_MS = 15000; // 15 seconds fast cache
+
 export async function getSessionByToken(token: string) {
   if (!token || !process.env.DATABASE_URL) return null;
+
+  const now = Date.now();
+  const cached = sessionMemoryCache.get(token);
+  if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
 
   try {
     const session = await prisma.session.findUnique({
@@ -80,15 +93,21 @@ export async function getSessionByToken(token: string) {
       },
     });
 
-    if (!session) return null;
+    if (!session) {
+      sessionMemoryCache.delete(token);
+      return null;
+    }
     if (session.expiresAt < new Date()) {
+      sessionMemoryCache.delete(token);
       await prisma.session.delete({ where: { token } }).catch(() => {});
       return null;
     }
     if (!session.user.isActive) {
+      sessionMemoryCache.delete(token);
       return null;
     }
 
+    sessionMemoryCache.set(token, { data: session, cachedAt: now });
     return session;
   } catch (error) {
     console.error("Session verification error (database unavailable):", error);
@@ -104,6 +123,7 @@ export async function getCurrentSession() {
 }
 
 export async function destroySession(token: string) {
+  sessionMemoryCache.delete(token);
   try {
     await prisma.session.delete({ where: { token } });
   } catch {
@@ -112,8 +132,10 @@ export async function destroySession(token: string) {
 }
 
 export async function updateSessionActiveTenant(token: string, newTenantId: string) {
+  sessionMemoryCache.delete(token);
   return prisma.session.update({
     where: { token },
     data: { activeTenantId: newTenantId },
   });
 }
+

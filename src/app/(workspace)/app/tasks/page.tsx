@@ -22,6 +22,7 @@ import {
   Sparkles,
   Layers,
   MessageSquare,
+  Loader2,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -44,6 +45,8 @@ export default function TasksPage() {
   const [assignedToFilter, setAssignedToFilter] = useState("ALL");
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Create Standard CRM Task Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -52,7 +55,6 @@ export default function TasksPage() {
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [assignedToId, setAssignedToId] = useState("");
-  const [creating, setCreating] = useState(false);
 
   // Create Agency Task Modal
   const [agencyModalOpen, setAgencyModalOpen] = useState(false);
@@ -63,16 +65,25 @@ export default function TasksPage() {
   const [agencyAssignee, setAgencyAssignee] = useState("Aman Gupta");
   const [agencyRole, setAgencyRole] = useState("Content Writer");
 
-  // Edit Modal
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<any | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editDueDate, setEditDueDate] = useState("");
-  const [editPriority, setEditPriority] = useState("MEDIUM");
-  const [editStatus, setEditStatus] = useState("PENDING");
-  const [editAssignedToId, setEditAssignedToId] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
+  // Edit Agency Task Modal
+  const [editAgencyModalOpen, setEditAgencyModalOpen] = useState(false);
+  const [editingAgencyTask, setEditingAgencyTask] = useState<any | null>(null);
+  const [editAgencyTitle, setEditAgencyTitle] = useState("");
+  const [editAgencyDesc, setEditAgencyDesc] = useState("");
+  const [editAgencyStage, setEditAgencyStage] = useState("CONTENT_BRIEF");
+  const [editAgencyAssignee, setEditAgencyAssignee] = useState("");
+  const [editAgencyRole, setEditAgencyRole] = useState("");
+  const [editAgencyPriority, setEditAgencyPriority] = useState("MEDIUM");
+
+  // Edit CRM Task Modal
+  const [editCrmModalOpen, setEditCrmModalOpen] = useState(false);
+  const [editingCrmTask, setEditingCrmTask] = useState<any | null>(null);
+  const [editCrmTitle, setEditCrmTitle] = useState("");
+  const [editCrmDesc, setEditCrmDesc] = useState("");
+  const [editCrmDueDate, setEditCrmDueDate] = useState("");
+  const [editCrmPriority, setEditCrmPriority] = useState("MEDIUM");
+  const [editCrmStatus, setEditCrmStatus] = useState("PENDING");
+  const [editCrmAssignedToId, setEditCrmAssignedToId] = useState("");
 
   useEffect(() => {
     fetchTeam();
@@ -163,6 +174,7 @@ export default function TasksPage() {
 
   async function handleCreateAgencyTask(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     try {
       const res = await fetch("/api/agency/tasks", {
         method: "POST",
@@ -183,15 +195,107 @@ export default function TasksPage() {
         setAgencyTitle("");
         setAgencyDesc("");
         fetchAgencyTasks();
+      } else {
+        alert(data.error || "Failed to create deliverable");
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEditAgencyModal(t: any) {
+    setEditingAgencyTask(t);
+    setEditAgencyTitle(t.title);
+    setEditAgencyDesc(t.description || "");
+    setEditAgencyStage(t.stage);
+    setEditAgencyAssignee(t.assigneeName || "");
+    setEditAgencyRole(t.assigneeRole || "");
+    setEditAgencyPriority(t.priority || "MEDIUM");
+    setEditAgencyModalOpen(true);
+  }
+
+  async function handleUpdateAgencyTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingAgencyTask) return;
+    setSaving(true);
+
+    // Optimistic update
+    setAgencyTasks((prev) =>
+      prev.map((t) =>
+        t.id === editingAgencyTask.id
+          ? {
+              ...t,
+              title: editAgencyTitle,
+              description: editAgencyDesc,
+              stage: editAgencyStage,
+              assigneeName: editAgencyAssignee,
+              assigneeRole: editAgencyRole,
+              priority: editAgencyPriority,
+            }
+          : t
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/agency/tasks/${editingAgencyTask.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editAgencyTitle,
+          description: editAgencyDesc,
+          stage: editAgencyStage,
+          assigneeName: editAgencyAssignee,
+          assigneeRole: editAgencyRole,
+          priority: editAgencyPriority,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditAgencyModalOpen(false);
+        setEditingAgencyTask(null);
+        fetchAgencyTasks();
+      } else {
+        alert(data.error || "Failed to update deliverable");
+        fetchAgencyTasks();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchAgencyTasks();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteAgencyTask(id: string, taskTitle: string) {
+    if (!confirm(`Are you sure you want to delete deliverable "${taskTitle}"?`)) return;
+
+    setDeletingId(id);
+    // Optimistic remove
+    setAgencyTasks((prev) => prev.filter((t) => t.id !== id));
+
+    try {
+      const res = await fetch(`/api/agency/tasks/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to delete deliverable");
+        fetchAgencyTasks();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchAgencyTasks();
+    } finally {
+      setDeletingId(null);
     }
   }
 
   async function handleCreateCrmTask(e: React.FormEvent) {
     e.preventDefault();
-    setCreating(true);
+    setSaving(true);
     try {
       const res = await fetch("/api/tasks", {
         method: "POST",
@@ -213,11 +317,100 @@ export default function TasksPage() {
         setDueDate("");
         setAssignedToId("");
         fetchTasks();
+      } else {
+        alert(data.error || "Failed to create CRM task");
       }
     } catch (err) {
       console.error(err);
     } finally {
-      setCreating(false);
+      setSaving(false);
+    }
+  }
+
+  function openEditCrmModal(t: any) {
+    setEditingCrmTask(t);
+    setEditCrmTitle(t.title);
+    setEditCrmDesc(t.description || "");
+    setEditCrmDueDate(t.dueDate ? t.dueDate.slice(0, 10) : "");
+    setEditCrmPriority(t.priority || "MEDIUM");
+    setEditCrmStatus(t.status || "PENDING");
+    setEditCrmAssignedToId(t.assignedToId || "");
+    setEditCrmModalOpen(true);
+  }
+
+  async function handleUpdateCrmTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingCrmTask) return;
+    setSaving(true);
+
+    // Optimistic UI update
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === editingCrmTask.id
+          ? {
+              ...t,
+              title: editCrmTitle,
+              description: editCrmDesc,
+              dueDate: editCrmDueDate || null,
+              priority: editCrmPriority,
+              status: editCrmStatus,
+            }
+          : t
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/tasks/${editingCrmTask.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editCrmTitle,
+          description: editCrmDesc,
+          dueDate: editCrmDueDate || null,
+          priority: editCrmPriority,
+          status: editCrmStatus,
+          assignedToId: editCrmAssignedToId || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditCrmModalOpen(false);
+        setEditingCrmTask(null);
+        fetchTasks();
+      } else {
+        alert(data.error || "Failed to update task");
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchTasks();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteCrmTask(id: string, taskTitle: string) {
+    if (!confirm(`Are you sure you want to delete task "${taskTitle}"?`)) return;
+
+    setDeletingId(id);
+    // Optimistic remove
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+
+    try {
+      const res = await fetch(`/api/tasks/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to delete task");
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchTasks();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -226,10 +419,10 @@ export default function TasksPage() {
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t)));
 
     try {
-      await fetch("/api/tasks", {
-        method: "PATCH",
+      await fetch(`/api/tasks/${task.id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: task.id, status: newStatus }),
+        body: JSON.stringify({ status: newStatus }),
       });
     } catch {
       fetchTasks();
@@ -258,88 +451,117 @@ export default function TasksPage() {
           </p>
         </div>
 
+        {/* View Switcher and Action Button */}
         <div className="flex items-center gap-3">
-          {/* Mode Switcher */}
-          <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
+          <div className="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-200">
             <button
               onClick={() => setViewMode("AGENCY")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                 viewMode === "AGENCY"
-                  ? "bg-white text-slate-900 shadow-xs"
+                  ? "bg-white text-emerald-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              7-Stage Agency Pod
+              Agency 7-Stage Pods
             </button>
             <button
               onClick={() => setViewMode("CRM")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                 viewMode === "CRM"
-                  ? "bg-white text-slate-900 shadow-xs"
+                  ? "bg-white text-emerald-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Standard CRM Tasks
+              CRM Sales Tasks
             </button>
           </div>
 
-          <button
-            onClick={() => (viewMode === "AGENCY" ? setAgencyModalOpen(true) : setModalOpen(true))}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm shadow-emerald-600/20 transition cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{viewMode === "AGENCY" ? "New Deliverable Task" : "Add CRM Task"}</span>
-          </button>
+          {viewMode === "AGENCY" ? (
+            <button
+              onClick={() => setAgencyModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm shadow-emerald-600/20 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Deliverable</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm shadow-emerald-600/20 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New CRM Task</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* VIEW MODE 1: AGENCY 7-STAGE KANBAN */}
+      {/* VIEW MODE 1: AGENCY 7-STAGE WORKFLOW KANBAN */}
       {viewMode === "AGENCY" && (
         <div className="overflow-x-auto pb-4">
-          <div className="flex gap-4 min-w-[1400px]">
-            {agencyStages.map((stageObj, stageIndex) => {
-              const stageTasks = agencyTasks.filter((t) => t.stage === stageObj.key);
+          <div className="flex gap-4 min-w-[1500px]">
+            {agencyStages.map((st, stageIndex) => {
+              const stageTasks = agencyTasks.filter((t) => t.stage === st.key);
 
               return (
                 <div
-                  key={stageObj.key}
-                  className="w-72 shrink-0 bg-slate-100/70 rounded-2xl p-3 border border-slate-200/80 flex flex-col max-h-[78vh]"
+                  key={st.key}
+                  className="w-72 shrink-0 bg-slate-50/80 rounded-2xl border border-slate-200/80 flex flex-col max-h-[75vh]"
                 >
-                  <div className="flex items-center justify-between pb-3 px-1 border-b border-slate-200">
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${stageObj.color}`}>
-                      {stageObj.label}
-                    </span>
-                    <span className="text-xs font-bold text-slate-400 bg-white px-2 py-0.5 rounded-full shadow-2xs">
+                  {/* Column Header */}
+                  <div className="p-3 border-b border-slate-200 bg-white/70 rounded-t-2xl flex items-center justify-between">
+                    <span className="font-bold text-xs text-slate-800">{st.label}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
                       {stageTasks.length}
                     </span>
                   </div>
 
-                  <div className="overflow-y-auto space-y-3 pt-3 flex-1 scrollbar-thin">
+                  {/* Tasks List */}
+                  <div className="p-2 space-y-2.5 overflow-y-auto flex-1">
                     {stageTasks.length === 0 ? (
-                      <div className="py-8 text-center text-[11px] text-slate-400">
-                        No tasks in this stage
+                      <div className="p-4 text-center text-[11px] text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                        No active items in {st.label.slice(3)}
                       </div>
                     ) : (
                       stageTasks.map((t) => (
                         <div
                           key={t.id}
-                          className="bg-white rounded-xl p-3.5 border border-slate-200/70 shadow-xs hover:border-emerald-300 hover:shadow-sm transition space-y-2.5"
+                          className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs hover:border-slate-300 transition space-y-2 group"
                         >
-                          {t.client && (
-                            <div className="text-[10px] font-bold text-emerald-700 truncate">
-                              {t.client.name}
+                          <div className="flex items-center justify-between">
+                            {t.client ? (
+                              <div className="text-[10px] font-bold text-emerald-700 truncate max-w-[140px]">
+                                {t.client.name}
+                              </div>
+                            ) : (
+                              <div />
+                            )}
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => openEditAgencyModal(t)}
+                                className="p-1 rounded text-slate-400 hover:text-emerald-700 hover:bg-slate-50 cursor-pointer"
+                                title="Edit Deliverable"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteAgencyTask(t.id, t.title)}
+                                disabled={deletingId === t.id}
+                                className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+                                title="Delete Deliverable"
+                              >
+                                {deletingId === t.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin text-rose-600" />
+                                ) : (
+                                  <Trash2 className="w-3 h-3" />
+                                )}
+                              </button>
                             </div>
-                          )}
+                          </div>
 
                           <h4 className="text-xs font-bold text-slate-900 leading-snug">
                             {t.title}
                           </h4>
-
-                          {t.assetPreview && (
-                            <div className="aspect-video rounded-lg overflow-hidden bg-slate-100">
-                              <img src={t.assetPreview} alt="" className="w-full h-full object-cover" />
-                            </div>
-                          )}
 
                           {t.description && (
                             <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
@@ -487,8 +709,41 @@ export default function TasksPage() {
                             {new Date(task.dueDate).toLocaleDateString()}
                           </span>
                         )}
+                        <span
+                          className={`px-2 py-0.2 rounded text-[10px] font-bold ${
+                            task.priority === "URGENT"
+                              ? "bg-rose-100 text-rose-800"
+                              : task.priority === "HIGH"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {task.priority}
+                        </span>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100">
+                    <button
+                      onClick={() => openEditCrmModal(task)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-slate-100 transition cursor-pointer"
+                      title="Edit CRM Task"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCrmTask(task.id, task.title)}
+                      disabled={deletingId === task.id}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
+                      title="Delete CRM Task"
+                    >
+                      {deletingId === task.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                 </div>
               ))
@@ -497,7 +752,7 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Agency Task Modal */}
+      {/* Agency Task Modal (Create) */}
       {agencyModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
@@ -589,9 +844,11 @@ export default function TasksPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5"
                 >
-                  Add Deliverable
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Add Deliverable</span>
                 </button>
               </div>
             </form>
@@ -599,7 +856,92 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* CRM Task Modal */}
+      {/* Agency Task Modal (Edit) */}
+      {editAgencyModalOpen && editingAgencyTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Agency Deliverable</h3>
+                <p className="text-xs text-slate-500">Update stage, brief, or delivery assignee.</p>
+              </div>
+              <button onClick={() => setEditAgencyModalOpen(false)} className="p-1 rounded-lg text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateAgencyTask} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Task Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editAgencyTitle}
+                  onChange={(e) => setEditAgencyTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Workflow Stage</label>
+                  <select
+                    value={editAgencyStage}
+                    onChange={(e) => setEditAgencyStage(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-emerald-800"
+                  >
+                    {agencyStages.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Assignee</label>
+                  <input
+                    type="text"
+                    value={editAgencyAssignee}
+                    onChange={(e) => setEditAgencyAssignee(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Brief & Notes</label>
+                <textarea
+                  rows={3}
+                  value={editAgencyDesc}
+                  onChange={(e) => setEditAgencyDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditAgencyModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CRM Task Modal (Create) */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
@@ -621,6 +963,17 @@ export default function TasksPage() {
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Follow up on proposal"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                 />
               </div>
@@ -651,6 +1004,22 @@ export default function TasksPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Assign To</label>
+                <select
+                  value={assignedToId}
+                  onChange={(e) => setAssignedToId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                >
+                  <option value="">Select Team Member</option>
+                  {teamMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.fullName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
                 <button
                   type="button"
@@ -661,9 +1030,124 @@ export default function TasksPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5"
                 >
-                  Create Task
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Create Task</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CRM Task Modal (Edit) */}
+      {editCrmModalOpen && editingCrmTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit CRM Task</h3>
+                <p className="text-xs text-slate-500">Update status, priority, or deadline.</p>
+              </div>
+              <button onClick={() => setEditCrmModalOpen(false)} className="p-1 rounded-lg text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCrmTask} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editCrmTitle}
+                  onChange={(e) => setEditCrmTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editCrmStatus}
+                    onChange={(e) => setEditCrmStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-emerald-800"
+                  >
+                    <option value="PENDING">PENDING</option>
+                    <option value="IN_PROGRESS">IN_PROGRESS</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Priority</label>
+                  <select
+                    value={editCrmPriority}
+                    onChange={(e) => setEditCrmPriority(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="URGENT">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Due Date</label>
+                <input
+                  type="date"
+                  value={editCrmDueDate}
+                  onChange={(e) => setEditCrmDueDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Assign To</label>
+                <select
+                  value={editCrmAssignedToId}
+                  onChange={(e) => setEditCrmAssignedToId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                >
+                  <option value="">Unassigned</option>
+                  {teamMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.fullName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={editCrmDesc}
+                  onChange={(e) => setEditCrmDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditCrmModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>

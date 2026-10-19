@@ -27,10 +27,10 @@ export default async function WorkspaceLayout({
     redirect("/login");
   }
 
-  const formattedMemberships = session.user.memberships.map((m) => ({
+  const formattedMemberships = session.user.memberships.map((m: any) => ({
     tenantId: m.tenantId,
-    tenantName: m.tenant.name,
-    tenantCode: m.tenant.code,
+    tenantName: m.tenant?.name || "",
+    tenantCode: m.tenant?.code || "",
     isOwner: m.isOwner,
   }));
 

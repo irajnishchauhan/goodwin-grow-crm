@@ -110,10 +110,10 @@ export async function POST(req: Request) {
           fullName: user.fullName,
           isPlatformAdmin: user.isPlatformAdmin,
         },
-        memberships: user.memberships.map((m) => ({
+        memberships: user.memberships.map((m: any) => ({
           tenantId: m.tenantId,
-          tenantName: m.tenant.name,
-          tenantCode: m.tenant.code,
+          tenantName: m.tenant?.name || "",
+          tenantCode: m.tenant?.code || "",
           isOwner: m.isOwner,
         })),
         activeTenantId: resolvedTenantId,

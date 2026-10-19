@@ -9,7 +9,6 @@ import {
   Linkedin,
   Facebook,
   Youtube,
-  Twitter,
   Clock,
   Sparkles,
   Building2,
@@ -19,6 +18,10 @@ import {
   X,
   Tag,
   Flame,
+  Edit2,
+  Trash2,
+  Loader2,
+  Save,
 } from "lucide-react";
 
 interface ContentPost {
@@ -59,8 +62,10 @@ export default function ContentCalendarPage() {
   const [selectedClientId, setSelectedClientId] = useState("ALL");
   const [selectedPlatform, setSelectedPlatform] = useState("ALL");
   const [composerOpen, setComposerOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Form State
+  // Create Form State
   const [title, setTitle] = useState("");
   const [caption, setCaption] = useState("");
   const [hashtags, setHashtags] = useState("");
@@ -70,6 +75,20 @@ export default function ContentCalendarPage() {
   const [scheduledDate, setScheduledDate] = useState("2026-10-25T11:00");
   const [festivalOrEvent, setFestivalOrEvent] = useState("Diwali Festive Campaign");
   const [mediaUrl, setMediaUrl] = useState("https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800");
+
+  // Edit Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<ContentPost | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCaption, setEditCaption] = useState("");
+  const [editHashtags, setEditHashtags] = useState("");
+  const [editClientId, setEditClientId] = useState("");
+  const [editPlatform, setEditPlatform] = useState("INSTAGRAM");
+  const [editPostType, setEditPostType] = useState("Carousel");
+  const [editScheduledDate, setEditScheduledDate] = useState("");
+  const [editStatus, setEditStatus] = useState("SCHEDULED");
+  const [editFestival, setEditFestival] = useState("");
+  const [editMediaUrl, setEditMediaUrl] = useState("");
 
   useEffect(() => {
     fetchPosts();
@@ -107,6 +126,7 @@ export default function ContentCalendarPage() {
 
   async function handleCreatePost(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     try {
       const res = await fetch("/api/agency/calendar", {
         method: "POST",
@@ -135,6 +155,127 @@ export default function ContentCalendarPage() {
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEditModal(post: ContentPost) {
+    setEditingPost(post);
+    setEditTitle(post.title);
+    setEditCaption(post.caption || "");
+    setEditHashtags(post.hashtags || "");
+    setEditClientId(post.client?.id || "");
+    setEditPlatform(post.platform);
+    setEditPostType(post.postType);
+    setEditScheduledDate(
+      post.scheduledDate ? new Date(post.scheduledDate).toISOString().slice(0, 16) : ""
+    );
+    setEditStatus(post.status);
+    setEditFestival(post.festivalOrEvent || "");
+    setEditMediaUrl(post.mediaUrl || "");
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdatePost(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingPost) return;
+    setSaving(true);
+
+    // Optimistic UI update
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === editingPost.id
+          ? {
+              ...p,
+              title: editTitle,
+              caption: editCaption,
+              hashtags: editHashtags,
+              platform: editPlatform,
+              postType: editPostType,
+              status: editStatus,
+              festivalOrEvent: editFestival,
+              mediaUrl: editMediaUrl,
+              scheduledDate: editScheduledDate || null,
+            }
+          : p
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/agency/calendar/${editingPost.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editTitle,
+          caption: editCaption,
+          hashtags: editHashtags,
+          clientId: editClientId || null,
+          platform: editPlatform,
+          postType: editPostType,
+          status: editStatus,
+          festivalOrEvent: editFestival || null,
+          mediaUrl: editMediaUrl || null,
+          scheduledDate: editScheduledDate ? new Date(editScheduledDate) : null,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingPost(null);
+        fetchPosts();
+      } else {
+        alert(data.error || "Failed to update post");
+        fetchPosts();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchPosts();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleQuickStatusChange(postId: string, newStatus: string) {
+    // Optimistic update
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, status: newStatus } : p))
+    );
+
+    try {
+      await fetch(`/api/agency/calendar/${postId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (err) {
+      console.error(err);
+      fetchPosts();
+    }
+  }
+
+  async function handleDeletePost(postId: string, postTitle: string) {
+    if (!confirm(`Are you sure you want to delete post "${postTitle}"?`)) return;
+
+    setDeletingId(postId);
+    // Optimistic remove
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+
+    try {
+      const res = await fetch(`/api/agency/calendar/${postId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to delete post");
+        fetchPosts();
+      }
+    } catch (err) {
+      console.error(err);
+      fetchPosts();
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -257,7 +398,7 @@ export default function ContentCalendarPage() {
           posts.map((post) => (
             <div
               key={post.id}
-              className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs hover:border-slate-300 transition flex flex-col justify-between"
+              className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs hover:border-slate-300 transition flex flex-col justify-between group"
             >
               <div>
                 {/* Media Preview Thumbnail */}
@@ -265,7 +406,7 @@ export default function ContentCalendarPage() {
                   <img
                     src={post.mediaUrl || "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=600"}
                     alt={post.title}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                   />
                   <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/90 backdrop-blur-xs text-[10px] font-bold text-slate-800 shadow-xs">
                     {getPlatformIcon(post.platform)}
@@ -301,34 +442,76 @@ export default function ContentCalendarPage() {
                 </div>
               </div>
 
-              <div className="p-4 pt-0 border-t border-slate-100 mt-2 flex items-center justify-between text-[11px] text-slate-500">
-                <span className="font-semibold text-emerald-700">
-                  {post.status.replace("_", " ")}
-                </span>
-                <span className="font-medium text-slate-400">
-                  {post.reach > 0 ? `${post.reach.toLocaleString()} reach` : "Ready to publish"}
-                </span>
+              {/* Status and Action Controls */}
+              <div className="p-4 pt-2 border-t border-slate-100 mt-2 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  {/* Quick Status Selector */}
+                  <select
+                    value={post.status}
+                    onChange={(e) => handleQuickStatusChange(post.id, e.target.value)}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer focus:outline-none ${
+                      post.status === "PUBLISHED"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : post.status === "SCHEDULED"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : post.status === "ARCHIVED"
+                        ? "bg-slate-100 text-slate-600 border-slate-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}
+                  >
+                    <option value="DRAFT">DRAFT</option>
+                    <option value="SCHEDULED">SCHEDULED</option>
+                    <option value="PUBLISHED">PUBLISHED</option>
+                    <option value="ARCHIVED">ARCHIVED</option>
+                  </select>
+
+                  <span className="text-[10px] font-medium text-slate-400">
+                    {post.reach > 0 ? `${post.reach.toLocaleString()} reach` : "Ready"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-end gap-1.5 pt-1">
+                  <button
+                    onClick={() => openEditModal(post)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
+                    title="Edit Post"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeletePost(post.id, post.title)}
+                    disabled={deletingId === post.id}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
+                    title="Delete Post"
+                  >
+                    {deletingId === post.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Post Composer Modal */}
+      {/* Post Composer Modal (Create) */}
       {composerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Schedule Agency Post</h3>
-                <p className="text-xs text-slate-500">Create multi-channel content for marketing clients.</p>
+                <h3 className="text-base font-bold text-slate-900">Compose & Schedule Post</h3>
+                <p className="text-xs text-slate-500">Multi-channel creative delivery for agency clients.</p>
               </div>
               <button onClick={() => setComposerOpen(false)} className="p-1.5 rounded-lg text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreatePost} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+            <form onSubmit={handleCreatePost} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Client *</label>
                 <select
@@ -347,13 +530,13 @@ export default function ContentCalendarPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Post Title *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Post Title / Creative Hook *</label>
                 <input
                   type="text"
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Diwali Shubh Mahurat Detailing Offer"
+                  placeholder="e.g. Diwali Mega Ceramic Coating Flash Sale"
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                 />
               </div>
@@ -369,39 +552,28 @@ export default function ContentCalendarPage() {
                     <option value="INSTAGRAM">Instagram</option>
                     <option value="FACEBOOK">Facebook</option>
                     <option value="LINKEDIN">LinkedIn</option>
-                    <option value="YOUTUBE">YouTube</option>
+                    <option value="YOUTUBE">YouTube Shorts</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Post Format</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Post Type</label>
                   <select
                     value={postType}
                     onChange={(e) => setPostType(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   >
-                    <option value="Reel">Reel (9:16)</option>
                     <option value="Carousel">Carousel (1080x1350)</option>
-                    <option value="Graphic Poster">Static Graphic (1080x1080)</option>
-                    <option value="Story">Story with Link Sticker</option>
+                    <option value="Reel / Video">Reel / 9:16 Video</option>
+                    <option value="Static Graphic">Static Square (1080x1080)</option>
+                    <option value="Story Offer">Story Limited Offer</option>
                   </select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Caption</label>
-                <textarea
-                  rows={3}
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="Write persuasive hook, educational body, and WhatsApp CTA..."
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
-                />
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Scheduled Date & Time</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Schedule Date & Time</label>
                   <input
                     type="datetime-local"
                     value={scheduledDate}
@@ -411,18 +583,51 @@ export default function ContentCalendarPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Festival / Hook</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Festival / Campaign Tag</label>
                   <input
                     type="text"
                     value={festivalOrEvent}
                     onChange={(e) => setFestivalOrEvent(e.target.value)}
-                    placeholder="Diwali Festive Offer"
+                    placeholder="e.g. Dhanteras 2026 Special"
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Caption / Copywriting</label>
+                <textarea
+                  rows={3}
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  placeholder="Compelling marketing copy with offer call to action..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Hashtags</label>
+                <input
+                  type="text"
+                  value={hashtags}
+                  onChange={(e) => setHashtags(e.target.value)}
+                  placeholder="#ceramiccoating #cardetailing #delhicars #diwaliautosale"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Media Asset Preview URL</label>
+                <input
+                  type="url"
+                  value={mediaUrl}
+                  onChange={(e) => setMediaUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setComposerOpen(false)}
@@ -432,9 +637,173 @@ export default function ContentCalendarPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
                 >
-                  Schedule Post
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Schedule Deliverable</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Post Modal */}
+      {editModalOpen && editingPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Scheduled Post</h3>
+                <p className="text-xs text-slate-500">Update creative copy, platform, timing, or status.</p>
+              </div>
+              <button onClick={() => setEditModalOpen(false)} className="p-1.5 rounded-lg text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdatePost} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Post Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-emerald-800"
+                  >
+                    <option value="DRAFT">DRAFT</option>
+                    <option value="SCHEDULED">SCHEDULED</option>
+                    <option value="PUBLISHED">PUBLISHED</option>
+                    <option value="ARCHIVED">ARCHIVED</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Client</label>
+                  <select
+                    value={editClientId}
+                    onChange={(e) => setEditClientId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">No Client / General</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Platform</label>
+                  <select
+                    value={editPlatform}
+                    onChange={(e) => setEditPlatform(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="INSTAGRAM">Instagram</option>
+                    <option value="FACEBOOK">Facebook</option>
+                    <option value="LINKEDIN">LinkedIn</option>
+                    <option value="YOUTUBE">YouTube Shorts</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Post Type</label>
+                  <select
+                    value={editPostType}
+                    onChange={(e) => setEditPostType(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="Carousel">Carousel (1080x1350)</option>
+                    <option value="Reel / Video">Reel / 9:16 Video</option>
+                    <option value="Static Graphic">Static Square (1080x1080)</option>
+                    <option value="Story Offer">Story Limited Offer</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Schedule Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={editScheduledDate}
+                    onChange={(e) => setEditScheduledDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Festival / Campaign Tag</label>
+                  <input
+                    type="text"
+                    value={editFestival}
+                    onChange={(e) => setEditFestival(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Caption / Copywriting</label>
+                <textarea
+                  rows={3}
+                  value={editCaption}
+                  onChange={(e) => setEditCaption(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Hashtags</label>
+                <input
+                  type="text"
+                  value={editHashtags}
+                  onChange={(e) => setEditHashtags(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Media Asset Preview URL</label>
+                <input
+                  type="url"
+                  value={editMediaUrl}
+                  onChange={(e) => setEditMediaUrl(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5"
+                >
+                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>

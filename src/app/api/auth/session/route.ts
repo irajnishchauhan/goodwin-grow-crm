@@ -26,10 +26,10 @@ export async function GET() {
       activeTenant: tenantCtx ? tenantCtx.tenant : null,
       roles: tenantCtx ? tenantCtx.roles : [],
       permissions: tenantCtx ? tenantCtx.permissions : [],
-      memberships: session.user.memberships.map((m) => ({
+      memberships: session.user.memberships.map((m: any) => ({
         tenantId: m.tenantId,
-        tenantName: m.tenant.name,
-        tenantCode: m.tenant.code,
+        tenantName: m.tenant?.name || "",
+        tenantCode: m.tenant?.code || "",
         isOwner: m.isOwner,
       })),
     },

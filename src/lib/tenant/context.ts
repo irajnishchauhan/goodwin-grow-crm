@@ -48,18 +48,18 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
   }
 
   const membership = session.user.memberships.find(
-    (m) => m.tenantId === activeTenantId && m.status === "ACTIVE"
+    (m: any) => m.tenantId === activeTenantId && m.status === "ACTIVE"
   );
 
   if (!membership) {
     return null;
   }
 
-  const roles = membership.roles.map((mr) => mr.role.name);
+  const roles = membership.roles.map((mr: any) => mr.role.name);
   const permissionSet = new Set<string>();
 
-  membership.roles.forEach((mr) => {
-    mr.role.permissions.forEach((rp) => {
+  membership.roles.forEach((mr: any) => {
+    mr.role.permissions.forEach((rp: any) => {
       permissionSet.add(rp.permission.code);
     });
   });
