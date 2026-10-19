@@ -24,6 +24,7 @@ import {
   Flame,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { BatteriesDashboardView } from "@/components/batteries/BatteriesDashboardView";
 
 export default async function DashboardPage() {
   const tenantCtx = await getTenantContext();
@@ -487,7 +488,110 @@ export default async function DashboardPage() {
   }
 
   // -------------------------------------------------------------
-  // Default / Standard Battery Industry Sales CRM Dashboard
+  // Goodwin Batteries - Battery Sales & Distribution CRM Dashboard
+  // -------------------------------------------------------------
+  const isBatteries = tenantCtx.tenant.code === "goodwin-batteries";
+  if (isBatteries) {
+    const [
+      activeDealers,
+      openEnquiries,
+      pendingOrdersCount,
+      collectionFollowUpsCount,
+      pendingOrdersValueAgg,
+      totalDealers,
+      distributorsCount,
+      retailersCount,
+      recentOrders,
+      collections,
+      fieldVisits,
+      warrantyCases,
+    ] = await Promise.all([
+      prisma.batteryPartner.count({ where: { tenantId, type: "DEALER", status: "ACTIVE" } }),
+      prisma.lead.count({ where: { tenantId, status: { in: ["NEW", "CONTACTED", "QUALIFIED"] } } }),
+      prisma.batteryOrder.count({ where: { tenantId, status: "PENDING_APPROVAL" } }),
+      prisma.batteryCollection.count({ where: { tenantId, nextFollowUpDate: { not: null } } }),
+      prisma.batteryOrder.aggregate({
+        where: { tenantId, status: "PENDING_APPROVAL" },
+        _sum: { totalAmount: true },
+      }),
+      prisma.batteryPartner.count({ where: { tenantId, type: "DEALER" } }),
+      prisma.batteryPartner.count({ where: { tenantId, type: "DISTRIBUTOR" } }),
+      prisma.batteryPartner.count({ where: { tenantId, type: "RETAILER" } }),
+      prisma.batteryOrder.findMany({
+        where: { tenantId },
+        take: 8,
+        orderBy: { createdAt: "desc" },
+        include: { partner: true },
+      }),
+      prisma.batteryCollection.findMany({
+        where: { tenantId, nextFollowUpDate: { not: null } },
+        take: 7,
+        orderBy: { ageingDays: "desc" },
+        include: { partner: true },
+      }),
+      prisma.batteryFieldVisit.findMany({
+        where: { tenantId },
+        take: 5,
+        orderBy: { visitDate: "desc" },
+        include: { partner: true },
+      }),
+      prisma.batteryWarrantyClaim.findMany({
+        where: { tenantId },
+        take: 6,
+        orderBy: { createdAt: "desc" },
+        include: { partner: true },
+      }),
+    ]);
+
+    return (
+      <BatteriesDashboardView
+        user={tenantCtx.user}
+        metrics={{
+          activeDealers,
+          openEnquiries,
+          pendingOrders: pendingOrdersCount,
+          collectionFollowUps: collectionFollowUpsCount,
+          totalDealers,
+          distributorsCount,
+          retailersCount,
+          pendingOrdersValue: Number(pendingOrdersValueAgg._sum.totalAmount || 0),
+          totalOutstanding: 1420000,
+        }}
+        recentOrders={recentOrders.map((o) => ({
+          ...o,
+          partner: {
+            businessName: o.partner.businessName,
+            city: o.partner.city,
+            tier: o.partner.tier,
+            territory: o.partner.territory,
+          },
+        }))}
+        collections={collections.map((c) => ({
+          ...c,
+          partner: {
+            businessName: c.partner.businessName,
+            phone: c.partner.phone,
+            city: c.partner.city,
+          },
+        }))}
+        fieldVisits={fieldVisits.map((v) => ({
+          ...v,
+          partner: {
+            businessName: v.partner.businessName,
+            city: v.partner.city,
+            territory: v.partner.territory,
+          },
+        }))}
+        warrantyCases={warrantyCases.map((w) => ({
+          ...w,
+          partner: w.partner ? { businessName: w.partner.businessName } : null,
+        }))}
+      />
+    );
+  }
+
+  // -------------------------------------------------------------
+  // Default / Generic Enterprise Sales CRM Dashboard
   // -------------------------------------------------------------
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());

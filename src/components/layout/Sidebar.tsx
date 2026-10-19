@@ -35,6 +35,12 @@ import {
   Sparkles,
   ExternalLink,
   Gauge,
+  BatteryCharging,
+  Store,
+  MapPin,
+  ShoppingBag,
+  Cpu,
+  ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -111,7 +117,53 @@ const agencyNavGroups = [
   },
 ];
 
-// 2. Standard Enterprise Sales & Distribution CRM (Goodwin Batteries & others)
+// 2. Goodwin Batteries - Battery Sales & Distribution CRM
+const batteriesNavGroups = [
+  {
+    category: "DISTRIBUTION NETWORK",
+    links: [
+      { name: "Dealers", href: "/app/dealers?tab=dealers", icon: Building2 },
+      { name: "Distributors", href: "/app/dealers?tab=distributors", icon: Share2 },
+      { name: "Retailers", href: "/app/dealers?tab=retailers", icon: Store },
+      { name: "Field Sales Visits", href: "/app/field-visits", icon: MapPin },
+    ],
+  },
+  {
+    category: "SALES & PIPELINE",
+    links: [
+      { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
+      { name: "Leads & Enquiries", href: "/app/leads", icon: TrendingUp },
+      { name: "Sales Pipeline", href: "/app/deals", icon: Kanban },
+      { name: "Quotations", href: "/app/quotations", icon: FileSpreadsheet },
+      { name: "Purchase Orders", href: "/app/orders", icon: ShoppingBag },
+    ],
+  },
+  {
+    category: "FINANCIALS & ERP SYNC",
+    links: [
+      { name: "Collections & Ageing", href: "/app/collections", icon: Wallet },
+      { name: "ERP Invoices", href: "/app/invoices", icon: Receipt },
+      { name: "ERP Boundary Sync", href: "/app/integrations", icon: Cpu },
+    ],
+  },
+  {
+    category: "SERVICE & PRODUCTS",
+    links: [
+      { name: "Warranty & Service", href: "/app/warranty", icon: ShieldAlert },
+      { name: "Battery Catalog", href: "/app/products", icon: BatteryCharging },
+    ],
+  },
+  {
+    category: "INTELLIGENCE & PORTAL",
+    links: [
+      { name: "Reports & Analytics", href: "/app/reports", icon: BarChart3 },
+      { name: "Dealer Partner Portal", href: "/app/portal", icon: ExternalLink },
+      { name: "Company Settings", href: "/app/settings", icon: Settings },
+    ],
+  },
+];
+
+// 3. Standard Enterprise Sales & Distribution CRM
 const standardNavGroups = [
   {
     category: "CORE CRM",
@@ -147,7 +199,8 @@ const standardNavGroups = [
 export function Sidebar({ isPlatformAdmin, activeTenant }: SidebarProps) {
   const pathname = usePathname();
   const isAgency = activeTenant?.code === "goodwin-grow-ai";
-  const navGroups = isAgency ? agencyNavGroups : standardNavGroups;
+  const isBatteries = activeTenant?.code === "goodwin-batteries";
+  const navGroups = isAgency ? agencyNavGroups : isBatteries ? batteriesNavGroups : standardNavGroups;
 
   return (
     <aside className="w-64 border-r border-slate-200 bg-white flex flex-col h-screen select-none shrink-0 shadow-xs">
@@ -158,21 +211,30 @@ export function Sidebar({ isPlatformAdmin, activeTenant }: SidebarProps) {
             "w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md transition-all",
             isAgency
               ? "bg-gradient-to-tr from-indigo-600 via-emerald-600 to-teal-500 shadow-emerald-600/20"
+              : isBatteries
+              ? "bg-gradient-to-tr from-amber-600 via-orange-500 to-emerald-600 shadow-amber-600/20"
               : "bg-gradient-to-tr from-emerald-700 via-emerald-600 to-teal-500 shadow-emerald-700/20"
           )}
         >
-          <Layers className="w-5 h-5" />
+          {isBatteries ? <BatteryCharging className="w-5 h-5 text-white" /> : <Layers className="w-5 h-5" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold tracking-tight text-slate-900 truncate flex items-center gap-1.5">
             {activeTenant?.name || "Goodwin Grow"}{" "}
-            <span className="text-emerald-600 font-extrabold text-xs">CRM</span>
+            <span className={cn("font-extrabold text-xs", isBatteries ? "text-amber-600" : "text-emerald-600")}>
+              {isBatteries ? "POWER" : "CRM"}
+            </span>
           </div>
           <div className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1 text-slate-400">
             {isAgency ? (
               <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 Agency OS
+              </span>
+            ) : isBatteries ? (
+              <span className="inline-flex items-center gap-1 text-amber-700 font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                Battery Sales & Distribution
               </span>
             ) : (
               <span>Enterprise Workspace</span>

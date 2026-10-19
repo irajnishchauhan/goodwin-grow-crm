@@ -84,6 +84,24 @@ export default function IntegrationsPage() {
       status: "CONNECTED",
       lastSync: "Synced 3 mins ago",
     },
+    {
+      id: "goodwin-erp",
+      name: "Goodwin Batteries ERP & Manufacturing System",
+      category: "Enterprise Resource Planning (ERP Boundary)",
+      description: "Bidirectional sync: Pushes approved dealer orders from CRM to ERP; pulls GST e-Way bills, inventory availability, and ledger settlements from ERP.",
+      iconBg: "bg-amber-600",
+      status: "CONNECTED",
+      lastSync: "Active REST Webhook (Idempotent)",
+    },
+    {
+      id: "warranty-engine",
+      name: "Goodwin Authorized Digital Warranty Engine",
+      category: "Warranty & Serial Authentication",
+      description: "Direct validation against production serial database, hydrometer specific gravity thresholds, and automated replacement serial allocation.",
+      iconBg: "bg-emerald-600",
+      status: "CONNECTED",
+      lastSync: "Verified & Connected",
+    },
   ]);
 
   function toggleConnection(id: string) {

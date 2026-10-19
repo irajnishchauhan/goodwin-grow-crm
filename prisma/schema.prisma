@@ -59,6 +59,13 @@ model Tenant {
   agencyInvoices       AgencyInvoice[]
   agencyExpenses       AgencyExpense[]
 
+  // Battery Manufacturing & Distribution Relations
+  batteryPartners       BatteryPartner[]
+  batteryOrders         BatteryOrder[]
+  batteryCollections    BatteryCollection[]
+  batteryWarrantyClaims BatteryWarrantyClaim[]
+  batteryFieldVisits    BatteryFieldVisit[]
+
   @@map("tenants")
 }
 
@@ -1114,4 +1121,197 @@ model AgencyExpense {
   @@index([tenantId, clientId])
   @@map("agency_expenses")
 }
+
+// -------------------------------------------------------------
+// 7. BATTERY MANUFACTURING & DISTRIBUTION CRM (GOODWIN BATTERIES)
+// -------------------------------------------------------------
+
+enum PartnerType {
+  DISTRIBUTOR
+  DEALER
+  RETAILER
+}
+
+enum PartnerTier {
+  PLATINUM
+  GOLD
+  SILVER
+  BRONZE
+}
+
+enum PartnerStatus {
+  PROSPECT
+  ONBOARDING
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+model BatteryPartner {
+  id                   String        @id @default(uuid())
+  tenantId             String        @map("tenant_id")
+  type                 PartnerType   @default(DEALER)
+  code                 String
+  businessName         String        @map("business_name")
+  ownerName            String        @map("owner_name")
+  phone                String
+  email                String?
+  gstin                String?
+  pan                  String?
+  address              String
+  city                 String
+  state                String
+  pincode              String?
+  territory            String
+  assignedSalesUserId  String?       @map("assigned_sales_user_id")
+  parentDistributorId  String?       @map("parent_distributor_id")
+  creditLimit          Decimal       @default(0.0) @map("credit_limit") @db.Decimal(14, 2)
+  creditDays           Int           @default(30) @map("credit_days")
+  outstandingBalance   Decimal       @default(0.0) @map("outstanding_balance") @db.Decimal(14, 2)
+  overdueAmount        Decimal       @default(0.0) @map("overdue_amount") @db.Decimal(14, 2)
+  status               PartnerStatus @default(ACTIVE)
+  tier                 PartnerTier   @default(SILVER)
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+
+  tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders               BatteryOrder[]
+  collections          BatteryCollection[]
+  warrantyClaims       BatteryWarrantyClaim[]
+  fieldVisits          BatteryFieldVisit[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, type, status])
+  @@index([tenantId, territory])
+  @@map("battery_partners")
+}
+
+enum BatteryOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PROCESSING
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+model BatteryOrder {
+  id              String             @id @default(uuid())
+  tenantId        String             @map("tenant_id")
+  orderNumber     String             @map("order_number")
+  partnerId       String             @map("partner_id")
+  salesUserId     String?            @map("sales_user_id")
+  totalAmount     Decimal            @map("total_amount") @db.Decimal(14, 2)
+  status          BatteryOrderStatus @default(PENDING_APPROVAL)
+  erpSyncStatus   String             @default("PENDING") @map("erp_sync_status")
+  erpOrderRef     String?            @map("erp_order_ref")
+  items           Json               @default("[]")
+  deliveryAddress String?            @map("delivery_address")
+  notes           String?
+  expectedDate    DateTime?          @map("expected_date")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  partner         BatteryPartner     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, partnerId, status])
+  @@map("battery_orders")
+}
+
+enum CollectionStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+model BatteryCollection {
+  id               String           @id @default(uuid())
+  tenantId         String           @map("tenant_id")
+  invoiceNumber    String           @map("invoice_number")
+  partnerId        String           @map("partner_id")
+  amountDue        Decimal          @map("amount_due") @db.Decimal(14, 2)
+  amountPaid       Decimal          @default(0.0) @map("amount_paid") @db.Decimal(14, 2)
+  dueDate          DateTime         @map("due_date")
+  paymentDate      DateTime?        @map("payment_date")
+  paymentMode      String?          @map("payment_mode")
+  status           CollectionStatus @default(PENDING)
+  ageingDays       Int              @default(0) @map("ageing_days")
+  followUpNotes    String?          @map("follow_up_notes")
+  nextFollowUpDate DateTime?        @map("next_follow_up_date")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  partner          BatteryPartner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, partnerId, status])
+  @@index([tenantId, dueDate])
+  @@map("battery_collections")
+}
+
+enum WarrantyClaimStatus {
+  SUBMITTED
+  INSPECTION
+  APPROVED_REPLACEMENT
+  APPROVED_PRORATA
+  REJECTED
+  CLOSED
+}
+
+model BatteryWarrantyClaim {
+  id                  String              @id @default(uuid())
+  tenantId            String              @map("tenant_id")
+  claimNumber         String              @map("claim_number")
+  partnerId           String?             @map("partner_id")
+  customerName        String              @map("customer_name")
+  customerPhone       String              @map("customer_phone")
+  batterySerialNumber String              @map("battery_serial_number")
+  batteryModel        String              @map("battery_model")
+  purchaseDate        DateTime            @map("purchase_date")
+  claimDate           DateTime            @default(now()) @map("claim_date")
+  claimType           String              @map("claim_type")
+  status              WarrantyClaimStatus @default(SUBMITTED)
+  technicianNotes     String?             @map("technician_notes")
+  replacementSerial   String?             @map("replacement_serial")
+  resolutionDate      DateTime?           @map("resolution_date")
+  erpSyncStatus       String              @default("PENDING") @map("erp_sync_status")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  partner             BatteryPartner?     @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, claimNumber])
+  @@index([tenantId, batterySerialNumber])
+  @@index([tenantId, status])
+  @@map("battery_warranty_claims")
+}
+
+model BatteryFieldVisit {
+  id             String         @id @default(uuid())
+  tenantId       String         @map("tenant_id")
+  partnerId      String         @map("partner_id")
+  salesUserId    String         @map("sales_user_id")
+  visitDate      DateTime       @default(now()) @map("visit_date")
+  purpose        String
+  outcome        String?
+  notes          String?
+  orderBooked    Decimal?       @map("order_booked") @db.Decimal(14, 2)
+  collectionMade Decimal?       @map("collection_made") @db.Decimal(14, 2)
+  followUpDate   DateTime?      @map("follow_up_date")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  partner        BatteryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, partnerId])
+  @@index([tenantId, salesUserId, visitDate])
+  @@map("battery_field_visits")
+}
+
 

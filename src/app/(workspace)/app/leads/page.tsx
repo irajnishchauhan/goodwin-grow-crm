@@ -32,6 +32,11 @@ import {
 import { formatDate } from "@/lib/utils";
 
 const serviceOptions = [
+  "Dealer Network Stocking & Distribution",
+  "Lithium E-Rickshaw & 3W Fleet Supply",
+  "Tall Tubular Inverter & Solar Distribution",
+  "Automotive Silver-Alloy Starter Batteries",
+  "Commercial Fleet Battery Bulk Contract",
   "Full Stack Growth Marketing Retainer",
   "Ceramic Detailing SEO & Meta Ads",
   "Luxury Furnishing Omnichannel Brand Campaign",
