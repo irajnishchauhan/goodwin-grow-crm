@@ -1,9 +1,128 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import prisma from "../src/lib/prisma";
 import { getTenantContext } from "../src/lib/tenant/context";
 import { createSession } from "../src/lib/auth/session";
 
 describe("P0 Client Isolation & Role Boundaries Verification", () => {
+  beforeAll(async () => {
+    let tenant = await prisma.tenant.findUnique({ where: { code: "goodwin-grow-ai" } });
+    if (!tenant) {
+      tenant = await prisma.tenant.create({
+        data: { code: "goodwin-grow-ai", name: "Goodwin Grow AI", status: "ACTIVE" },
+      });
+    }
+    const tenantId = tenant.id;
+
+    let sapna = await prisma.agencyClient.findFirst({ where: { tenantId, name: "Sapna Washing Point" } });
+    if (!sapna) {
+      sapna = await prisma.agencyClient.create({
+        data: { tenantId, name: "Sapna Washing Point", status: "ACTIVE" },
+      });
+    }
+
+    let amba = await prisma.agencyClient.findFirst({ where: { tenantId, name: "Maa Amba Foam & Furnishing" } });
+    if (!amba) {
+      amba = await prisma.agencyClient.create({
+        data: { tenantId, name: "Maa Amba Foam & Furnishing", status: "ACTIVE" },
+      });
+    }
+
+    let clientRole = await prisma.role.findFirst({ where: { tenantId, name: "Client" } });
+    if (!clientRole) {
+      clientRole = await prisma.role.create({
+        data: { tenantId, name: "Client", isSystem: true },
+      });
+    }
+
+    let sapnaUser = await prisma.user.findUnique({ where: { email: "client@sapnawashing.in" } });
+    if (!sapnaUser) {
+      sapnaUser = await prisma.user.create({
+        data: {
+          email: "client@sapnawashing.in",
+          fullName: "Rajesh Patidar",
+          passwordHash: "$2a$10$abcdefghijklmnopqrstuvwxyz123456",
+          isActive: true,
+        },
+      });
+    }
+
+    const membership = await prisma.tenantMembership.findUnique({
+      where: { tenantId_userId: { tenantId, userId: sapnaUser.id } },
+    });
+    if (!membership) {
+      const newM = await prisma.tenantMembership.create({
+        data: { tenantId, userId: sapnaUser.id, agencyClientId: sapna.id, status: "ACTIVE" },
+      });
+      await prisma.membershipRole.create({
+        data: { membershipId: newM.id, roleId: clientRole.id },
+      });
+    } else if (!membership.agencyClientId) {
+      await prisma.tenantMembership.update({
+        where: { id: membership.id },
+        data: { agencyClientId: sapna.id },
+      });
+    }
+
+    // Approved test asset
+    let approvedAsset = await prisma.creativeAsset.findFirst({
+      where: { tenantId, clientId: sapna.id, reviewStatus: "APPROVED" },
+    });
+    if (!approvedAsset) {
+      await prisma.creativeAsset.create({
+        data: {
+          tenantId,
+          clientId: sapna.id,
+          title: "Approved Test Asset",
+          reviewStatus: "APPROVED",
+          approverName: "Rajesh Patidar",
+          approverEmail: "client@sapnawashing.in",
+          approvedAt: new Date(),
+          submittedBy: "Pooja Verma",
+        },
+      });
+    }
+
+    // Asset with comment - Diwali 30% Off
+    let diwaliAsset = await prisma.creativeAsset.findFirst({
+      where: { tenantId, clientId: sapna.id, title: { contains: "Diwali 30% Off" } },
+      include: { comments: true },
+    });
+    if (!diwaliAsset) {
+      await prisma.creativeAsset.create({
+        data: {
+          tenantId,
+          clientId: sapna.id,
+          title: "Diwali 30% Off Offer Creative",
+          reviewStatus: "CLIENT_REVIEW",
+          submittedBy: "Pooja Verma",
+          comments: {
+            create: [
+              { tenantId, authorName: "Kunal Sharma", content: "Internal Note", isInternal: true },
+              { tenantId, authorName: "Pooja Verma", content: "Client Visible Note", isInternal: false },
+            ],
+          },
+        },
+      });
+    }
+
+    // Lead for duplicate test
+    let existingLead = await prisma.lead.findFirst({
+      where: { tenantId, email: "vikram@singhanialogistics.in" },
+    });
+    if (!existingLead) {
+      await prisma.lead.create({
+        data: {
+          tenantId,
+          firstName: "Vikram",
+          lastName: "Singhania",
+          email: "vikram@singhanialogistics.in",
+          phone: "+91 98111 22334",
+          status: "QUALIFIED",
+        },
+      });
+    }
+  });
+
   it("should enforce strict client isolation between Sapna Washing Point and Maa Amba Furnishing", async () => {
     const sapnaClient = await prisma.agencyClient.findFirst({
       where: { name: "Sapna Washing Point" },
@@ -244,4 +363,32 @@ describe("P0 Client Isolation & Role Boundaries Verification", () => {
     expect(duplicate).not.toBeNull();
     expect(duplicate!.id).toBe(existingLead!.id);
   });
+
+  afterAll(async () => {
+    const tenant = await prisma.tenant.findUnique({ where: { code: "goodwin-grow-ai" } });
+    if (!tenant) return;
+    const testClients = await prisma.agencyClient.findMany({
+      where: {
+        tenantId: tenant.id,
+        name: { in: ["Sapna Washing Point", "Maa Amba Foam & Furnishing"] },
+      },
+    });
+    for (const c of testClients) {
+      await prisma.creativeComment.deleteMany({ where: { tenantId: tenant.id, asset: { clientId: c.id } } });
+      await prisma.creativeVersion.deleteMany({ where: { tenantId: tenant.id, asset: { clientId: c.id } } });
+      await prisma.creativeAsset.deleteMany({ where: { tenantId: tenant.id, clientId: c.id } });
+      await prisma.tenantMembership.deleteMany({ where: { tenantId: tenant.id, agencyClientId: c.id } });
+      await prisma.agencyClient.delete({ where: { id: c.id } }).catch(() => {});
+    }
+    await prisma.lead.deleteMany({
+      where: { tenantId: tenant.id, email: "vikram@singhanialogistics.in" },
+    });
+    const clientUser = await prisma.user.findUnique({ where: { email: "client@sapnawashing.in" } });
+    if (clientUser) {
+      await prisma.membershipRole.deleteMany({ where: { membership: { userId: clientUser.id } } }).catch(() => {});
+      await prisma.tenantMembership.deleteMany({ where: { userId: clientUser.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: clientUser.id } }).catch(() => {});
+    }
+  });
 });
+

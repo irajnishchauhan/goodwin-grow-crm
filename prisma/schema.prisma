@@ -58,6 +58,7 @@ model Tenant {
   seoTrackers          SeoTracker[]
   agencyInvoices       AgencyInvoice[]
   agencyExpenses       AgencyExpense[]
+  marketingFestivals   MarketingFestival[]
 
   // Battery Manufacturing & Distribution Relations
   batteryPartners       BatteryPartner[]
@@ -1313,5 +1314,22 @@ model BatteryFieldVisit {
   @@index([tenantId, salesUserId, visitDate])
   @@map("battery_field_visits")
 }
+
+model MarketingFestival {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  date      String
+  title     String
+  tag       String
+  desc      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("marketing_festivals")
+}
+
 
 

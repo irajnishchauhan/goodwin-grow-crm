@@ -1,9 +1,44 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import prisma from "../src/lib/prisma";
 import { getTenantContext, switchActiveTenant } from "../src/lib/tenant/context";
 import { createSession } from "../src/lib/auth/session";
 
 describe("Multi-Tenant Data Isolation & Security Verification", () => {
+  beforeAll(async () => {
+    let sapnaAdmin = await prisma.user.findUnique({
+      where: { email: "admin@sapnawashing.com" },
+    });
+    if (!sapnaAdmin) {
+      sapnaAdmin = await prisma.user.create({
+        data: {
+          email: "admin@sapnawashing.com",
+          fullName: "Sapna Wash Admin",
+          passwordHash: "$2a$10$abcdefghijklmnopqrstuvwxyz123456",
+          isActive: true,
+        },
+      });
+    }
+    const tenantSapna = await prisma.tenant.findUnique({
+      where: { code: "sapna-wash" },
+    });
+    if (tenantSapna) {
+      await prisma.tenantMembership.upsert({
+        where: {
+          tenantId_userId: {
+            tenantId: tenantSapna.id,
+            userId: sapnaAdmin.id,
+          },
+        },
+        update: {},
+        create: {
+          tenantId: tenantSapna.id,
+          userId: sapnaAdmin.id,
+          status: "ACTIVE",
+        },
+      });
+    }
+  });
+
   it("should enforce complete data isolation between Goodwin Batteries and Sapna Washing Point", async () => {
     const tenantBatteries = await prisma.tenant.findUnique({
       where: { code: "goodwin-batteries" },
