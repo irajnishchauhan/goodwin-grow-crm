@@ -128,6 +128,36 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
     }
 
+    // Cascaded safe cleanup of related records before deleting client
+    try {
+      await prisma.$executeRawUnsafe(`DELETE FROM "client_deliverables" WHERE "client_id" = $1;`, id).catch(() => {});
+      await prisma.$executeRawUnsafe(`DELETE FROM "client_reports" WHERE "client_id" = $1;`, id).catch(() => {});
+      
+      // Clean up creative assets versions & comments first
+      const assets = await prisma.creativeAsset.findMany({ where: { clientId: id }, select: { id: true } });
+      const assetIds = assets.map((a) => a.id);
+      if (assetIds.length > 0) {
+        await prisma.creativeComment.deleteMany({ where: { assetId: { in: assetIds } } }).catch(() => {});
+        await prisma.creativeVersion.deleteMany({ where: { assetId: { in: assetIds } } }).catch(() => {});
+        await prisma.creativeAsset.deleteMany({ where: { id: { in: assetIds } } }).catch(() => {});
+      }
+
+      await prisma.contentPost.deleteMany({ where: { clientId: id } }).catch(() => {});
+      await prisma.adCampaign.deleteMany({ where: { clientId: id } }).catch(() => {});
+      await prisma.seoTracker.deleteMany({ where: { clientId: id } }).catch(() => {});
+      await prisma.agencyInvoice.deleteMany({ where: { clientId: id } }).catch(() => {});
+      await prisma.agencyExpense.deleteMany({ where: { clientId: id } }).catch(() => {});
+      await prisma.agencyTask.deleteMany({ where: { clientId: id } }).catch(() => {});
+      await prisma.agencyProject.deleteMany({ where: { clientId: id } }).catch(() => {});
+
+      // Disassociate crm tasks, leads, and memberships
+      await prisma.task.updateMany({ where: { clientId: id }, data: { clientId: null } }).catch(() => {});
+      await prisma.lead.updateMany({ where: { clientId: id }, data: { clientId: null } }).catch(() => {});
+      await prisma.tenantMembership.updateMany({ where: { agencyClientId: id }, data: { agencyClientId: null } }).catch(() => {});
+    } catch (cleanupErr: any) {
+      console.warn("Notice: Client pre-delete cleanup warning:", cleanupErr.message);
+    }
+
     await prisma.agencyClient.delete({ where: { id } });
 
     return NextResponse.json({ success: true, message: "Client deleted successfully" });

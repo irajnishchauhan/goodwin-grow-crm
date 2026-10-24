@@ -92,10 +92,23 @@ export async function ensureDatabaseSchema() {
       "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`,
 
-    // 9. Performance Indexes
+    // 9. Marketing Festivals & Campaign Hooks Table
+    `CREATE TABLE IF NOT EXISTS "marketing_festivals" (
+      "id" TEXT PRIMARY KEY,
+      "tenant_id" TEXT NOT NULL,
+      "date" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "tag" TEXT NOT NULL,
+      "desc" TEXT NOT NULL,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );`,
+
+    // 10. Performance Indexes
     `CREATE INDEX IF NOT EXISTS "tenant_memberships_agency_client_idx" ON "tenant_memberships"("tenant_id", "agency_client_id");`,
     `CREATE INDEX IF NOT EXISTS "leads_client_id_idx" ON "leads"("tenant_id", "client_id");`,
-    `CREATE INDEX IF NOT EXISTS "tasks_client_id_idx" ON "tasks"("tenant_id", "client_id");`
+    `CREATE INDEX IF NOT EXISTS "tasks_client_id_idx" ON "tasks"("tenant_id", "client_id");`,
+    `CREATE INDEX IF NOT EXISTS "marketing_festivals_tenant_idx" ON "marketing_festivals"("tenant_id");`
   ];
 
   for (const stmt of ddlStatements) {
@@ -132,6 +145,7 @@ export async function ensureRubricPersonas() {
     let tenant = await prisma.tenant.findUnique({
       where: { code: "goodwin-grow-ai" },
     });
+    const isNewTenant = !tenant;
 
     if (!tenant) {
       tenant = await prisma.tenant.create({
@@ -236,7 +250,7 @@ export async function ensureRubricPersonas() {
     let sapna = await prisma.agencyClient.findFirst({
       where: { tenantId, name: "Sapna Washing Point" },
     });
-    if (!sapna) {
+    if (!sapna && isNewTenant) {
       sapna = await prisma.agencyClient.create({
         data: {
           tenantId,
@@ -263,7 +277,7 @@ export async function ensureRubricPersonas() {
     let amba = await prisma.agencyClient.findFirst({
       where: { tenantId, name: "Maa Amba Foam & Furnishing" },
     });
-    if (!amba) {
+    if (!amba && isNewTenant) {
       amba = await prisma.agencyClient.create({
         data: {
           tenantId,
@@ -368,221 +382,211 @@ export async function ensureRubricPersonas() {
     );
 
     // Client 1 (Sapna)
-    await ensureUserWithMembership(
-      "client@sapnawashing.in",
-      "Rajesh Patidar (Sapna Detailing Owner)",
-      "ClientPortal@2026!",
-      clientRole.id,
-      sapna.id,
-      false
-    );
+    if (sapna) {
+      await ensureUserWithMembership(
+        "client@sapnawashing.in",
+        "Rajesh Patidar (Sapna Detailing Owner)",
+        "ClientPortal@2026!",
+        clientRole.id,
+        sapna.id,
+        false
+      );
+    }
 
     // Client 2 (Amba)
-    await ensureUserWithMembership(
-      "client@ambafurnishing.com",
-      "Suresh Agarwal (Amba Living Owner)",
-      "ClientPortal@2026!",
-      clientRole.id,
-      amba.id,
-      false
-    );
-
-    // 6. Seed sample creative assets if none exist for this tenant
-    const existingAssets = await prisma.creativeAsset.count({ where: { tenantId } });
-    if (existingAssets === 0) {
-      await prisma.creativeAsset.create({
-        data: {
-          tenantId,
-          clientId: sapna.id,
-          title: "Diwali 30% Off Detailing Spa Carousel",
-          assetType: "Instagram 5-Slide Carousel (1080x1350)",
-          dimensions: "1080x1350",
-          fileUrl: "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800",
-          mediaType: "image",
-          version: 2,
-          reviewStatus: "CLIENT_REVIEW" as any,
-          submittedBy: "Pooja Verma",
-          versions: {
-            create: [
-              {
-                tenantId,
-                versionNumber: 1,
-                fileUrl: "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800",
-                mediaType: "image",
-                changelog: "v1: Draft slide flow and typography",
-                submittedBy: "Pooja Verma",
-              },
-              {
-                tenantId,
-                versionNumber: 2,
-                fileUrl: "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800",
-                mediaType: "image",
-                changelog: "v2: Added WhatsApp booking QR code and festive golden accents",
-                submittedBy: "Pooja Verma",
-              },
-            ],
-          },
-          comments: {
-            create: [
-              {
-                tenantId,
-                versionNumber: 1,
-                authorName: "Kunal Sharma",
-                authorRole: "Account Manager",
-                content: "Internal review note: Please verify brand cyan #06B6D4 matches the approved deck before client sees this.",
-                isInternal: true,
-              },
-              {
-                tenantId,
-                versionNumber: 2,
-                authorName: "Pooja Verma",
-                authorRole: "Designer",
-                content: "Colors matched and high-res ceramic gloss slides uploaded for client review.",
-                isInternal: false,
-              },
-            ],
-          },
-        },
-      });
-
-      // Video Creative
-      await prisma.creativeAsset.create({
-        data: {
-          tenantId,
-          clientId: sapna.id,
-          title: "High-Pressure Snow Foam ASMR & Paint Protection Reel",
-          assetType: "Vertical 9:16 Video Reel (1080x1920)",
-          dimensions: "1080x1920",
-          fileUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-          mediaType: "video",
-          version: 1,
-          reviewStatus: "INTERNAL_REVIEW" as any,
-          submittedBy: "Deepak Joshi",
-          versions: {
-            create: [
-              {
-                tenantId,
-                versionNumber: 1,
-                fileUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-                mediaType: "video",
-                changelog: "v1: Rough video cut with slow-motion foam nozzle audio",
-                submittedBy: "Deepak Joshi",
-              },
-            ],
-          },
-        },
-      });
+    if (amba) {
+      await ensureUserWithMembership(
+        "client@ambafurnishing.com",
+        "Suresh Agarwal (Amba Living Owner)",
+        "ClientPortal@2026!",
+        clientRole.id,
+        amba.id,
+        false
+      );
     }
 
-    // 7. Seed sample content posts if none exist
-    const existingPosts = await prisma.contentPost.count({ where: { tenantId } });
-    if (existingPosts === 0) {
-      const now = Date.now();
-      await prisma.contentPost.createMany({
-        data: [
-          {
+    // 6. Seed sample creative assets only on initial brand-new tenant provisioning
+    if (isNewTenant && sapna) {
+      const existingAssets = await prisma.creativeAsset.count({ where: { tenantId } });
+      if (existingAssets === 0) {
+        await prisma.creativeAsset.create({
+          data: {
             tenantId,
             clientId: sapna.id,
-            platform: "INSTAGRAM" as any,
-            postType: "5-Slide Carousel",
             title: "Diwali 30% Off Detailing Spa Carousel",
-            caption: "Festival season brings traffic, dust, and fireworks fallout. Protect your ride with 9H ceramic coating!",
-            ownerName: "Pooja Verma",
-            deadline: new Date(now - 2 * 86400000), // Overdue deadline
-            approvalStatus: "CLIENT_REVIEW",
-            scheduledDate: new Date(now + 4 * 86400000),
-            status: "SCHEDULED" as any,
-            mediaUrl: "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800",
-            festivalOrEvent: "Diwali Festive Campaign",
+            assetType: "Instagram 5-Slide Carousel (1080x1350)",
+            dimensions: "1080x1350",
+            fileUrl: "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800",
+            mediaType: "image",
+            version: 2,
+            reviewStatus: "CLIENT_REVIEW" as any,
+            submittedBy: "Pooja Verma",
+            versions: {
+              create: [
+                {
+                  tenantId,
+                  versionNumber: 1,
+                  fileUrl: "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800",
+                  mediaType: "image",
+                  changelog: "v1: Draft slide flow and typography",
+                  submittedBy: "Pooja Verma",
+                },
+                {
+                  tenantId,
+                  versionNumber: 2,
+                  fileUrl: "https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800",
+                  mediaType: "image",
+                  changelog: "v2: Added WhatsApp booking QR code and festive golden accents",
+                  submittedBy: "Pooja Verma",
+                },
+              ],
+            },
+            comments: {
+              create: [
+                {
+                  tenantId,
+                  versionNumber: 1,
+                  authorName: "Kunal Sharma",
+                  authorRole: "Account Manager",
+                  content: "Internal review note: Please verify brand cyan #06B6D4 matches the approved deck before client sees this.",
+                  isInternal: true,
+                },
+                {
+                  tenantId,
+                  versionNumber: 2,
+                  authorName: "Pooja Verma",
+                  authorRole: "Designer",
+                  content: "Colors matched and high-res ceramic gloss slides uploaded for client review.",
+                  isInternal: false,
+                },
+              ],
+            },
           },
-          {
-            tenantId,
-            clientId: sapna.id,
-            platform: "INSTAGRAM" as any,
-            postType: "Reel",
-            title: "Foam Wash ASMR & Water Beading Demonstration",
-            caption: "Satisfying car wash transformation 🚗💦 Watch the water sheet off the hydrophobic shield.",
-            ownerName: "Deepak Joshi",
-            deadline: new Date(now + 1 * 86400000),
-            approvalStatus: "INTERNAL_REVIEW",
-            scheduledDate: new Date(now + 3 * 86400000),
-            status: "SCHEDULED" as any,
-            mediaUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-            festivalOrEvent: "Weekly Brand Content",
-          },
-        ],
-      });
-    }
+        });
 
-    // 8. Seed sample leads if none exist
-    const existingLeads = await prisma.lead.count({ where: { tenantId } });
-    if (existingLeads === 0) {
-      const now = Date.now();
-      await prisma.lead.createMany({
-        data: [
-          {
+        // Video Creative
+        await prisma.creativeAsset.create({
+          data: {
             tenantId,
             clientId: sapna.id,
-            firstName: "Vikram",
-            lastName: "Singhania",
-            companyName: "Singhania Logistics & Fleet Services",
-            email: "vikram@singhanialogistics.in",
-            phone: "+91 98111 22334",
-            status: "QUALIFIED" as any,
-            source: "Google Ads (High Intent)",
-            serviceRequired: "Corporate Fleet Ceramic Spa Retainer",
-            dealValue: 480000.0,
-            nextFollowUp: new Date(now + 1 * 86400000),
-            priority: "HIGH" as any,
-            score: 85,
+            title: "High-Pressure Snow Foam ASMR & Paint Protection Reel",
+            assetType: "Vertical 9:16 Video Reel (1080x1920)",
+            dimensions: "1080x1920",
+            fileUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+            mediaType: "video",
+            version: 1,
+            reviewStatus: "INTERNAL_REVIEW" as any,
+            submittedBy: "Deepak Joshi",
+            versions: {
+              create: [
+                {
+                  tenantId,
+                  versionNumber: 1,
+                  fileUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                  mediaType: "video",
+                  changelog: "v1: Rough video cut with slow-motion foam nozzle audio",
+                  submittedBy: "Deepak Joshi",
+                },
+              ],
+            },
           },
-          {
-            tenantId,
-            clientId: amba.id,
-            firstName: "Meenakshi",
-            lastName: "Rao",
-            companyName: "Rao Luxury Home Interior Design Studio",
-            email: "meenakshi@raodesignstudio.com",
-            phone: "+91 98222 33445",
-            status: "PROPOSAL" as any,
-            source: "Meta Lead Gen Form",
-            serviceRequired: "Custom Modular Sectional & Mattresses",
-            dealValue: 750000.0,
-            nextFollowUp: new Date(now + 2 * 86400000),
-            priority: "URGENT" as any,
-            score: 92,
-          },
-        ],
-      });
-    }
+        });
+      }
 
-    // 9. Seed sample tasks if none exist
-    const existingTasks = await prisma.task.count({ where: { tenantId } });
-    if (existingTasks === 0) {
-      const now = Date.now();
-      await prisma.task.createMany({
-        data: [
-          {
-            tenantId,
-            clientId: sapna.id,
-            title: "Deliver Diwali 5-Slide Carousel revisions for Sapna Detailing",
-            description: "Implement WhatsApp QR placement and enlarge festive discount badge",
-            dueDate: new Date(now - 1 * 86400000), // Overdue!
-            priority: "URGENT" as any,
-            status: "PENDING" as any,
-            checklist: [
-              { id: "1", text: "Check brand cyan #06B6D4 HEX consistency", completed: true },
-              { id: "2", text: "Export 1080x1350 PNG with 300 DPI", completed: false },
-              { id: "3", text: "Upload to client portal for approval", completed: false },
-            ],
-            attachments: [
-              { name: "Sapna_Brand_Guide_v2.pdf", url: "https://example.com/guide.pdf", size: "2.4 MB" },
-            ],
-            isRecurring: true,
-            recurringInterval: "WEEKLY",
-          },
-        ],
-      });
+      // 7. Seed sample content posts if none exist and it's a new tenant
+      const existingPosts = await prisma.contentPost.count({ where: { tenantId } });
+      if (existingPosts === 0) {
+        const now = Date.now();
+        await prisma.contentPost.createMany({
+          data: [
+            {
+              tenantId,
+              clientId: sapna.id,
+              platform: "INSTAGRAM" as any,
+              postType: "5-Slide Carousel",
+              title: "Diwali 30% Off Detailing Spa Carousel",
+              caption: "Festival season brings traffic, dust, and fireworks fallout. Protect your ride with 9H ceramic coating!",
+              ownerName: "Pooja Verma",
+              deadline: new Date(now - 2 * 86400000), // Overdue deadline
+              approvalStatus: "CLIENT_REVIEW",
+              scheduledDate: new Date(now + 4 * 86400000),
+              status: "SCHEDULED" as any,
+              mediaUrl: "https://images.unsplash.com/photo-1601362840469-51e4d8d58785?w=800",
+              festivalOrEvent: "Diwali Festive Campaign",
+            },
+            {
+              tenantId,
+              clientId: sapna.id,
+              platform: "INSTAGRAM" as any,
+              postType: "Reel",
+              title: "Foam Wash ASMR & Water Beading Demonstration",
+              caption: "Satisfying car wash transformation 🚗💦 Watch the water sheet off the hydrophobic shield.",
+              ownerName: "Deepak Joshi",
+              deadline: new Date(now + 1 * 86400000),
+              approvalStatus: "INTERNAL_REVIEW",
+              scheduledDate: new Date(now + 3 * 86400000),
+              status: "SCHEDULED" as any,
+              mediaUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+              festivalOrEvent: "Weekly Brand Content",
+            },
+          ],
+        });
+      }
+
+      // 8. Seed sample leads if none exist and new tenant
+      const existingLeads = await prisma.lead.count({ where: { tenantId } });
+      if (existingLeads === 0) {
+        const now = Date.now();
+        await prisma.lead.createMany({
+          data: [
+            {
+              tenantId,
+              clientId: sapna.id,
+              firstName: "Vikram",
+              lastName: "Singhania",
+              companyName: "Singhania Logistics & Fleet Services",
+              email: "vikram@singhanialogistics.in",
+              phone: "+91 98111 22334",
+              status: "QUALIFIED" as any,
+              source: "Google Ads (High Intent)",
+              serviceRequired: "Corporate Fleet Ceramic Spa Retainer",
+              dealValue: 480000.0,
+              nextFollowUp: new Date(now + 1 * 86400000),
+              priority: "HIGH" as any,
+              score: 85,
+            },
+          ],
+        });
+      }
+
+      // 9. Seed sample tasks if none exist and new tenant
+      const existingTasks = await prisma.task.count({ where: { tenantId } });
+      if (existingTasks === 0) {
+        const now = Date.now();
+        await prisma.task.createMany({
+          data: [
+            {
+              tenantId,
+              clientId: sapna.id,
+              title: "Deliver Diwali 5-Slide Carousel revisions for Sapna Detailing",
+              description: "Implement WhatsApp QR placement and enlarge festive discount badge",
+              dueDate: new Date(now - 1 * 86400000), // Overdue!
+              priority: "URGENT" as any,
+              status: "PENDING" as any,
+              checklist: [
+                { id: "1", text: "Check brand cyan #06B6D4 HEX consistency", completed: true },
+                { id: "2", text: "Export 1080x1350 PNG with 300 DPI", completed: false },
+                { id: "3", text: "Upload to client portal for approval", completed: false },
+              ],
+              attachments: [
+                { name: "Sapna_Brand_Guide_v2.pdf", url: "https://example.com/guide.pdf", size: "2.4 MB" },
+              ],
+              isRecurring: true,
+              recurringInterval: "WEEKLY",
+            },
+          ],
+        });
+      }
     }
 
     isDataEnsured = true;

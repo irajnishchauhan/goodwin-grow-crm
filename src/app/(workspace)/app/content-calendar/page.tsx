@@ -56,15 +56,13 @@ interface ContentPost {
   } | null;
 }
 
-const indianFestivals2026 = [
-  { date: "Oct 20, 2026", title: "Dussehra / Vijayadashami", tag: "Festival", desc: "Auspicious new vehicle & home purchase campaigns" },
-  { date: "Oct 28, 2026", title: "Dhanteras & Gold Muhurat", tag: "Major Festive", desc: "Vehicle detailing & gold jewellery festive offers" },
-  { date: "Oct 30, 2026", title: "Diwali (Deepavali)", tag: "National Festival", desc: "Grand festive sales, brand greetings & holiday offers" },
-  { date: "Nov 02, 2026", title: "Bhai Dooj", tag: "Festival", desc: "Gifting and family celebration creative campaigns" },
-  { date: "Nov 06, 2026", title: "Chhath Puja", tag: "Regional Festival", desc: "Bihar & UP vernacular campaigns and solar celebrations" },
-  { date: "Nov 27, 2026", title: "Black Friday & Cyber Weekend", tag: "E-Commerce", desc: "D2C brands mega flash sale campaigns" },
-  { date: "Dec 25, 2026", title: "Christmas & Year-End Countdown", tag: "Holiday", desc: "Year-end party packages & wellness resolutions" },
-];
+interface MarketingFestival {
+  id: string;
+  date: string;
+  title: string;
+  tag: string;
+  desc: string;
+}
 
 export default function ContentCalendarPage() {
   const [posts, setPosts] = useState<ContentPost[]>([]);
@@ -78,6 +76,20 @@ export default function ContentCalendarPage() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Marketing Festivals State (Full CRUD)
+  const [festivals, setFestivals] = useState<MarketingFestival[]>([]);
+  const [festivalsLoading, setFestivalsLoading] = useState(false);
+  const [showAllFestivals, setShowAllFestivals] = useState(false);
+  const [festivalModalOpen, setFestivalModalOpen] = useState(false);
+  const [editingFestival, setEditingFestival] = useState<MarketingFestival | null>(null);
+  const [festivalForm, setFestivalForm] = useState({
+    date: "",
+    title: "",
+    tag: "Festival",
+    desc: "",
+  });
+  const [savingFestival, setSavingFestival] = useState(false);
 
   // Create Form State
   const [title, setTitle] = useState("");
@@ -113,7 +125,128 @@ export default function ContentCalendarPage() {
   useEffect(() => {
     fetchPosts();
     fetchClients();
+    fetchFestivals();
   }, [selectedClientId, selectedPlatform]);
+
+  async function fetchFestivals() {
+    try {
+      setFestivalsLoading(true);
+      const res = await fetch("/api/agency/festivals");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setFestivals(data.data);
+      }
+    } catch (err) {
+      console.error("Failed to load festivals:", err);
+    } finally {
+      setFestivalsLoading(false);
+    }
+  }
+
+  async function handleSaveFestival(e: React.FormEvent) {
+    e.preventDefault();
+    if (!festivalForm.date.trim() || !festivalForm.title.trim()) {
+      alert("Please enter a valid festival date and name");
+      return;
+    }
+
+    try {
+      setSavingFestival(true);
+      if (editingFestival) {
+        // Optimistic update
+        setFestivals((prev) =>
+          prev.map((f) => (f.id === editingFestival.id ? { ...f, ...festivalForm } : f))
+        );
+
+        const res = await fetch(`/api/agency/festivals/${editingFestival.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(festivalForm),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setFestivalModalOpen(false);
+          setEditingFestival(null);
+          fetchFestivals();
+        } else {
+          alert(data.error || "Failed to update festival");
+          fetchFestivals();
+        }
+      } else {
+        const res = await fetch("/api/agency/festivals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(festivalForm),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setFestivalModalOpen(false);
+          fetchFestivals();
+        } else {
+          alert(data.error || "Failed to create festival");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving festival");
+    } finally {
+      setSavingFestival(false);
+    }
+  }
+
+  async function handleDeleteFestival(id: string, festivalTitle: string) {
+    if (!confirm(`Are you sure you want to delete festival "${festivalTitle}" from the calendar?`)) {
+      return;
+    }
+
+    // Optimistic UI update
+    setFestivals((prev) => prev.filter((f) => f.id !== id));
+
+    try {
+      const res = await fetch(`/api/agency/festivals/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || "Failed to delete festival");
+        fetchFestivals();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting festival");
+      fetchFestivals();
+    }
+  }
+
+  async function handleDeleteWrong3Dates() {
+    const wrongItems = festivals.filter(
+      (f) =>
+        f.date.includes("Oct 28") ||
+        f.date.includes("Oct 30") ||
+        f.date.includes("Nov 02")
+    );
+
+    if (wrongItems.length === 0) {
+      alert("No incorrect dummy festival dates (Oct 28, Oct 30, Nov 02) found!");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Are you sure you want to delete the ${wrongItems.length} incorrect festival dates?\n` +
+          wrongItems.map((w) => `• ${w.date} - ${w.title}`).join("\n")
+      )
+    ) {
+      return;
+    }
+
+    // Optimistic UI
+    const wrongIds = wrongItems.map((w) => w.id);
+    setFestivals((prev) => prev.filter((f) => !wrongIds.includes(f.id)));
+
+    for (const w of wrongItems) {
+      await fetch(`/api/agency/festivals/${w.id}`, { method: "DELETE" }).catch(() => {});
+    }
+    fetchFestivals();
+  }
 
   async function fetchClients() {
     try {
@@ -400,34 +533,138 @@ export default function ContentCalendarPage() {
         </div>
       </div>
 
-      {/* Upcoming Indian Festivals & Cultural Events 2026 */}
+      {/* Upcoming Indian Festivals & Cultural Events (Full CRUD) */}
       <div className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-teal-500/10 p-5 rounded-2xl border border-amber-200/60 shadow-xs">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <Flame className="w-4 h-4 text-amber-600" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Indian Festive Calendar & National Campaign Hooks (Q4 2026)
-            </h3>
+            <Flame className="w-4 h-4 text-amber-600 shrink-0" />
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Indian Festive Calendar & National Campaign Hooks
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Real-time marketing calendar hooks. Modify dates, remove incorrect festivals, or add custom brand milestones.
+              </p>
+            </div>
           </div>
-          <span className="text-[11px] font-semibold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md">
-            Auto-synced
-          </span>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Quick cleaner for incorrect dummy dates if present */}
+            {festivals.some(
+              (f) =>
+                f.date.includes("Oct 28") ||
+                f.date.includes("Oct 30") ||
+                f.date.includes("Nov 02")
+            ) && (
+              <button
+                type="button"
+                onClick={handleDeleteWrong3Dates}
+                className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 transition"
+                title="Delete 3 incorrect dummy festival dates"
+              >
+                <Trash2 className="w-3 h-3 text-rose-600" />
+                <span>Delete 3 Wrong Dates</span>
+              </button>
+            )}
+
+            {festivals.length > 4 && (
+              <button
+                type="button"
+                onClick={() => setShowAllFestivals(!showAllFestivals)}
+                className="px-2.5 py-1 rounded-lg bg-white/80 hover:bg-white text-slate-700 border border-slate-200 text-[11px] font-semibold transition"
+              >
+                {showAllFestivals ? "Show Top 4" : `View All (${festivals.length})`}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingFestival(null);
+                setFestivalForm({
+                  date: "",
+                  title: "",
+                  tag: "Festival",
+                  desc: "",
+                });
+                setFestivalModalOpen(true);
+              }}
+              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Festival / Hook</span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {indianFestivals2026.slice(0, 4).map((f, i) => (
-            <div key={i} className="p-3 bg-white/90 rounded-xl border border-amber-100 shadow-xs">
-              <div className="flex items-center justify-between text-[11px] mb-1">
-                <span className="font-bold text-amber-900">{f.date}</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                  {f.tag}
-                </span>
+        {festivalsLoading && festivals.length === 0 ? (
+          <div className="py-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+            <span>Loading festival hooks...</span>
+          </div>
+        ) : festivals.length === 0 ? (
+          <div className="p-4 bg-white/80 rounded-xl border border-amber-100 text-center text-xs text-slate-600 space-y-2">
+            <p className="font-semibold">No festivals or campaign hooks currently scheduled.</p>
+            <button
+              type="button"
+              onClick={fetchFestivals}
+              className="text-xs font-bold text-amber-800 underline"
+            >
+              Reload festival hooks
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {(showAllFestivals ? festivals : festivals.slice(0, 4)).map((f) => (
+              <div
+                key={f.id}
+                className="p-3 bg-white/95 rounded-xl border border-amber-100 shadow-xs relative group hover:border-amber-300 hover:shadow-sm transition"
+              >
+                <div className="flex items-center justify-between text-[11px] mb-1">
+                  <span className="font-bold text-amber-900 flex items-center gap-1">
+                    <CalendarIcon className="w-3 h-3 text-amber-600" />
+                    <span>{f.date}</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                      {f.tag}
+                    </span>
+                    {/* Action buttons (always accessible & on hover) */}
+                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingFestival(f);
+                          setFestivalForm({
+                            date: f.date,
+                            title: f.title,
+                            tag: f.tag,
+                            desc: f.desc,
+                          });
+                          setFestivalModalOpen(true);
+                        }}
+                        className="p-1 rounded hover:bg-amber-100 text-slate-600 hover:text-amber-800 transition"
+                        title="Edit festival date / details"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFestival(f.id, f.title)}
+                        className="p-1 rounded hover:bg-rose-100 text-slate-500 hover:text-rose-600 transition"
+                        title="Delete festival"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="font-bold text-xs text-slate-900 pr-1">{f.title}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{f.desc}</div>
               </div>
-              <div className="font-bold text-xs text-slate-900">{f.title}</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">{f.desc}</div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Filter and Search Bar */}
@@ -1140,6 +1377,117 @@ export default function ContentCalendarPage() {
                 >
                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                   <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Festival Event Create / Edit Modal (Full CRUD) */}
+      {festivalModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Flame className="w-5 h-5 text-amber-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  {editingFestival ? "Edit Festival / Campaign Hook" : "Add Festival / Campaign Hook"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFestivalModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFestival} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Event / Festival Date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={festivalForm.date}
+                  onChange={(e) => setFestivalForm({ ...festivalForm, date: e.target.value })}
+                  placeholder="e.g. Nov 08, 2026 or Oct 20, 2026"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Tip: Use format &quot;MMM DD, YYYY&quot; like &quot;Nov 08, 2026&quot; for clean calendar display.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Festival / Campaign Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={festivalForm.title}
+                  onChange={(e) => setFestivalForm({ ...festivalForm, title: e.target.value })}
+                  placeholder="e.g. Diwali (Deepavali) or Dhanteras & Gold Muhurat"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Tag / Category
+                </label>
+                <select
+                  value={festivalForm.tag}
+                  onChange={(e) => setFestivalForm({ ...festivalForm, tag: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                >
+                  <option value="National Festival">National Festival</option>
+                  <option value="Major Festive">Major Festive</option>
+                  <option value="Regional Festival">Regional Festival</option>
+                  <option value="Festival">Festival</option>
+                  <option value="E-Commerce">E-Commerce Flash Sale</option>
+                  <option value="Holiday">Public Holiday</option>
+                  <option value="Global Event">Global Celebration</option>
+                  <option value="Brand Milestone">Brand Milestone / Anniversary</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Marketing Angle / Hook Description
+                </label>
+                <textarea
+                  rows={2}
+                  value={festivalForm.desc}
+                  onChange={(e) => setFestivalForm({ ...festivalForm, desc: e.target.value })}
+                  placeholder="e.g. Grand festive offers, brand greetings, gold & vehicle purchase campaigns"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setFestivalModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingFestival}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs flex items-center gap-1.5 transition"
+                >
+                  {savingFestival ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span>{editingFestival ? "Update Festival" : "Add to Calendar"}</span>
                 </button>
               </div>
             </form>

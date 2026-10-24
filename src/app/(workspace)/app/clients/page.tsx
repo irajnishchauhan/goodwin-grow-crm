@@ -150,21 +150,69 @@ export default function ClientsPage() {
       }
     } catch (err) {
       console.error(err);
+      alert("Error saving client");
     }
   }
 
   async function handleDeleteClient(id: string) {
     if (!confirm("Are you sure you want to remove this client from Goodwin Grow AI?")) return;
+    
+    // Optimistic UI update
+    setClients((prev) => prev.filter((c) => c.id !== id));
+    if (selectedClient?.id === id) setSelectedClient(null);
+
     try {
       const res = await fetch(`/api/agency/clients/${id}`, { method: "DELETE" });
       const data = await res.json();
-      if (data.success) {
-        if (selectedClient?.id === id) setSelectedClient(null);
+      if (!data.success) {
+        alert(data.error || "Failed to delete client");
         fetchClients();
       }
     } catch (err) {
       console.error(err);
+      alert("Error deleting client");
+      fetchClients();
     }
+  }
+
+  async function handleDeleteDemoClients() {
+    const demoNames = [
+      "Sapna Washing Point",
+      "Maa Amba Foam & Furnishing",
+      "ZestPure Omnichannel D2C Nutrition",
+      "FinEdge Neo-Banking & Wealth Technologies",
+      "Mahalaxmi Heritage Jewellers Group",
+      "Nikita Shrivastava (Lucky's Hair Studio)",
+      "Sumit More Furniture Design",
+    ];
+
+    const demoClients = clients.filter((c) =>
+      demoNames.some((d) => c.name.toLowerCase().includes(d.toLowerCase()))
+    );
+
+    if (demoClients.length === 0) {
+      alert("No pre-seeded demo clients found in your workspace!");
+      return;
+    }
+
+    if (
+      !confirm(
+        `Are you sure you want to remove all ${demoClients.length} dummy/demo clients?\n\n` +
+          demoClients.map((c) => `• ${c.name}`).join("\n") +
+          "\n\nOnly the clients you manually add will remain."
+      )
+    ) {
+      return;
+    }
+
+    const idsToDelete = demoClients.map((c) => c.id);
+    setClients((prev) => prev.filter((c) => !idsToDelete.includes(c.id)));
+
+    for (const c of demoClients) {
+      await fetch(`/api/agency/clients/${c.id}`, { method: "DELETE" }).catch(() => {});
+    }
+
+    fetchClients();
   }
 
   function handleEditClick(client: Client) {
@@ -216,6 +264,28 @@ export default function ClientsPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {clients.some((c) =>
+            [
+              "Sapna Washing Point",
+              "Maa Amba Foam & Furnishing",
+              "ZestPure",
+              "FinEdge",
+              "Mahalaxmi",
+              "Nikita",
+              "Sumit More",
+            ].some((d) => c.name.toLowerCase().includes(d.toLowerCase()))
+          ) && (
+            <button
+              type="button"
+              onClick={handleDeleteDemoClients}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold shadow-xs transition cursor-pointer"
+              title="Clean all pre-seeded dummy client records"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>Delete Dummy Clients</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               setEditingClient(null);
