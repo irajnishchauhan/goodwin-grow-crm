@@ -176,43 +176,26 @@ export default function ClientsPage() {
   }
 
   async function handleDeleteDemoClients() {
-    const demoNames = [
-      "Sapna Washing Point",
-      "Maa Amba Foam & Furnishing",
-      "ZestPure Omnichannel D2C Nutrition",
-      "FinEdge Neo-Banking & Wealth Technologies",
-      "Mahalaxmi Heritage Jewellers Group",
-      "Nikita Shrivastava (Lucky's Hair Studio)",
-      "Sumit More Furniture Design",
-    ];
-
-    const demoClients = clients.filter((c) =>
-      demoNames.some((d) => c.name.toLowerCase().includes(d.toLowerCase()))
-    );
-
-    if (demoClients.length === 0) {
-      alert("No pre-seeded demo clients found in your workspace!");
-      return;
-    }
-
     if (
       !confirm(
-        `Are you sure you want to remove all ${demoClients.length} dummy/demo clients?\n\n` +
-          demoClients.map((c) => `• ${c.name}`).join("\n") +
-          "\n\nOnly the clients you manually add will remain."
+        "Are you sure you want to remove all pre-seeded dummy/demo clients, tasks, and posts from this workspace?\n\nOnly the clients and data you manually add will remain."
       )
     ) {
       return;
     }
 
-    const idsToDelete = demoClients.map((c) => c.id);
-    setClients((prev) => prev.filter((c) => !idsToDelete.includes(c.id)));
-
-    for (const c of demoClients) {
-      await fetch(`/api/agency/clients/${c.id}`, { method: "DELETE" }).catch(() => {});
+    try {
+      setLoading(true);
+      const res = await fetch("/api/agency/clean-dummy-data", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || "All dummy data deleted successfully!");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      fetchClients();
     }
-
-    fetchClients();
   }
 
   function handleEditClick(client: Client) {

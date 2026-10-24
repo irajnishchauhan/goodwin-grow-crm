@@ -784,6 +784,36 @@ function SettingsContent() {
               </div>
             </div>
           </div>
+
+          {/* Workspace Data Sanitation */}
+          <div className="pt-5 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h4 className="text-xs font-bold text-slate-900">Workspace Data Management</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Purge any initial demo/dummy clients, mock leads, tasks, and creative assets from this workspace to start completely fresh.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (confirm("Are you sure you want to purge all pre-seeded dummy data from this workspace? Real team members will remain intact.")) {
+                    try {
+                      const res = await fetch("/api/agency/clean-dummy-data", { method: "POST" });
+                      const d = await res.json();
+                      alert(d.message || "Workspace dummy data cleaned!");
+                      window.location.reload();
+                    } catch (e) {
+                      alert("Error cleaning dummy data");
+                    }
+                  }
+                }}
+                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition cursor-pointer shrink-0"
+              >
+                Purge All Dummy Data
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
