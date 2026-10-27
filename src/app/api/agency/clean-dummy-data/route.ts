@@ -18,7 +18,6 @@ export async function POST() {
       "FinEdge Neo-Banking & Wealth Technologies",
       "Mahalaxmi Heritage Jewellers Group",
       "Nikita Shrivastava (Lucky's Hair Studio)",
-      "Sumit More Furniture Design",
     ];
 
     const demoClients = await prisma.agencyClient.findMany({
@@ -46,12 +45,65 @@ export async function POST() {
       clientsDeleted++;
     }
 
-    const demoClientEmails = ["client@sapnawashing.in", "client@ambafurnishing.com", "admin@sapnawashing.com"];
+    // Sanitize any dummy pod members assigned to real clients (Pooja Verma, Aman Gupta, Kunal Sharma)
+    await prisma.agencyClient.updateMany({
+      where: {
+        tenantId,
+        OR: [
+          { leadDesignerName: { contains: "Pooja", mode: "insensitive" } },
+          { leadDesignerName: { contains: "Verma", mode: "insensitive" } },
+        ],
+      },
+      data: {
+        leadDesignerName: null,
+      },
+    }).catch(() => {});
+
+    await prisma.agencyClient.updateMany({
+      where: {
+        tenantId,
+        OR: [
+          { contentWriterName: { contains: "Aman", mode: "insensitive" } },
+          { contentWriterName: { contains: "Gupta", mode: "insensitive" } },
+        ],
+      },
+      data: {
+        contentWriterName: null,
+      },
+    }).catch(() => {});
+
+    await prisma.agencyClient.updateMany({
+      where: {
+        tenantId,
+        accountManagerName: { contains: "Kunal Sharma", mode: "insensitive" },
+      },
+      data: {
+        accountManagerName: null,
+      },
+    }).catch(() => {});
+
+    const demoClientEmails = [
+      "pooja@goodwingrowai.com",
+      "kunal@goodwingrowai.com",
+      "client@sapnawashing.in",
+      "client@ambafurnishing.com",
+      "admin@sapnawashing.com"
+    ];
     for (const em of demoClientEmails) {
       const u = await prisma.user.findUnique({ where: { email: em } });
       if (u) {
-        await prisma.membershipRole.deleteMany({ where: { membership: { userId: u.id, tenantId } } }).catch(() => {});
-        await prisma.tenantMembership.deleteMany({ where: { userId: u.id, tenantId } }).catch(() => {});
+        await prisma.session.deleteMany({ where: { userId: u.id } }).catch(() => {});
+        await prisma.activity.deleteMany({ where: { performedById: u.id } }).catch(() => {});
+        await prisma.note.deleteMany({ where: { createdById: u.id } }).catch(() => {});
+        await prisma.task.updateMany({ where: { assignedToId: u.id }, data: { assignedToId: null } }).catch(() => {});
+        await prisma.lead.updateMany({ where: { assignedOwnerId: u.id }, data: { assignedOwnerId: null } }).catch(() => {});
+        await prisma.contact.updateMany({ where: { assignedOwnerId: u.id }, data: { assignedOwnerId: null } }).catch(() => {});
+        await prisma.company.updateMany({ where: { assignedOwnerId: u.id }, data: { assignedOwnerId: null } }).catch(() => {});
+        await prisma.deal.updateMany({ where: { assignedOwnerId: u.id }, data: { assignedOwnerId: null } }).catch(() => {});
+        await prisma.dealStageHistory.deleteMany({ where: { changedById: u.id } }).catch(() => {});
+        await prisma.auditLog.deleteMany({ where: { userId: u.id } }).catch(() => {});
+        await prisma.membershipRole.deleteMany({ where: { membership: { userId: u.id } } }).catch(() => {});
+        await prisma.tenantMembership.deleteMany({ where: { userId: u.id } }).catch(() => {});
         await prisma.user.delete({ where: { id: u.id } }).catch(() => {});
       }
     }

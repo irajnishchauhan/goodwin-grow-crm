@@ -69,6 +69,7 @@ export default function ClientsPage() {
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -83,17 +84,39 @@ export default function ClientsPage() {
     activePackage: "Growth Retainer (Social + Local SEO)",
     monthlyRetainer: "50000",
     postsPlanned: "12",
-    accountManagerName: "Kunal Sharma",
-    leadDesignerName: "Pooja Verma",
-    contentWriterName: "Aman Gupta",
-    mediaBuyerName: "Rohit Kapoor",
+    accountManagerName: "",
+    leadDesignerName: "",
+    contentWriterName: "",
+    mediaBuyerName: "",
     brandGuidelines: "",
     status: "ACTIVE",
   });
 
+  function sanitizePodMember(name?: string | null): string | null {
+    if (!name) return null;
+    const lower = name.toLowerCase().trim();
+    if (lower.includes("pooja") || lower.includes("aman") || lower.includes("kunal sharma")) {
+      return null;
+    }
+    return name;
+  }
+
   useEffect(() => {
     fetchClients();
+    fetchTeamMembers();
   }, [search, statusFilter]);
+
+  async function fetchTeamMembers() {
+    try {
+      const res = await fetch("/api/team?activeOnly=true");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setTeamMembers(data.data);
+      }
+    } catch (err) {
+      console.error("Failed to load team members:", err);
+    }
+  }
 
   async function fetchClients() {
     try {
@@ -104,8 +127,14 @@ export default function ClientsPage() {
 
       const res = await fetch(`/api/agency/clients?${params.toString()}`);
       const data = await res.json();
-      if (data.success) {
-        setClients(data.data);
+      if (data.success && Array.isArray(data.data)) {
+        const sanitized = data.data.map((c: Client) => ({
+          ...c,
+          accountManagerName: sanitizePodMember(c.accountManagerName),
+          leadDesignerName: sanitizePodMember(c.leadDesignerName),
+          contentWriterName: sanitizePodMember(c.contentWriterName),
+        }));
+        setClients(sanitized);
       }
     } catch (err) {
       console.error(err);
@@ -118,13 +147,20 @@ export default function ClientsPage() {
     try {
       const res = await fetch(`/api/agency/clients/${client.id}`);
       const data = await res.json();
-      if (data.success) {
-        setSelectedClient(data.data);
-      } else {
-        setSelectedClient(client);
-      }
+      const clientObj = data.success && data.data ? data.data : client;
+      setSelectedClient({
+        ...clientObj,
+        accountManagerName: sanitizePodMember(clientObj.accountManagerName),
+        leadDesignerName: sanitizePodMember(clientObj.leadDesignerName),
+        contentWriterName: sanitizePodMember(clientObj.contentWriterName),
+      });
     } catch (err) {
-      setSelectedClient(client);
+      setSelectedClient({
+        ...client,
+        accountManagerName: sanitizePodMember(client.accountManagerName),
+        leadDesignerName: sanitizePodMember(client.leadDesignerName),
+        contentWriterName: sanitizePodMember(client.contentWriterName),
+      });
     }
   }
 
@@ -212,9 +248,9 @@ export default function ClientsPage() {
       activePackage: client.activePackage || "Growth Retainer",
       monthlyRetainer: String(client.monthlyRetainer),
       postsPlanned: String(client.postsPlanned || 12),
-      accountManagerName: client.accountManagerName || "",
-      leadDesignerName: client.leadDesignerName || "",
-      contentWriterName: client.contentWriterName || "",
+      accountManagerName: sanitizePodMember(client.accountManagerName) || "",
+      leadDesignerName: sanitizePodMember(client.leadDesignerName) || "",
+      contentWriterName: sanitizePodMember(client.contentWriterName) || "",
       mediaBuyerName: client.mediaBuyerName || "",
       brandGuidelines: client.brandGuidelines || "",
       status: client.status,
@@ -284,10 +320,10 @@ export default function ClientsPage() {
                 activePackage: "Growth Retainer (Social + Local SEO)",
                 monthlyRetainer: "50000",
                 postsPlanned: "12",
-                accountManagerName: "Kunal Sharma",
-                leadDesignerName: "Pooja Verma",
-                contentWriterName: "Aman Gupta",
-                mediaBuyerName: "Rohit Kapoor",
+                accountManagerName: "",
+                leadDesignerName: "",
+                contentWriterName: "",
+                mediaBuyerName: "",
                 brandGuidelines: "",
                 status: "ACTIVE",
               });
@@ -485,10 +521,10 @@ export default function ClientsPage() {
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-slate-800">
-                          {client.accountManagerName || "Unassigned"}
+                          {sanitizePodMember(client.accountManagerName) || "Unassigned"}
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          Design: {client.leadDesignerName || "Pooja"}
+                          Design: {sanitizePodMember(client.leadDesignerName) || "Unassigned"}
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
@@ -668,49 +704,106 @@ export default function ClientsPage() {
                 </div>
 
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <Users2 className="w-4 h-4 text-indigo-600" />
-                    <span>Assigned Goodwin Grow Pod</span>
-                  </h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                      <Users2 className="w-4 h-4 text-indigo-600" />
+                      <span>Assigned Goodwin Grow Pod</span>
+                    </h4>
+                    <button
+                      onClick={() => {
+                        handleEditClick(selectedClient);
+                        setSelectedClient(null);
+                      }}
+                      className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Edit className="w-3 h-3" />
+                      <span>Edit Pod</span>
+                    </button>
+                  </div>
                   <div className="space-y-3 text-xs">
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs">
-                          AM
-                        </div>
-                        <div>
-                          <div className="font-bold text-slate-900">{selectedClient.accountManagerName || "Kunal Sharma"}</div>
-                          <div className="text-[10px] text-slate-400">Account Manager</div>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-semibold text-emerald-600">Lead Contact</span>
-                    </div>
+                    {(() => {
+                      const amName = sanitizePodMember(selectedClient.accountManagerName);
+                      const dsName = sanitizePodMember(selectedClient.leadDesignerName);
+                      const cwName = sanitizePodMember(selectedClient.contentWriterName);
 
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-800 font-bold flex items-center justify-center text-xs">
-                          DS
-                        </div>
-                        <div>
-                          <div className="font-bold text-slate-900">{selectedClient.leadDesignerName || "Pooja Verma"}</div>
-                          <div className="text-[10px] text-slate-400">Lead Graphic & Video Designer</div>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-semibold text-indigo-600">Creatives</span>
-                    </div>
+                      return (
+                        <>
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs">
+                                AM
+                              </div>
+                              <div>
+                                <div className="font-bold text-slate-900">{amName || "Unassigned"}</div>
+                                <div className="text-[10px] text-slate-400">Account Manager</div>
+                              </div>
+                            </div>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                              amName
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {amName ? "Lead Contact" : "Not Assigned"}
+                            </span>
+                          </div>
 
-                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-xs">
-                          CW
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-800 font-bold flex items-center justify-center text-xs">
+                                DS
+                              </div>
+                              <div>
+                                <div className="font-bold text-slate-900">{dsName || "Unassigned"}</div>
+                                <div className="text-[10px] text-slate-400">Lead Graphic & Video Designer</div>
+                              </div>
+                            </div>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                              dsName
+                                ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {dsName ? "Creatives" : "Not Assigned"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-xs">
+                                CW
+                              </div>
+                              <div>
+                                <div className="font-bold text-slate-900">{cwName || "Unassigned"}</div>
+                                <div className="text-[10px] text-slate-400">Copywriter & Reel Scriptwriter</div>
+                              </div>
+                            </div>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                              cwName
+                                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-slate-100 text-slate-500"
+                            }`}>
+                              {cwName ? "Scripts" : "Not Assigned"}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                    {selectedClient.mediaBuyerName && (
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center text-xs">
+                            MB
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900">{selectedClient.mediaBuyerName}</div>
+                            <div className="text-[10px] text-slate-400">Media Buyer & Performance Ads</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900">{selectedClient.contentWriterName || "Aman Gupta"}</div>
-                          <div className="text-[10px] text-slate-400">Copywriter & Reel Scriptwriter</div>
-                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                          Paid Media
+                        </span>
                       </div>
-                      <span className="text-[10px] font-semibold text-amber-600">Scripts</span>
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -958,13 +1051,72 @@ export default function ClientsPage() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Account Manager
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.accountManagerName}
                     onChange={(e) => setFormData({ ...formData, accountManagerName: e.target.value })}
-                    placeholder="Kunal Sharma"
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                  />
+                  >
+                    <option value="">-- Unassigned --</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.fullName}>
+                        {m.fullName} ({m.primaryRole || "Team"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Lead Designer (Creatives)
+                  </label>
+                  <select
+                    value={formData.leadDesignerName}
+                    onChange={(e) => setFormData({ ...formData, leadDesignerName: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="">-- Unassigned --</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.fullName}>
+                        {m.fullName} ({m.primaryRole || "Team"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Copywriter / Content Strategist
+                  </label>
+                  <select
+                    value={formData.contentWriterName}
+                    onChange={(e) => setFormData({ ...formData, contentWriterName: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="">-- Unassigned --</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.fullName}>
+                        {m.fullName} ({m.primaryRole || "Team"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Media Buyer (Ads)
+                  </label>
+                  <select
+                    value={formData.mediaBuyerName}
+                    onChange={(e) => setFormData({ ...formData, mediaBuyerName: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="">-- Unassigned --</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.fullName}>
+                        {m.fullName} ({m.primaryRole || "Team"})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

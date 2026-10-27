@@ -34,6 +34,30 @@ describe("P0 Client Isolation & Role Boundaries Verification", () => {
       });
     }
 
+    let managerRole = await prisma.role.findFirst({ where: { tenantId, name: "Account Manager" } });
+    if (!managerRole) {
+      managerRole = await prisma.role.create({
+        data: {
+          tenantId,
+          name: "Account Manager",
+          isSystem: true,
+          permissions: ["creatives:review_internal", "leads:write", "tasks:write"],
+        },
+      });
+    }
+
+    let designerRole = await prisma.role.findFirst({ where: { tenantId, name: "Designer" } });
+    if (!designerRole) {
+      designerRole = await prisma.role.create({
+        data: {
+          tenantId,
+          name: "Designer",
+          isSystem: true,
+          permissions: ["creatives:version", "creatives:read", "tasks:read"],
+        },
+      });
+    }
+
     let sapnaUser = await prisma.user.findUnique({ where: { email: "client@sapnawashing.in" } });
     if (!sapnaUser) {
       sapnaUser = await prisma.user.create({
@@ -62,6 +86,52 @@ describe("P0 Client Isolation & Role Boundaries Verification", () => {
         data: { agencyClientId: sapna.id },
       });
     }
+
+    // Ephemeral test Account Manager
+    let testMgr = await prisma.user.findUnique({ where: { email: "kunal@goodwingrowai.com" } });
+    if (!testMgr) {
+      testMgr = await prisma.user.create({
+        data: {
+          email: "kunal@goodwingrowai.com",
+          fullName: "Kunal Sharma",
+          passwordHash: "$2a$10$abcdefghijklmnopqrstuvwxyz123456",
+          isActive: true,
+        },
+      });
+    }
+    const mgrMem = await prisma.tenantMembership.upsert({
+      where: { tenantId_userId: { tenantId, userId: testMgr.id } },
+      update: { status: "ACTIVE" },
+      create: { tenantId, userId: testMgr.id, status: "ACTIVE" },
+    });
+    await prisma.membershipRole.upsert({
+      where: { membershipId_roleId: { membershipId: mgrMem.id, roleId: managerRole.id } },
+      update: {},
+      create: { membershipId: mgrMem.id, roleId: managerRole.id },
+    });
+
+    // Ephemeral test Designer
+    let testDes = await prisma.user.findUnique({ where: { email: "pooja@goodwingrowai.com" } });
+    if (!testDes) {
+      testDes = await prisma.user.create({
+        data: {
+          email: "pooja@goodwingrowai.com",
+          fullName: "Pooja Verma",
+          passwordHash: "$2a$10$abcdefghijklmnopqrstuvwxyz123456",
+          isActive: true,
+        },
+      });
+    }
+    const desMem = await prisma.tenantMembership.upsert({
+      where: { tenantId_userId: { tenantId, userId: testDes.id } },
+      update: { status: "ACTIVE" },
+      create: { tenantId, userId: testDes.id, status: "ACTIVE" },
+    });
+    await prisma.membershipRole.upsert({
+      where: { membershipId_roleId: { membershipId: desMem.id, roleId: designerRole.id } },
+      update: {},
+      create: { membershipId: desMem.id, roleId: designerRole.id },
+    });
 
     // Approved test asset
     let approvedAsset = await prisma.creativeAsset.findFirst({
@@ -383,11 +453,15 @@ describe("P0 Client Isolation & Role Boundaries Verification", () => {
     await prisma.lead.deleteMany({
       where: { tenantId: tenant.id, email: "vikram@singhanialogistics.in" },
     });
-    const clientUser = await prisma.user.findUnique({ where: { email: "client@sapnawashing.in" } });
-    if (clientUser) {
-      await prisma.membershipRole.deleteMany({ where: { membership: { userId: clientUser.id } } }).catch(() => {});
-      await prisma.tenantMembership.deleteMany({ where: { userId: clientUser.id } }).catch(() => {});
-      await prisma.user.delete({ where: { id: clientUser.id } }).catch(() => {});
+    const testUserEmails = ["client@sapnawashing.in", "kunal@goodwingrowai.com", "pooja@goodwingrowai.com"];
+    for (const em of testUserEmails) {
+      const u = await prisma.user.findUnique({ where: { email: em } });
+      if (u) {
+        await prisma.session.deleteMany({ where: { userId: u.id } }).catch(() => {});
+        await prisma.membershipRole.deleteMany({ where: { membership: { userId: u.id } } }).catch(() => {});
+        await prisma.tenantMembership.deleteMany({ where: { userId: u.id } }).catch(() => {});
+        await prisma.user.delete({ where: { id: u.id } }).catch(() => {});
+      }
     }
   });
 });

@@ -181,64 +181,64 @@ export default function LoginPage() {
 
               <button
                 type="button"
-                onClick={() => fillDemoAccount("kunal@goodwingrowai.com", "AccountManager@2026!")}
+                onClick={() => fillDemoAccount("sameer@goodwingrowai.com", "Admin@2026!")}
                 className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
               >
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-amber-600" />
+                  <Building2 className="w-4 h-4 text-emerald-600" />
                   <div>
-                    <div className="text-xs font-bold text-slate-800 group-hover:text-amber-900">
-                      Kunal Sharma (Account Manager)
+                    <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-900">
+                      Sameer Meena (Workspace Admin)
                     </div>
                     <div className="text-[10px] text-slate-400 font-mono">
-                      kunal@goodwingrowai.com
+                      sameer@goodwingrowai.com
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-md">
-                  Account Mgr
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">
+                  Admin
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => fillDemoAccount("pooja@goodwingrowai.com", "Designer@2026!")}
+                onClick={() => fillDemoAccount("goodwingrow.ansh@gmail.com", "Admin@2026!")}
                 className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
               >
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-purple-600" />
                   <div>
                     <div className="text-xs font-bold text-slate-800 group-hover:text-purple-900">
-                      Pooja Verma (Lead Designer)
+                      Ansh Chourasiya (Workspace Admin)
                     </div>
                     <div className="text-[10px] text-slate-400 font-mono">
-                      pooja@goodwingrowai.com
+                      goodwingrow.ansh@gmail.com
                     </div>
                   </div>
                 </div>
                 <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-md">
-                  Designer
+                  Admin
                 </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => fillDemoAccount("client@sapnawashing.in", "ClientPortal@2026!")}
+                onClick={() => fillDemoAccount("kunalgoodwingrow@gmail.com", "Admin@2026!")}
                 className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
               >
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-teal-600" />
+                  <Building2 className="w-4 h-4 text-amber-600" />
                   <div>
-                    <div className="text-xs font-bold text-slate-800 group-hover:text-teal-900">
-                      Rajesh Patidar (Client Portal - Sapna)
+                    <div className="text-xs font-bold text-slate-800 group-hover:text-amber-900">
+                      Kunal Sen (Automation Executive)
                     </div>
                     <div className="text-[10px] text-slate-400 font-mono">
-                      client@sapnawashing.in
+                      kunalgoodwingrow@gmail.com
                     </div>
                   </div>
                 </div>
-                <span className="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-md">
-                  Client User
+                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-md">
+                  Team Member
                 </span>
               </button>
 

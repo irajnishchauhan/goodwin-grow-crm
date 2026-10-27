@@ -254,7 +254,6 @@ export async function ensureRubricPersonas() {
       "FinEdge Neo-Banking & Wealth Technologies",
       "Mahalaxmi Heritage Jewellers Group",
       "Nikita Shrivastava (Lucky's Hair Studio)",
-      "Sumit More Furniture Design",
     ];
 
     const demoClients = await prisma.agencyClient.findMany({
@@ -282,6 +281,43 @@ export async function ensureRubricPersonas() {
       }
       console.log(`🧹 Cleaned ${demoClients.length} pre-seeded demo clients from goodwin-grow-ai.`);
     }
+
+    // Sanitize any dummy pod members assigned to real clients (Pooja Verma, Aman Gupta, Kunal Sharma)
+    await prisma.agencyClient.updateMany({
+      where: {
+        tenantId,
+        OR: [
+          { leadDesignerName: { contains: "Pooja", mode: "insensitive" } },
+          { leadDesignerName: { contains: "Verma", mode: "insensitive" } },
+        ],
+      },
+      data: {
+        leadDesignerName: null,
+      },
+    }).catch(() => {});
+
+    await prisma.agencyClient.updateMany({
+      where: {
+        tenantId,
+        OR: [
+          { contentWriterName: { contains: "Aman", mode: "insensitive" } },
+          { contentWriterName: { contains: "Gupta", mode: "insensitive" } },
+        ],
+      },
+      data: {
+        contentWriterName: null,
+      },
+    }).catch(() => {});
+
+    await prisma.agencyClient.updateMany({
+      where: {
+        tenantId,
+        accountManagerName: { contains: "Kunal Sharma", mode: "insensitive" },
+      },
+      data: {
+        accountManagerName: null,
+      },
+    }).catch(() => {});
 
     // 5. Ensure Persona Users (Agency Team Members)
     async function ensureUserWithMembership(
@@ -343,33 +379,29 @@ export async function ensureRubricPersonas() {
       false
     );
 
-    // Account Manager
-    await ensureUserWithMembership(
-      "kunal@goodwingrowai.com",
-      "Kunal Sharma (Senior Account Manager)",
-      "AccountManager@2026!",
-      accountManagerRole.id,
-      null,
-      false
-    );
-
-    // Designer
-    await ensureUserWithMembership(
+    // Clean up any fake users / demo logins (Pooja Verma, Kunal Sharma, demo clients)
+    const fakeEmails = [
       "pooja@goodwingrowai.com",
-      "Pooja Verma (Lead Motion & Visual Designer)",
-      "Designer@2026!",
-      designerRole.id,
-      null,
-      false
-    );
-
-    // Clean up any demo client portal logins
-    const demoClientEmails = ["client@sapnawashing.in", "client@ambafurnishing.com", "admin@sapnawashing.com"];
-    for (const em of demoClientEmails) {
+      "kunal@goodwingrowai.com",
+      "client@sapnawashing.in",
+      "client@ambafurnishing.com",
+      "admin@sapnawashing.com"
+    ];
+    for (const em of fakeEmails) {
       const u = await prisma.user.findUnique({ where: { email: em } });
       if (u) {
-        await prisma.membershipRole.deleteMany({ where: { membership: { userId: u.id, tenantId } } }).catch(() => {});
-        await prisma.tenantMembership.deleteMany({ where: { userId: u.id, tenantId } }).catch(() => {});
+        await prisma.session.deleteMany({ where: { userId: u.id } }).catch(() => {});
+        await prisma.activity.deleteMany({ where: { performedById: u.id } }).catch(() => {});
+        await prisma.note.deleteMany({ where: { createdById: u.id } }).catch(() => {});
+        await prisma.task.updateMany({ where: { assignedToId: u.id }, data: { assignedToId: null } }).catch(() => {});
+        await prisma.lead.updateMany({ where: { assignedOwnerId: u.id }, data: { assignedOwnerId: null } }).catch(() => {});
+        await prisma.contact.updateMany({ where: { assignedOwnerId: u.id }, data: { assignedOwnerId: null } }).catch(() => {});
+        await prisma.company.updateMany({ where: { assignedOwnerId: u.id }, data: { assignedOwnerId: null } }).catch(() => {});
+        await prisma.deal.updateMany({ where: { assignedOwnerId: u.id }, data: { assignedOwnerId: null } }).catch(() => {});
+        await prisma.dealStageHistory.deleteMany({ where: { changedById: u.id } }).catch(() => {});
+        await prisma.auditLog.deleteMany({ where: { userId: u.id } }).catch(() => {});
+        await prisma.membershipRole.deleteMany({ where: { membership: { userId: u.id } } }).catch(() => {});
+        await prisma.tenantMembership.deleteMany({ where: { userId: u.id } }).catch(() => {});
         await prisma.user.delete({ where: { id: u.id } }).catch(() => {});
       }
     }

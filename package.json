@@ -10,7 +10,11 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "crm:digest": "tsx scripts/crm/crmkit-digest.ts",
+    "crm:import": "tsx scripts/crm/crmkit-import.ts",
+    "crm:backup": "tsx scripts/crm/crmkit-backup.ts",
+    "crm:inbox-sync": "tsx scripts/crm/crmkit-inbox-sync.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
