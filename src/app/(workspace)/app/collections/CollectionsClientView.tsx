@@ -17,6 +17,7 @@ import {
   Plus,
   Send,
   Building2,
+  Trash2,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -144,6 +145,25 @@ export function CollectionsClientView({
       alert("Error updating record");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteCollection = async (colId: string, invoiceNumber: string) => {
+    if (!confirm(`Are you sure you want to delete invoice ${invoiceNumber} from collections?`)) return;
+    try {
+      const res = await fetch(`/api/batteries/collections/${colId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCollections((prev) => prev.filter((c) => c.id !== colId));
+        setToastMessage(`Invoice ${invoiceNumber} deleted from collections.`);
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        alert(data.error || "Failed to delete collection");
+      }
+    } catch {
+      alert("Error deleting collection");
     }
   };
 
@@ -380,17 +400,26 @@ export function CollectionsClientView({
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      {col.status !== "PAID" && (
+                      <div className="flex items-center justify-end gap-1.5">
+                        {col.status !== "PAID" && (
+                          <button
+                            onClick={() => {
+                              setSelectedCollection(col);
+                              setFollowUpNote(col.followUpNotes || "");
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] cursor-pointer"
+                          >
+                            Update / Pay
+                          </button>
+                        )}
                         <button
-                          onClick={() => {
-                            setSelectedCollection(col);
-                            setFollowUpNote(col.followUpNotes || "");
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px]"
+                          onClick={() => handleDeleteCollection(col.id, col.invoiceNumber)}
+                          title="Delete Invoice"
+                          className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
                         >
-                          Update / Pay
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );

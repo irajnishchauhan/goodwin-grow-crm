@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock, Plus, Phone, Mail, Calendar, MessageSquare, FileText, X, Trash2, Filter, User } from "lucide-react";
+import { Clock, Plus, Phone, Mail, Calendar, MessageSquare, FileText, X, Trash2, Filter, User, Edit2, Save, Loader2 } from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
 
 export default function ActivitiesPage() {
@@ -16,6 +16,14 @@ export default function ActivitiesPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Edit Activity State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<any | null>(null);
+  const [editType, setEditType] = useState("CALL");
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     fetchTeam();
@@ -80,6 +88,45 @@ export default function ActivitiesPage() {
       alert("Error logging activity");
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEditModal(act: any) {
+    setEditingActivity(act);
+    setEditType(act.type);
+    setEditTitle(act.title);
+    setEditDescription(act.description || "");
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingActivity) return;
+    setSavingEdit(true);
+
+    try {
+      const res = await fetch(`/api/activities/${editingActivity.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: editType,
+          title: editTitle,
+          description: editDescription,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingActivity(null);
+        fetchActivities();
+      } else {
+        alert(data.error || "Failed to update activity");
+      }
+    } catch {
+      alert("Error updating activity");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -184,6 +231,13 @@ export default function ActivitiesPage() {
                         {formatDateTime(act.occurredAt)}
                       </span>
                       <button
+                        onClick={() => openEditModal(act)}
+                        title="Edit Activity"
+                        className="opacity-0 group-hover:opacity-100 transition p-1 hover:bg-emerald-50 rounded text-slate-400 hover:text-emerald-600 cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
                         onClick={() => handleDelete(act.id, act.title)}
                         title="Delete Activity"
                         className="opacity-0 group-hover:opacity-100 transition p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
@@ -279,6 +333,87 @@ export default function ActivitiesPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Activity Modal */}
+      {editModalOpen && editingActivity && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Edit Activity Log</h2>
+                <p className="text-xs text-slate-500">Update activity notes or category</p>
+              </div>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Activity Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["CALL", "EMAIL", "MEETING", "WHATSAPP", "NOTE"].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setEditType(t)}
+                      className={`py-2 px-2 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+                        editType === t
+                          ? "bg-emerald-50 border-emerald-500 text-emerald-800"
+                          : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Title / Summary *</label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Details & Outcome Notes</label>
+                <textarea
+                  rows={3}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  {savingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

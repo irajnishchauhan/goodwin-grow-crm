@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Building2,
   ChevronDown,
@@ -15,6 +16,19 @@ import {
   Kanban,
   X,
   Sparkles,
+  Command,
+  Plus,
+  Calendar,
+  FileSpreadsheet,
+  Megaphone,
+  CheckSquare,
+  Clock,
+  Battery,
+  Truck,
+  Wrench,
+  Receipt,
+  MapPin,
+  ArrowRight,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -43,7 +57,8 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
 
-  // Global Search State
+  // Command Palette State
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{
     leads: any[];
@@ -52,8 +67,40 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
     deals: any[];
   } | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const isBattery = activeTenant?.code?.includes("batteries");
+
+  // Global Cmd+K / Ctrl+K Shortcut Listener
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
+      if (e.key === "Escape") {
+        setPaletteOpen(false);
+        setCompanyMenuOpen(false);
+        setUserMenuOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Auto-focus search input when palette opens
+  useEffect(() => {
+    if (paletteOpen) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+    } else {
+      setSearchQuery("");
+      setSearchResults(null);
+    }
+  }, [paletteOpen]);
+
+  // Live search debouncing
   useEffect(() => {
     if (!searchQuery || searchQuery.trim().length < 2) {
       setSearchResults(null);
@@ -73,25 +120,15 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
       } finally {
         setSearchLoading(false);
       }
-    }, 250);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Click outside to close search
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setSearchResults(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   async function handleSwitchTenant(tenantId: string) {
     if (tenantId === activeTenant?.id) {
       setCompanyMenuOpen(false);
+      setPaletteOpen(false);
       return;
     }
 
@@ -105,6 +142,7 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
 
       if (res.ok) {
         setCompanyMenuOpen(false);
+        setPaletteOpen(false);
         window.location.href = "/app/dashboard";
       } else {
         alert("Failed to switch workspace");
@@ -126,7 +164,39 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
     }
   }
 
-  const hasResults =
+  const quickNavLinks = isBattery
+    ? [
+        { label: "Dealers & Channel Network", href: "/app/dealers", icon: Building2 },
+        { label: "Dispatch & Orders Register", href: "/app/orders", icon: Truck },
+        { label: "Warranty Claims & Service", href: "/app/warranty", icon: Wrench },
+        { label: "Outstanding & Collections", href: "/app/collections", icon: Receipt },
+        { label: "Field Force Visits", href: "/app/field-visits", icon: MapPin },
+        { label: "Sales Quotations", href: "/app/quotations", icon: FileSpreadsheet },
+        { label: "Activities & Timeline", href: "/app/activities", icon: Clock },
+      ]
+    : [
+        { label: "Leads Pipeline", href: "/app/leads", icon: TrendingUp },
+        { label: "Deals & Revenue Board", href: "/app/deals", icon: Kanban },
+        { label: "Clients 360° Management", href: "/app/clients", icon: Building2 },
+        { label: "Client Onboarding Hub", href: "/app/clients/onboarding", icon: Sparkles },
+        { label: "Contracts & Renewals", href: "/app/clients/renewals", icon: Clock },
+        { label: "Campaigns Management", href: "/app/campaigns", icon: Megaphone },
+        { label: "Meta Ad Campaigns", href: "/app/meta-ads", icon: Megaphone },
+        { label: "Google Ad Campaigns", href: "/app/google-ads", icon: Megaphone },
+        { label: "Content Calendar Hub", href: "/app/content-calendar", icon: Calendar },
+        { label: "Proposals & Quotations", href: "/app/proposals", icon: FileSpreadsheet },
+        { label: "Activities & Client Logs", href: "/app/activities", icon: Clock },
+      ];
+
+  const quickActionShortcuts = [
+    { label: "New Lead", href: "/app/leads", badge: "+ Add", icon: TrendingUp },
+    { label: "New Deal", href: "/app/deals", badge: "+ Add", icon: Kanban },
+    { label: "New Task", href: "/app/tasks", badge: "+ Add", icon: CheckSquare },
+    { label: "Log Activity", href: "/app/activities", badge: "+ Log", icon: Clock },
+    { label: "New Quotation", href: "/app/quotations", badge: "+ Quote", icon: FileSpreadsheet },
+  ];
+
+  const hasSearchResults =
     searchResults &&
     (searchResults.leads.length > 0 ||
       searchResults.contacts.length > 0 ||
@@ -225,121 +295,34 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
         </div>
       </div>
 
-      {/* Center: Global Search Bar */}
-      <div ref={searchRef} className="hidden md:flex items-center max-w-md w-full mx-6 relative">
-        <div className="relative w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search leads, deals, contacts, companies..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => {
-                setSearchQuery("");
-                setSearchResults(null);
-              }}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Search Results Dropdown */}
-        {searchResults && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 p-3 z-50 max-h-96 overflow-y-auto space-y-3">
-            {searchLoading ? (
-              <div className="text-xs text-slate-400 text-center py-4">Searching workspace...</div>
-            ) : !hasResults ? (
-              <div className="text-xs text-slate-400 text-center py-4">No matching records found.</div>
-            ) : (
-              <>
-                {searchResults.leads.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-emerald-600" />
-                      <span>Leads</span>
-                    </div>
-                    {searchResults.leads.map((l) => (
-                      <a
-                        key={l.id}
-                        href="/app/leads"
-                        className="block p-1.5 rounded-lg hover:bg-slate-50 text-xs text-slate-800"
-                      >
-                        <span className="font-semibold">{l.firstName} {l.lastName}</span>
-                        {l.companyName && <span className="text-slate-400"> • {l.companyName}</span>}
-                      </a>
-                    ))}
-                  </div>
-                )}
-
-                {searchResults.deals.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <Kanban className="w-3 h-3 text-cyan-600" />
-                      <span>Deals</span>
-                    </div>
-                    {searchResults.deals.map((d) => (
-                      <a
-                        key={d.id}
-                        href="/app/deals"
-                        className="block p-1.5 rounded-lg hover:bg-slate-50 text-xs text-slate-800"
-                      >
-                        <span className="font-semibold">{d.title}</span>
-                        <span className="text-emerald-700 font-bold ml-1.5">₹{Number(d.value).toLocaleString("en-IN")}</span>
-                      </a>
-                    ))}
-                  </div>
-                )}
-
-                {searchResults.contacts.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <Users2 className="w-3 h-3 text-teal-600" />
-                      <span>Contacts</span>
-                    </div>
-                    {searchResults.contacts.map((c) => (
-                      <a
-                        key={c.id}
-                        href="/app/contacts"
-                        className="block p-1.5 rounded-lg hover:bg-slate-50 text-xs text-slate-800"
-                      >
-                        <span className="font-semibold">{c.firstName} {c.lastName}</span>
-                        {c.email && <span className="text-slate-400"> • {c.email}</span>}
-                      </a>
-                    ))}
-                  </div>
-                )}
-
-                {searchResults.companies.length > 0 && (
-                  <div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <Building2 className="w-3 h-3 text-amber-600" />
-                      <span>Companies</span>
-                    </div>
-                    {searchResults.companies.map((co) => (
-                      <a
-                        key={co.id}
-                        href="/app/companies"
-                        className="block p-1.5 rounded-lg hover:bg-slate-50 text-xs text-slate-800 font-semibold"
-                      >
-                        {co.name}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+      {/* Center: Command Palette Trigger Button */}
+      <div className="hidden md:flex items-center max-w-md w-full mx-6">
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          className="w-full flex items-center justify-between px-3.5 py-1.5 text-xs bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl text-slate-400 transition cursor-pointer group shadow-2xs"
+        >
+          <div className="flex items-center gap-2.5">
+            <Search className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition" />
+            <span className="text-slate-500 font-medium">Quick jump, search or action...</span>
           </div>
-        )}
+          <div className="flex items-center gap-1 bg-white border border-slate-200/80 px-1.5 py-0.5 rounded-md text-[10px] font-mono text-slate-500 shadow-2xs">
+            <span>⌘</span>
+            <span>K</span>
+          </div>
+        </button>
       </div>
 
       {/* Right: User Menu */}
       <div className="flex items-center gap-3">
+        {/* Mobile Search Button */}
+        <button
+          onClick={() => setPaletteOpen(true)}
+          className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+        >
+          <Search className="w-5 h-5" />
+        </button>
+
         <div className="relative">
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -396,6 +379,270 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
           )}
         </div>
       </div>
+
+      {/* Global Cmd+K Spotlight Modal */}
+      {paletteOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div
+            className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Search Input Bar */}
+            <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+              <Search className="w-5 h-5 text-emerald-600 shrink-0" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Type to search records, jump to a page, or run a quick action..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full text-sm bg-transparent border-none outline-none text-slate-900 placeholder-slate-400 font-medium"
+              />
+              <div className="flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] font-mono text-slate-400">
+                  ESC
+                </span>
+                <button
+                  onClick={() => setPaletteOpen(false)}
+                  className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="overflow-y-auto p-4 space-y-5 flex-1">
+              {/* If Searching */}
+              {searchQuery.trim().length >= 2 ? (
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Search Results
+                  </div>
+                  {searchLoading ? (
+                    <div className="py-8 text-center text-xs text-slate-400">Searching records...</div>
+                  ) : !hasSearchResults ? (
+                    <div className="py-8 text-center text-xs text-slate-400">
+                      No records found matching "{searchQuery}".
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {searchResults.leads.length > 0 && (
+                        <div>
+                          <div className="text-[11px] font-bold text-emerald-700 mb-1 flex items-center gap-1">
+                            <TrendingUp className="w-3.5 h-3.5" />
+                            <span>Leads</span>
+                          </div>
+                          <div className="space-y-1">
+                            {searchResults.leads.map((l) => (
+                              <button
+                                key={l.id}
+                                onClick={() => {
+                                  setPaletteOpen(false);
+                                  router.push("/app/leads");
+                                }}
+                                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-left text-xs text-slate-800 transition"
+                              >
+                                <span className="font-semibold">{l.firstName} {l.lastName}</span>
+                                {l.companyName && <span className="text-slate-400">{l.companyName}</span>}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {searchResults.deals.length > 0 && (
+                        <div>
+                          <div className="text-[11px] font-bold text-cyan-700 mb-1 flex items-center gap-1">
+                            <Kanban className="w-3.5 h-3.5" />
+                            <span>Deals</span>
+                          </div>
+                          <div className="space-y-1">
+                            {searchResults.deals.map((d) => (
+                              <button
+                                key={d.id}
+                                onClick={() => {
+                                  setPaletteOpen(false);
+                                  router.push("/app/deals");
+                                }}
+                                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-left text-xs text-slate-800 transition"
+                              >
+                                <span className="font-semibold">{d.title}</span>
+                                <span className="text-emerald-700 font-bold">
+                                  ₹{Number(d.value).toLocaleString("en-IN")}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {searchResults.contacts.length > 0 && (
+                        <div>
+                          <div className="text-[11px] font-bold text-teal-700 mb-1 flex items-center gap-1">
+                            <Users2 className="w-3.5 h-3.5" />
+                            <span>Contacts</span>
+                          </div>
+                          <div className="space-y-1">
+                            {searchResults.contacts.map((c) => (
+                              <button
+                                key={c.id}
+                                onClick={() => {
+                                  setPaletteOpen(false);
+                                  router.push("/app/contacts");
+                                }}
+                                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-left text-xs text-slate-800 transition"
+                              >
+                                <span className="font-semibold">{c.firstName} {c.lastName}</span>
+                                {c.email && <span className="text-slate-400">{c.email}</span>}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {searchResults.companies.length > 0 && (
+                        <div>
+                          <div className="text-[11px] font-bold text-amber-700 mb-1 flex items-center gap-1">
+                            <Building2 className="w-3.5 h-3.5" />
+                            <span>Companies</span>
+                          </div>
+                          <div className="space-y-1">
+                            {searchResults.companies.map((co) => (
+                              <button
+                                key={co.id}
+                                onClick={() => {
+                                  setPaletteOpen(false);
+                                  router.push("/app/companies");
+                                }}
+                                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-left text-xs text-slate-800 font-semibold transition"
+                              >
+                                <span>{co.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* Quick Creation Actions */}
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                      Quick Actions
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {quickActionShortcuts.map((act) => {
+                        const Icon = act.icon;
+                        return (
+                          <button
+                            key={act.label}
+                            onClick={() => {
+                              setPaletteOpen(false);
+                              router.push(act.href);
+                            }}
+                            className="flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/50 hover:bg-emerald-50 hover:border-emerald-200 transition text-left cursor-pointer group"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 group-hover:text-emerald-700 group-hover:border-emerald-300">
+                              <Plus className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-950">
+                                {act.label}
+                              </div>
+                              <div className="text-[10px] text-slate-400">{act.badge}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Quick Navigation Pages */}
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                      Quick Navigation
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {quickNavLinks.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <button
+                            key={item.href}
+                            onClick={() => {
+                              setPaletteOpen(false);
+                              router.push(item.href);
+                            }}
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-left transition group"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <Icon className="w-4 h-4 text-slate-400 group-hover:text-emerald-600" />
+                              <span className="text-xs font-medium text-slate-700 group-hover:text-slate-900 group-hover:font-semibold">
+                                {item.label}
+                              </span>
+                            </div>
+                            <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-600 transition" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Switch Organization Workspace */}
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                      Switch Active Organization
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {memberships.map((m) => {
+                        const isCurrent = m.tenantId === activeTenant?.id;
+                        return (
+                          <button
+                            key={m.tenantId}
+                            disabled={switching}
+                            onClick={() => handleSwitchTenant(m.tenantId)}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                              isCurrent
+                                ? "bg-emerald-50/80 border-emerald-300 font-bold text-emerald-950"
+                                : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 truncate">
+                              <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold shrink-0">
+                                {m.tenantName.charAt(0)}
+                              </div>
+                              <div className="truncate">
+                                <div className="text-xs truncate">{m.tenantName}</div>
+                                <div className="text-[10px] text-slate-400 font-mono">{m.tenantCode}</div>
+                              </div>
+                            </div>
+                            {isCurrent && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+              <div className="flex items-center gap-3">
+                <span>Navigate with mouse or keyboard</span>
+                <span>•</span>
+                <span>Press <strong>ESC</strong> to dismiss</span>
+              </div>
+              <div className="font-mono text-[10px] text-slate-400">
+                Goodwin Multi-Tenant Suite
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
+

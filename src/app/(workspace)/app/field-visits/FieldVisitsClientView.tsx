@@ -14,6 +14,10 @@ import {
   Send,
   Building2,
   Navigation,
+  Edit2,
+  Trash2,
+  Loader2,
+  Save,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -54,6 +58,18 @@ export function FieldVisitsClientView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Edit Visit State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingVisit, setEditingVisit] = useState<VisitItem | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    purpose: "",
+    outcome: "",
+    orderBooked: "",
+    collectionMade: "",
+    followUpDate: "",
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   // New Visit State
   const [formData, setFormData] = useState({
     partnerId: partners[0]?.id || "",
@@ -63,6 +79,67 @@ export function FieldVisitsClientView({
     collectionMade: "",
     followUpDate: "",
   });
+
+  const handleOpenEdit = (v: VisitItem) => {
+    setEditingVisit(v);
+    setEditFormData({
+      purpose: v.purpose,
+      outcome: v.outcome || "",
+      orderBooked: v.orderBooked ? String(v.orderBooked) : "",
+      collectionMade: v.collectionMade ? String(v.collectionMade) : "",
+      followUpDate: v.followUpDate ? new Date(v.followUpDate).toISOString().split("T")[0] : "",
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateVisit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVisit) return;
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch(`/api/batteries/field-visits/${editingVisit.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editFormData),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setVisits((prev) =>
+          prev.map((item) => (item.id === editingVisit.id ? { ...item, ...data.data } : item))
+        );
+        setShowEditModal(false);
+        setEditingVisit(null);
+        setToastMessage("Field visit updated successfully!");
+        setTimeout(() => setToastMessage(null), 3000);
+      } else {
+        alert(data.error || "Failed to update visit");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating visit");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDeleteVisit = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this field visit log?")) return;
+    try {
+      const res = await fetch(`/api/batteries/field-visits/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setVisits((prev) => prev.filter((v) => v.id !== id));
+        setToastMessage("Field visit record deleted.");
+        setTimeout(() => setToastMessage(null), 3000);
+      } else {
+        alert(data.error || "Failed to delete visit");
+      }
+    } catch {
+      alert("Error deleting visit");
+    }
+  };
 
   const totalOrdersBooked = visits.reduce((acc, v) => acc + Number(v.orderBooked || 0), 0);
   const totalCollectionsMade = visits.reduce((acc, v) => acc + Number(v.collectionMade || 0), 0);
@@ -202,12 +279,13 @@ export function FieldVisitsClientView({
                 <th className="py-3 px-4">Order Booked</th>
                 <th className="py-3 px-4">Collected</th>
                 <th className="py-3 px-4">Next Follow-up</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredVisits.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     No field visits found.
                   </td>
                 </tr>
@@ -238,6 +316,26 @@ export function FieldVisitsClientView({
                     </td>
                     <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
                       {visit.followUpDate ? formatDate(visit.followUpDate) : "—"}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(visit)}
+                          title="Edit Visit Log"
+                          className="p-1 rounded hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteVisit(visit.id)}
+                          title="Delete Visit Log"
+                          className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -356,6 +454,100 @@ export function FieldVisitsClientView({
           </div>
         </div>
       )}
+
+      {/* Edit Visit Modal */}
+      {showEditModal && editingVisit && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Edit Field Visit Log</h3>
+                <p className="text-xs text-slate-500">{editingVisit.partner.businessName} • {editingVisit.partner.city}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateVisit} className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Visit Purpose *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.purpose}
+                  onChange={(e) => setEditFormData({ ...editFormData, purpose: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Key Meeting Outcome & Feedback</label>
+                <textarea
+                  rows={2}
+                  value={editFormData.outcome}
+                  onChange={(e) => setEditFormData({ ...editFormData, outcome: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Order Booked (₹)</label>
+                  <input
+                    type="number"
+                    value={editFormData.orderBooked}
+                    onChange={(e) => setEditFormData({ ...editFormData, orderBooked: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Payment Collected (₹)</label>
+                  <input
+                    type="number"
+                    value={editFormData.collectionMade}
+                    onChange={(e) => setEditFormData({ ...editFormData, collectionMade: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Next Follow-up Date</label>
+                <input
+                  type="date"
+                  value={editFormData.followUpDate}
+                  onChange={(e) => setEditFormData({ ...editFormData, followUpDate: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  {isSavingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

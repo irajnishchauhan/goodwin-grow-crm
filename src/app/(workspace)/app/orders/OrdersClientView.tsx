@@ -189,6 +189,45 @@ export function OrdersClientView({
     }
   };
 
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/batteries/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
+        setToastMessage(`Order status updated to ${newStatus.replace("_", " ")}`);
+        setTimeout(() => setToastMessage(null), 3000);
+      } else {
+        alert(data.error || "Failed to update order status");
+      }
+    } catch {
+      alert("Error updating order status");
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string, orderNumber: string) => {
+    if (!confirm(`Are you sure you want to delete order "${orderNumber}"?`)) return;
+    try {
+      const res = await fetch(`/api/batteries/orders/${orderId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOrders((prev) => prev.filter((o) => o.id !== orderId));
+        setToastMessage(`Order ${orderNumber} deleted successfully.`);
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        alert(data.error || "Failed to delete order");
+      }
+    } catch {
+      alert("Error deleting order");
+    }
+  };
+
   const filteredOrders = orders.filter((o) => {
     if (statusFilter !== "ALL" && o.status !== statusFilter) return false;
     if (searchQuery.trim()) {
@@ -388,19 +427,36 @@ export function OrdersClientView({
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        {isPending ? (
+                        <div className="flex items-center justify-end gap-2">
+                          {isPending ? (
+                            <button
+                              onClick={() => handleApproveOrder(order.id)}
+                              disabled={isSyncing}
+                              className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+                            >
+                              {isSyncing ? "Syncing..." : "Approve & Push"}
+                            </button>
+                          ) : (
+                            <select
+                              value={order.status}
+                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                              className="text-[11px] font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-700 focus:outline-none cursor-pointer"
+                            >
+                              <option value="APPROVED">APPROVED</option>
+                              <option value="PROCESSING">PROCESSING</option>
+                              <option value="DISPATCHED">DISPATCHED</option>
+                              <option value="DELIVERED">DELIVERED</option>
+                              <option value="CANCELLED">CANCELLED</option>
+                            </select>
+                          )}
                           <button
-                            onClick={() => handleApproveOrder(order.id)}
-                            disabled={isSyncing}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50"
+                            onClick={() => handleDeleteOrder(order.id, order.orderNumber)}
+                            title="Delete Order"
+                            className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
                           >
-                            {isSyncing ? "Syncing..." : "Approve & Push"}
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        ) : (
-                          <span className="text-xs font-semibold text-emerald-600 flex items-center justify-end gap-1">
-                            <Check className="w-4 h-4" /> Ready in ERP
-                          </span>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );

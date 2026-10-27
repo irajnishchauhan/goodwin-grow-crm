@@ -22,6 +22,10 @@ import {
   FileText,
   Clock,
   Sparkles,
+  Edit2,
+  Trash2,
+  Loader2,
+  Save,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -74,6 +78,26 @@ export function DealersClientView({
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Edit Partner Form State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPartner, setEditingPartner] = useState<PartnerItem | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    businessName: "",
+    ownerName: "",
+    phone: "",
+    email: "",
+    address: "",
+    city: "",
+    state: "Delhi",
+    territory: "",
+    type: "DEALER",
+    tier: "SILVER",
+    status: "ACTIVE",
+    creditLimit: "250000",
+    creditDays: "30",
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   // New Partner Form State
   const [formData, setFormData] = useState({
     businessName: "",
@@ -92,6 +116,79 @@ export function DealersClientView({
     creditDays: "30",
     parentDistributorId: "",
   });
+
+  const handleOpenEdit = (p: PartnerItem) => {
+    setEditingPartner(p);
+    setEditFormData({
+      businessName: p.businessName,
+      ownerName: p.ownerName,
+      phone: p.phone,
+      email: p.email || "",
+      address: p.address,
+      city: p.city,
+      state: p.state,
+      territory: p.territory,
+      type: p.type,
+      tier: p.tier,
+      status: p.status,
+      creditLimit: String(p.creditLimit || "250000"),
+      creditDays: String(p.creditDays || "30"),
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdatePartner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPartner) return;
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch(`/api/batteries/dealers/${editingPartner.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editFormData),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPartners((prev) =>
+          prev.map((item) => (item.id === editingPartner.id ? { ...item, ...data.data } : item))
+        );
+        if (selectedPartner?.id === editingPartner.id) {
+          setSelectedPartner((prev) => (prev ? { ...prev, ...data.data } : null));
+        }
+        setShowEditModal(false);
+        setEditingPartner(null);
+      } else {
+        alert(data.error || "Failed to update partner");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating partner");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleDeletePartner = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete partner "${name}" and all associated orders/warranty records?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/batteries/dealers/${id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPartners((prev) => prev.filter((p) => p.id !== id));
+        if (selectedPartner?.id === id) {
+          setSelectedPartner(null);
+        }
+      } else {
+        alert(data.error || "Failed to delete partner");
+      }
+    } catch {
+      alert("Error deleting partner");
+    }
+  };
 
   // Unique territories
   const territories = Array.from(new Set(partners.map((p) => p.territory))).filter(Boolean);
@@ -386,9 +483,33 @@ export function DealersClientView({
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <button className="text-slate-400 group-hover:text-amber-600 transition-colors p-1">
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(partner);
+                            }}
+                            className="p-1 rounded hover:bg-amber-100 text-slate-400 hover:text-amber-700 transition cursor-pointer"
+                            title="Edit Partner"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePartner(partner.id, partner.businessName);
+                            }}
+                            className="p-1 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                            title="Delete Partner"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button className="text-slate-400 group-hover:text-amber-600 transition-colors p-1">
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -418,12 +539,32 @@ export function DealersClientView({
                   Proprietor: {selectedPartner.ownerName} • {selectedPartner.city}, {selectedPartner.state}
                 </p>
               </div>
-              <button
-                onClick={() => setSelectedPartner(null)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenEdit(selectedPartner)}
+                  className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold flex items-center gap-1.5 transition text-white cursor-pointer"
+                  title="Edit Partner Profile"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeletePartner(selectedPartner.id, selectedPartner.businessName)}
+                  className="px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Delete Partner"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+                <button
+                  onClick={() => setSelectedPartner(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Drawer Body */}
@@ -736,6 +877,184 @@ export function DealersClientView({
           </div>
         </div>
       )}
+
+      {/* Edit Partner Modal */}
+      {showEditModal && editingPartner && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Edit Partner Profile</h3>
+                <p className="text-xs text-slate-500">Update business details, status, tier, or credit terms</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdatePartner} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Business Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.businessName}
+                    onChange={(e) => setEditFormData({ ...editFormData, businessName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Proprietor Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.ownerName}
+                    onChange={(e) => setEditFormData({ ...editFormData, ownerName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Phone Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Status</label>
+                  <select
+                    value={editFormData.status}
+                    onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="ONBOARDING">ONBOARDING</option>
+                    <option value="SUSPENDED">SUSPENDED</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Tier</label>
+                  <select
+                    value={editFormData.tier}
+                    onChange={(e) => setEditFormData({ ...editFormData, tier: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  >
+                    <option value="SILVER">SILVER</option>
+                    <option value="GOLD">GOLD</option>
+                    <option value="PLATINUM">PLATINUM</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Partner Type</label>
+                  <select
+                    value={editFormData.type}
+                    onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  >
+                    <option value="DEALER">DEALER</option>
+                    <option value="DISTRIBUTOR">DISTRIBUTOR</option>
+                    <option value="RETAILER">RETAILER</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Credit Limit (₹)</label>
+                  <input
+                    type="number"
+                    value={editFormData.creditLimit}
+                    onChange={(e) => setEditFormData({ ...editFormData, creditLimit: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Credit Days</label>
+                  <input
+                    type="number"
+                    value={editFormData.creditDays}
+                    onChange={(e) => setEditFormData({ ...editFormData, creditDays: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">City</label>
+                  <input
+                    type="text"
+                    value={editFormData.city}
+                    onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Territory</label>
+                  <input
+                    type="text"
+                    value={editFormData.territory}
+                    onChange={(e) => setEditFormData({ ...editFormData, territory: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Address</label>
+                <input
+                  type="text"
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  {isSavingEdit && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

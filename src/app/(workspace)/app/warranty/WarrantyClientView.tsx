@@ -15,6 +15,7 @@ import {
   Building2,
   Phone,
   FileCheck,
+  Trash2,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -164,6 +165,25 @@ export function WarrantyClientView({
       alert("Error resolving claim");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteClaim = async (claimId: string, claimNumber: string) => {
+    if (!confirm(`Are you sure you want to delete warranty claim "${claimNumber}"?`)) return;
+    try {
+      const res = await fetch(`/api/batteries/warranty/${claimId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setClaims((prev) => prev.filter((c) => c.id !== claimId));
+        setToastMessage(`Warranty claim ${claimNumber} deleted successfully.`);
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        alert(data.error || "Failed to delete claim");
+      }
+    } catch {
+      alert("Error deleting claim");
     }
   };
 
@@ -397,19 +417,28 @@ export function WarrantyClientView({
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      {!claim.status.includes("APPROVED") && claim.status !== "REJECTED" ? (
+                      <div className="flex items-center justify-end gap-1.5">
+                        {!claim.status.includes("APPROVED") && claim.status !== "REJECTED" ? (
+                          <button
+                            onClick={() => {
+                              setSelectedClaim(claim);
+                              setTechNotes(claim.technicianNotes || "");
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] cursor-pointer"
+                          >
+                            Diagnose / Resolve
+                          </button>
+                        ) : (
+                          <span className="text-slate-400 text-[11px] font-semibold">Resolved</span>
+                        )}
                         <button
-                          onClick={() => {
-                            setSelectedClaim(claim);
-                            setTechNotes(claim.technicianNotes || "");
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px]"
+                          onClick={() => handleDeleteClaim(claim.id, claim.claimNumber)}
+                          title="Delete Claim"
+                          className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
                         >
-                          Diagnose / Resolve
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      ) : (
-                        <span className="text-slate-400 text-[11px] font-semibold">Resolved</span>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))
