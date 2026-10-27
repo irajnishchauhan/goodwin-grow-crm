@@ -319,6 +319,22 @@ export async function ensureRubricPersonas() {
       },
     }).catch(() => {});
 
+    // Purge any incorrect dummy festival dates (Oct 28, Oct 30, Nov 02)
+    await (prisma as any).marketingFestival?.deleteMany({
+      where: {
+        tenantId,
+        OR: [
+          { date: { contains: "Oct 28" } },
+          { date: { contains: "Oct 30" } },
+          { date: { contains: "Nov 02" } },
+        ],
+      },
+    }).catch(() => {});
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "marketing_festivals" 
+       WHERE "date" LIKE '%Oct 28%' OR "date" LIKE '%Oct 30%' OR "date" LIKE '%Nov 02%'`
+    ).catch(() => {});
+
     // 5. Ensure Persona Users (Agency Team Members)
     async function ensureUserWithMembership(
       email: string,

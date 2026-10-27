@@ -82,6 +82,23 @@ export async function POST() {
       },
     }).catch(() => {});
 
+    // Purge any incorrect dummy festival dates
+    await (prisma as any).marketingFestival?.deleteMany({
+      where: {
+        tenantId,
+        OR: [
+          { date: { contains: "Oct 28" } },
+          { date: { contains: "Oct 30" } },
+          { date: { contains: "Nov 02" } },
+        ],
+      },
+    }).catch(() => {});
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "marketing_festivals" 
+       WHERE "tenant_id" = $1 AND ("date" LIKE '%Oct 28%' OR "date" LIKE '%Oct 30%' OR "date" LIKE '%Nov 02%')`,
+      tenantId
+    ).catch(() => {});
+
     const demoClientEmails = [
       "pooja@goodwingrowai.com",
       "kunal@goodwingrowai.com",

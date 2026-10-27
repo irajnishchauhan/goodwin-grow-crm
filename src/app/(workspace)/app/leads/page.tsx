@@ -520,7 +520,7 @@ export default function LeadsPage() {
 
           <button
             onClick={() => {
-              setImportRawText("First Name,Last Name,Company,Email,Phone,Source,Service Required,Deal Value,Priority,Score\nNikhil,Sharma,Nexus Auto Detailing,nikhil@nexusauto.com,+91 98777 66554,Inbound,Ceramic Detailing SEO & Meta Ads,180000,HIGH,80\nPooja,Iyer,Iyer Living Furnishings,pooja@iyerliving.com,+91 98888 77665,Meta Ads,Luxury Furnishing Omnichannel Brand Campaign,250000,URGENT,90");
+              setImportRawText("First Name,Last Name,Company,Email,Phone,Source,Service Required,Deal Value,Priority,Score\nNikhil,Sharma,Nexus Auto Detailing,nikhil@nexusauto.com,+91 98777 66554,Inbound,Ceramic Detailing SEO & Meta Ads,180000,HIGH,80\nPreeti,Iyer,Iyer Living Furnishings,preeti@iyerliving.com,+91 98888 77665,Meta Ads,Luxury Furnishing Omnichannel Brand Campaign,250000,URGENT,90");
               setImportResult(null);
               setImportModalOpen(true);
             }}

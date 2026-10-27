@@ -46,6 +46,7 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [clients, setClients] = useState<any[]>([]);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
   // Create Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -55,7 +56,7 @@ export default function ProjectsPage() {
   const [deliverableType, setDeliverableType] = useState("Monthly Retainer Deliverable");
   const [budget, setBudget] = useState("50000");
   const [dueDate, setDueDate] = useState("");
-  const [assigneeName, setAssigneeName] = useState("Kunal Sharma");
+  const [assigneeName, setAssigneeName] = useState("");
 
   // Edit Modal
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -76,7 +77,20 @@ export default function ProjectsPage() {
   useEffect(() => {
     fetchProjects();
     fetchClients();
+    fetchTeam();
   }, []);
+
+  async function fetchTeam() {
+    try {
+      const res = await fetch("/api/team?activeOnly=true");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setTeamMembers(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   async function fetchClients() {
     try {
@@ -495,12 +509,28 @@ export default function ProjectsPage() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Assignee
                   </label>
-                  <input
-                    type="text"
-                    value={assigneeName}
-                    onChange={(e) => setAssigneeName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
-                  />
+                  {teamMembers.length > 0 ? (
+                    <select
+                      value={assigneeName}
+                      onChange={(e) => setAssigneeName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                    >
+                      <option value="">Unassigned</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.fullName}>
+                          {m.fullName} ({m.primaryRole || "Member"})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="e.g. Sameer Meena, Kunal Sen"
+                      value={assigneeName}
+                      onChange={(e) => setAssigneeName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -631,12 +661,28 @@ export default function ProjectsPage() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Assignee
                   </label>
-                  <input
-                    type="text"
-                    value={editAssignee}
-                    onChange={(e) => setEditAssignee(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
-                  />
+                  {teamMembers.length > 0 ? (
+                    <select
+                      value={editAssignee}
+                      onChange={(e) => setEditAssignee(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                    >
+                      <option value="">Unassigned</option>
+                      {teamMembers.map((m) => (
+                        <option key={m.id} value={m.fullName}>
+                          {m.fullName} ({m.primaryRole || "Member"})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="e.g. Sameer Meena, Kunal Sen"
+                      value={editAssignee}
+                      onChange={(e) => setEditAssignee(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                    />
+                  )}
                 </div>
 
                 <div>

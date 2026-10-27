@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Package,
@@ -21,11 +21,32 @@ interface RetainerPlan {
   cadence: string;
   description: string;
   deliverables: string[];
-  activeClientsCount: number;
   highlighted?: boolean;
 }
 
 export default function RetainersPage() {
+  const [clients, setClients] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/agency/clients")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data)) {
+          setClients(data.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  function getClientCount(plan: RetainerPlan): number {
+    return clients.filter(
+      (c) =>
+        c.status === "ACTIVE" &&
+        (c.activePackage?.toLowerCase().includes(plan.name.split(" ")[0].toLowerCase()) ||
+          Number(c.monthlyRetainer) === plan.price)
+    ).length;
+  }
+
   const plans: RetainerPlan[] = [
     {
       id: "starter",
@@ -39,7 +60,6 @@ export default function RetainersPage() {
         "Monthly Customer Review Management",
         "Dedicated Account Executive",
       ],
-      activeClientsCount: 2,
     },
     {
       id: "growth",
@@ -53,7 +73,6 @@ export default function RetainersPage() {
         "Meta Lead Ads WhatsApp Funnel Setup",
         "Bi-weekly Strategy & Deliverables Review",
       ],
-      activeClientsCount: 2,
       highlighted: true,
     },
     {
@@ -68,7 +87,6 @@ export default function RetainersPage() {
         "Custom Creative Review & Approval Dashboard",
         "Dedicated Creative Director & Account Manager",
       ],
-      activeClientsCount: 1,
     },
     {
       id: "performance",
@@ -82,7 +100,6 @@ export default function RetainersPage() {
         "Server-Side Conversions API & ROAS Optimization",
         "Guaranteed 3.5x+ ROAS Framework",
       ],
-      activeClientsCount: 1,
     },
     {
       id: "corporate",
@@ -96,7 +113,6 @@ export default function RetainersPage() {
         "24/7 Social Listening & Crisis ORM",
         "Custom Executive Reporting & C-Suite Reviews",
       ],
-      activeClientsCount: 1,
     },
   ];
 
@@ -150,7 +166,7 @@ export default function RetainersPage() {
                 </span>
                 <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
                   <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                  {plan.activeClientsCount} Clients Active
+                  {getClientCount(plan)} Clients Active
                 </span>
               </div>
 

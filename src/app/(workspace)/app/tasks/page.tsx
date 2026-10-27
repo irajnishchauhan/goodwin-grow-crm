@@ -116,14 +116,6 @@ export default function TasksPage() {
   const [editNewAttachmentName, setEditNewAttachmentName] = useState("");
   const [editNewAttachmentUrl, setEditNewAttachmentUrl] = useState("");
 
-  // Agency 7-Stage Workflow Modal
-  const [agencyModalOpen, setAgencyModalOpen] = useState(false);
-  const [agencyTitle, setAgencyTitle] = useState("");
-  const [agencyDesc, setAgencyDesc] = useState("");
-  const [agencyClientId, setAgencyClientId] = useState("");
-  const [agencyStage, setAgencyStage] = useState("CONTENT_BRIEF");
-  const [agencyAssignee, setAgencyAssignee] = useState("Kunal Sharma");
-  const [agencyRole, setAgencyRole] = useState("Account Manager");
 
   useEffect(() => {
     fetchTeam();

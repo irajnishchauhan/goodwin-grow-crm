@@ -51,8 +51,24 @@ export async function GET(req: Request) {
     orderBy: [{ isOwner: "desc" }, { createdAt: "asc" }],
   });
 
-  const teamMembers = memberships.map((m) => ({
-    id: m.user.id,
+  const fakePersonaEmails = [
+    "pooja@goodwingrowai.com",
+    "kunal@goodwingrowai.com",
+    "client@sapnawashing.in",
+    "client@ambafurnishing.com",
+    "admin@sapnawashing.com",
+  ];
+
+  const teamMembers = memberships
+    .filter((m) => {
+      const email = m.user.email.toLowerCase();
+      const name = m.user.fullName.toLowerCase();
+      if (fakePersonaEmails.includes(email)) return false;
+      if (name.includes("pooja verma") || name.includes("aman gupta") || name.includes("kunal sharma")) return false;
+      return true;
+    })
+    .map((m) => ({
+      id: m.user.id,
     userId: m.user.id,
     membershipId: m.id,
     fullName: m.user.fullName,

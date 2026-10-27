@@ -56,7 +56,11 @@ export default function InvoicesPage() {
   const [clientId, setClientId] = useState("");
   const [serviceDescription, setServiceDescription] = useState("Monthly Social Media & Performance Retainer");
   const [subtotal, setSubtotal] = useState("50000");
-  const [dueDate, setDueDate] = useState("2026-10-31");
+  const [dueDate, setDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split("T")[0];
+  });
 
   // Edit Modal
   const [editModalOpen, setEditModalOpen] = useState(false);

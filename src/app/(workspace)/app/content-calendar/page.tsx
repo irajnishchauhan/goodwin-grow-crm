@@ -98,12 +98,12 @@ export default function ContentCalendarPage() {
   const [clientId, setClientId] = useState("");
   const [platform, setPlatform] = useState("INSTAGRAM");
   const [postType, setPostType] = useState("Carousel");
-  const [ownerName, setOwnerName] = useState("Kunal Sharma");
-  const [deadline, setDeadline] = useState("2026-10-24T18:00");
+  const [ownerName, setOwnerName] = useState("");
+  const [deadline, setDeadline] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 16));
   const [approvalStatus, setApprovalStatus] = useState("DRAFT");
-  const [scheduledDate, setScheduledDate] = useState("2026-10-25T11:00");
-  const [festivalOrEvent, setFestivalOrEvent] = useState("Diwali Festive Campaign");
-  const [mediaUrl, setMediaUrl] = useState("https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?w=800");
+  const [scheduledDate, setScheduledDate] = useState(() => new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 16));
+  const [festivalOrEvent, setFestivalOrEvent] = useState("");
+  const [mediaUrl, setMediaUrl] = useState("");
 
   // Edit Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -246,6 +246,43 @@ export default function ContentCalendarPage() {
       await fetch(`/api/agency/festivals/${w.id}`, { method: "DELETE" }).catch(() => {});
     }
     fetchFestivals();
+  }
+
+  async function handleSeedDefaultFestivals() {
+    try {
+      setFestivalsLoading(true);
+      const res = await fetch("/api/agency/festivals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "seed-defaults" }),
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setFestivals(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setFestivalsLoading(false);
+    }
+  }
+
+  async function handleClearAllFestivals() {
+    if (!confirm("Are you sure you want to delete all festivals from this marketing calendar?")) return;
+    try {
+      setFestivalsLoading(true);
+      setFestivals([]);
+      await fetch("/api/agency/festivals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear-all" }),
+      });
+    } catch (err) {
+      console.error(err);
+      fetchFestivals();
+    } finally {
+      setFestivalsLoading(false);
+    }
   }
 
   async function fetchClients() {
@@ -559,7 +596,7 @@ export default function ContentCalendarPage() {
               <button
                 type="button"
                 onClick={handleDeleteWrong3Dates}
-                className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 transition"
+                className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
                 title="Delete 3 incorrect dummy festival dates"
               >
                 <Trash2 className="w-3 h-3 text-rose-600" />
@@ -567,15 +604,37 @@ export default function ContentCalendarPage() {
               </button>
             )}
 
+            {festivals.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllFestivals}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 text-[11px] font-semibold transition cursor-pointer"
+                title="Delete all festivals from calendar"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Clear All</span>
+              </button>
+            )}
+
             {festivals.length > 4 && (
               <button
                 type="button"
                 onClick={() => setShowAllFestivals(!showAllFestivals)}
-                className="px-2.5 py-1 rounded-lg bg-white/80 hover:bg-white text-slate-700 border border-slate-200 text-[11px] font-semibold transition"
+                className="px-2.5 py-1 rounded-lg bg-white/80 hover:bg-white text-slate-700 border border-slate-200 text-[11px] font-semibold transition cursor-pointer"
               >
                 {showAllFestivals ? "Show Top 4" : `View All (${festivals.length})`}
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={handleSeedDefaultFestivals}
+              className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+              title="Load verified 2026-2027 Indian festival calendar"
+            >
+              <Sparkles className="w-3 h-3 text-emerald-600" />
+              <span>Standard Festive Dates</span>
+            </button>
 
             <button
               type="button"
@@ -589,7 +648,7 @@ export default function ContentCalendarPage() {
                 });
                 setFestivalModalOpen(true);
               }}
-              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition"
+              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition cursor-pointer"
             >
               <Plus className="w-3 h-3" />
               <span>Add Festival / Hook</span>
@@ -603,15 +662,30 @@ export default function ContentCalendarPage() {
             <span>Loading festival hooks...</span>
           </div>
         ) : festivals.length === 0 ? (
-          <div className="p-4 bg-white/80 rounded-xl border border-amber-100 text-center text-xs text-slate-600 space-y-2">
-            <p className="font-semibold">No festivals or campaign hooks currently scheduled.</p>
-            <button
-              type="button"
-              onClick={fetchFestivals}
-              className="text-xs font-bold text-amber-800 underline"
-            >
-              Reload festival hooks
-            </button>
+          <div className="p-6 bg-white/90 rounded-2xl border border-amber-200/60 text-center space-y-3">
+            <p className="text-xs font-semibold text-slate-700">No marketing festivals currently scheduled on calendar.</p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={handleSeedDefaultFestivals}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Load Verified 2026-2027 Festive Dates</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingFestival(null);
+                  setFestivalForm({ date: "", title: "", tag: "Festival", desc: "" });
+                  setFestivalModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Custom Festival</span>
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1087,7 +1161,7 @@ export default function ContentCalendarPage() {
                     type="text"
                     value={ownerName}
                     onChange={(e) => setOwnerName(e.target.value)}
-                    placeholder="e.g. Kunal Sharma"
+                    placeholder="e.g. Sameer Meena, Kunal Sen"
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>

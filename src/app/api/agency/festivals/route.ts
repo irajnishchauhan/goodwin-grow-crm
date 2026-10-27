@@ -61,10 +61,19 @@ export async function GET(req: Request) {
   }
 
   const tenantId = tenantCtx.tenant.id;
+  const url = new URL(req.url);
+  const shouldSeed = url.searchParams.get("seed") === "true";
 
   try {
-    // 1. Query marketing_festivals for this tenant
-    const rows: any[] = await prisma.$queryRawUnsafe(
+    // 1. Purge legacy incorrect festival dates (Oct 28, Oct 30, Nov 02)
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "marketing_festivals" 
+       WHERE "tenant_id" = $1 AND ("date" LIKE '%Oct 28%' OR "date" LIKE '%Oct 30%' OR "date" LIKE '%Nov 02%')`,
+      tenantId
+    ).catch(() => {});
+
+    // 2. Query marketing_festivals for this tenant
+    let rows: any[] = await prisma.$queryRawUnsafe(
       `SELECT "id", "date", "title", "tag", "desc", "created_at" as "createdAt", "updated_at" as "updatedAt"
        FROM "marketing_festivals"
        WHERE "tenant_id" = $1
@@ -72,35 +81,29 @@ export async function GET(req: Request) {
       tenantId
     );
 
-    // 2. If table is empty for this tenant, seed default accurate dates once
-    if (rows.length === 0) {
-      // Check if user has explicitly cleared all festivals (stored via flag or empty count check)
-      const isCleared = req.headers.get("x-festivals-cleared");
-      if (!isCleared) {
-        for (const item of initialDefaultFestivals) {
-          const id = crypto.randomUUID();
-          await prisma.$executeRawUnsafe(
-            `INSERT INTO "marketing_festivals" ("id", "tenant_id", "date", "title", "tag", "desc", "created_at", "updated_at")
-             VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
-            id,
-            tenantId,
-            item.date,
-            item.title,
-            item.tag,
-            item.desc
-          );
-        }
-
-        const seededRows: any[] = await prisma.$queryRawUnsafe(
-          `SELECT "id", "date", "title", "tag", "desc", "created_at" as "createdAt", "updated_at" as "updatedAt"
-           FROM "marketing_festivals"
-           WHERE "tenant_id" = $1
-           ORDER BY "created_at" ASC`,
-          tenantId
+    // 3. Only seed if explicitly requested via query param ?seed=true
+    if (rows.length === 0 && shouldSeed) {
+      for (const item of initialDefaultFestivals) {
+        const id = crypto.randomUUID();
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "marketing_festivals" ("id", "tenant_id", "date", "title", "tag", "desc", "created_at", "updated_at")
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+          id,
+          tenantId,
+          item.date,
+          item.title,
+          item.tag,
+          item.desc
         );
-
-        return NextResponse.json({ success: true, data: seededRows });
       }
+
+      rows = await prisma.$queryRawUnsafe(
+        `SELECT "id", "date", "title", "tag", "desc", "created_at" as "createdAt", "updated_at" as "updatedAt"
+         FROM "marketing_festivals"
+         WHERE "tenant_id" = $1
+         ORDER BY "created_at" ASC`,
+        tenantId
+      );
     }
 
     return NextResponse.json({ success: true, data: rows });
@@ -119,6 +122,70 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
+
+    // Action 1: Seed default standard festivals
+    if (body.action === "seed-defaults") {
+      // Clear legacy/incorrect ones first
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "marketing_festivals" WHERE "tenant_id" = $1`,
+        tenantId
+      ).catch(() => {});
+
+      for (const item of initialDefaultFestivals) {
+        const id = crypto.randomUUID();
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "marketing_festivals" ("id", "tenant_id", "date", "title", "tag", "desc", "created_at", "updated_at")
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+          id,
+          tenantId,
+          item.date,
+          item.title,
+          item.tag,
+          item.desc
+        );
+      }
+
+      const seededRows: any[] = await prisma.$queryRawUnsafe(
+        `SELECT "id", "date", "title", "tag", "desc", "created_at" as "createdAt", "updated_at" as "updatedAt"
+         FROM "marketing_festivals"
+         WHERE "tenant_id" = $1
+         ORDER BY "created_at" ASC`,
+        tenantId
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: "Standard 2026-2027 Indian marketing festival dates loaded successfully",
+        data: seededRows,
+      });
+    }
+
+    // Action 2: Clear all festivals
+    if (body.action === "clear-all") {
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "marketing_festivals" WHERE "tenant_id" = $1`,
+        tenantId
+      );
+      return NextResponse.json({
+        success: true,
+        message: "All festivals removed from calendar",
+        data: [],
+      });
+    }
+
+    // Action 3: Purge 3 wrong dates
+    if (body.action === "delete-wrong-dates") {
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "marketing_festivals" 
+         WHERE "tenant_id" = $1 AND ("date" LIKE '%Oct 28%' OR "date" LIKE '%Oct 30%' OR "date" LIKE '%Nov 02%')`,
+        tenantId
+      );
+      return NextResponse.json({
+        success: true,
+        message: "Removed incorrect dummy festival dates",
+      });
+    }
+
     const { date, title, tag = "Festival", desc = "" } = body;
 
     if (!date || !title) {
