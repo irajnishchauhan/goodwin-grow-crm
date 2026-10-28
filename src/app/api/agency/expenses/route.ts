@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
+import { getPackageByName, SERVICE_PACKAGES } from "@/lib/agency/packages";
 
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
@@ -33,13 +34,17 @@ export async function GET(req: Request) {
 
   const profitability = clients.map((c) => {
     const totalRevenue = c.invoices.reduce((acc, inv) => acc + Number(inv.subtotal), 0) || Number(c.monthlyRetainer);
-    const totalExpenses = c.expenses.reduce((acc, exp) => acc + Number(exp.amount), 0);
+    const recordedExpenses = c.expenses.reduce((acc, exp) => acc + Number(exp.amount), 0);
+    const pkgDef = getPackageByName(c.activePackage);
+    const estimatedCost = Number(c.estimatedDeliveryCost) || (pkgDef ? pkgDef.estimatedDeliveryCost : Math.round(Number(c.monthlyRetainer) * 0.3));
+    const totalExpenses = recordedExpenses > 0 ? recordedExpenses : estimatedCost;
     const netProfit = totalRevenue - totalExpenses;
     const grossMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
     return {
       clientId: c.id,
       clientName: c.name,
+      activePackage: c.activePackage || "Growth Retainer",
       monthlyRetainer: Number(c.monthlyRetainer),
       totalRevenue,
       totalExpenses,
@@ -48,11 +53,37 @@ export async function GET(req: Request) {
     };
   });
 
+  // Calculate package-wise profitability breakdown
+  const packageMap = new Map<string, { packageName: string; clientCount: number; totalRevenue: number; totalCost: number; netProfit: number; grossMargin: number }>();
+  profitability.forEach((p) => {
+    if (!packageMap.has(p.activePackage)) {
+      packageMap.set(p.activePackage, {
+        packageName: p.activePackage,
+        clientCount: 0,
+        totalRevenue: 0,
+        totalCost: 0,
+        netProfit: 0,
+        grossMargin: 0,
+      });
+    }
+    const pm = packageMap.get(p.activePackage)!;
+    pm.clientCount += 1;
+    pm.totalRevenue += p.totalRevenue;
+    pm.totalCost += p.totalExpenses;
+  });
+
+  const packageProfitability = Array.from(packageMap.values()).map((pm) => {
+    const net = pm.totalRevenue - pm.totalCost;
+    const margin = pm.totalRevenue > 0 ? Math.round((net / pm.totalRevenue) * 100) : 0;
+    return { ...pm, netProfit: net, grossMargin: margin };
+  }).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
   return NextResponse.json({
     success: true,
     data: {
       expenses,
       profitability,
+      packageProfitability,
     },
   });
 }

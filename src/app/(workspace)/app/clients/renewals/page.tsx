@@ -20,7 +20,11 @@ import {
   X,
   Sparkles,
   RefreshCw,
+  Layers,
+  Filter,
+  Check,
 } from "lucide-react";
+import { SERVICE_PACKAGES, getPackageByName } from "@/lib/agency/packages";
 
 interface ClientContract {
   id: string;
@@ -28,14 +32,20 @@ interface ClientContract {
   brandName?: string | null;
   activePackage?: string | null;
   monthlyRetainer: number;
+  contractStartDate?: string | null;
   contractRenewalDate?: string | null;
+  billingCycle?: string | null;
+  packageStatus?: string | null;
+  accountManagerName?: string | null;
   status: string;
+  invoices?: any[];
 }
 
 export default function ContractsRenewalsPage() {
   const [clients, setClients] = useState<ClientContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [urgencyFilter, setUrgencyFilter] = useState<"ALL" | "EXPIRING_30" | "NEXT_60" | "OVERDUE">("ALL");
   const [selectedClient, setSelectedClient] = useState<ClientContract | null>(null);
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -43,6 +53,7 @@ export default function ContractsRenewalsPage() {
   // Form State
   const [monthlyRetainer, setMonthlyRetainer] = useState("");
   const [activePackage, setActivePackage] = useState("");
+  const [billingCycle, setBillingCycle] = useState("MONTHLY");
   const [contractRenewalDate, setContractRenewalDate] = useState("");
   const [status, setStatus] = useState("ACTIVE");
 
@@ -71,7 +82,8 @@ export default function ContractsRenewalsPage() {
   function handleOpenRenew(c: ClientContract) {
     setSelectedClient(c);
     setMonthlyRetainer(String(c.monthlyRetainer || 0));
-    setActivePackage(c.activePackage || "Growth Retainer");
+    setActivePackage(c.activePackage || "Growth Retainer (Social + Local SEO)");
+    setBillingCycle(c.billingCycle || "MONTHLY");
     setContractRenewalDate(
       c.contractRenewalDate
         ? new Date(c.contractRenewalDate).toISOString().slice(0, 10)
@@ -99,6 +111,7 @@ export default function ContractsRenewalsPage() {
         body: JSON.stringify({
           monthlyRetainer: Number(monthlyRetainer) || 0,
           activePackage,
+          billingCycle,
           contractRenewalDate: contractRenewalDate ? new Date(contractRenewalDate).toISOString() : null,
           status,
         }),
@@ -124,13 +137,15 @@ export default function ContractsRenewalsPage() {
       return;
     }
 
-    const headers = ["Client Name", "Brand", "Package", "Monthly Retainer (INR)", "Annualized Value (ARR)", "Renewal Date", "Status"];
+    const headers = ["Client Name", "Brand", "Package", "Billing Cycle", "Monthly Retainer (INR)", "Annualized Value (ARR)", "Start Date", "Renewal Date", "Status"];
     const rows = clients.map((c) => [
       `"${c.name.replace(/"/g, '""')}"`,
       `"${(c.brandName || "").replace(/"/g, '""')}"`,
       `"${(c.activePackage || "Growth Retainer").replace(/"/g, '""')}"`,
+      `"${c.billingCycle || "MONTHLY"}"`,
       c.monthlyRetainer || 0,
       (c.monthlyRetainer || 0) * 12,
+      c.contractStartDate ? new Date(c.contractStartDate).toLocaleDateString("en-IN") : "Jan 2026",
       c.contractRenewalDate ? new Date(c.contractRenewalDate).toLocaleDateString("en-IN") : "Rolling Monthly",
       c.status || "ACTIVE",
     ]);
@@ -146,15 +161,49 @@ export default function ContractsRenewalsPage() {
   }
 
   // Calculate MRR and ARR totals
-  const totalMRR = clients.reduce((sum, c) => sum + (Number(c.monthlyRetainer) || 0), 0);
+  const totalMRR = clients.reduce((sum, c) => sum + (c.status === "ACTIVE" ? Number(c.monthlyRetainer) || 0 : 0), 0);
   const totalARR = totalMRR * 12;
 
+  // Renewals breakdown
+  const nowTime = Date.now();
+  const expiring30Count = clients.filter((c) => {
+    if (!c.contractRenewalDate) return false;
+    const diff = Math.ceil((new Date(c.contractRenewalDate).getTime() - nowTime) / (1000 * 60 * 60 * 24));
+    return diff >= 0 && diff <= 30;
+  }).length;
+
+  const overdueCount = clients.filter((c) => {
+    if (!c.contractRenewalDate) return false;
+    const diff = Math.ceil((new Date(c.contractRenewalDate).getTime() - nowTime) / (1000 * 60 * 60 * 24));
+    return diff < 0;
+  }).length;
+
+  // Filtered clients by search and urgency tab
   const filteredClients = clients.filter((c) => {
-    return (
+    const matchesSearch = (
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       (c.brandName && c.brandName.toLowerCase().includes(search.toLowerCase())) ||
-      (c.activePackage && c.activePackage.toLowerCase().includes(search.toLowerCase()))
+      (c.activePackage && c.activePackage.toLowerCase().includes(search.toLowerCase())) ||
+      (c.accountManagerName && c.accountManagerName.toLowerCase().includes(search.toLowerCase()))
     );
+
+    if (!matchesSearch) return false;
+
+    if (!c.contractRenewalDate) return urgencyFilter === "ALL";
+
+    const diffDays = Math.ceil((new Date(c.contractRenewalDate).getTime() - nowTime) / (1000 * 60 * 60 * 24));
+
+    if (urgencyFilter === "EXPIRING_30") {
+      return diffDays >= 0 && diffDays <= 30;
+    }
+    if (urgencyFilter === "NEXT_60") {
+      return diffDays >= 0 && diffDays <= 60;
+    }
+    if (urgencyFilter === "OVERDUE") {
+      return diffDays < 0;
+    }
+
+    return true;
   });
 
   return (
@@ -164,14 +213,14 @@ export default function ContractsRenewalsPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Contracts & Renewals
+              Client Contracts & Renewal Management
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
               Retention & LTV Engine
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Track annual agreement expiry dates, renewal probabilities, client retention, and retainer upsell opportunities.
+            Track contract start and end dates, billing cycles, upcoming renewal deadlines, and extend retainers seamlessly.
           </p>
         </div>
 
@@ -194,37 +243,74 @@ export default function ContractsRenewalsPage() {
       </div>
 
       {/* KPI Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
           <div className="text-[11px] font-bold text-slate-400 uppercase">Monthly Recurring (MRR)</div>
           <div className="text-xl font-black text-slate-900 mt-1">
             ₹{totalMRR.toLocaleString("en-IN")}
           </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">Active billing pipeline</div>
         </div>
+
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
           <div className="text-[11px] font-bold text-emerald-700 uppercase">Annualized Run Rate (ARR)</div>
           <div className="text-xl font-black text-emerald-700 mt-1">
             ₹{totalARR.toLocaleString("en-IN")}
           </div>
+          <div className="text-[10px] text-emerald-600 mt-0.5">₹{(totalARR / 100000).toFixed(1)}L annualized</div>
         </div>
+
         <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-          <div className="text-[11px] font-bold text-slate-400 uppercase">Active Retainers Tracked</div>
-          <div className="text-xl font-black text-slate-900 mt-1">
-            {clients.length} Accounts
+          <div className="text-[11px] font-bold text-amber-700 uppercase">Expiring in 30 Days</div>
+          <div className="text-xl font-black text-amber-700 mt-1">
+            {expiring30Count} Accounts
           </div>
+          <div className="text-[10px] text-amber-600 mt-0.5">Action required for renewal</div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <div className="text-[11px] font-bold text-rose-700 uppercase">Overdue Renewals</div>
+          <div className="text-xl font-black text-rose-700 mt-1">
+            {overdueCount} Accounts
+          </div>
+          <div className="text-[10px] text-rose-600 mt-0.5">Requires urgent contract extension</div>
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative w-full sm:w-80">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          placeholder="Search contracts by client or plan..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
-        />
+      {/* Search and Urgency Filter Tabs */}
+      <div className="bg-white p-3 rounded-2xl border border-slate-200/70 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search contracts by client, plan, or AM..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
+          <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          {[
+            { id: "ALL", label: `All (${clients.length})` },
+            { id: "EXPIRING_30", label: `Next 30 Days (${expiring30Count})` },
+            { id: "NEXT_60", label: "Next 60 Days" },
+            { id: "OVERDUE", label: `Overdue (${overdueCount})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setUrgencyFilter(tab.id as any)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+                urgencyFilter === tab.id
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -240,24 +326,16 @@ export default function ContractsRenewalsPage() {
           <h3 className="text-sm font-bold text-slate-900">No Client Contracts Found</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
             {search
-              ? "No contracts match your search term."
+              ? "No contracts match your search term or urgency filter."
               : "When you add clients and set their monthly retainer and contract renewal date in Client 360°, they will be tracked here."}
           </p>
-          <div className="mt-4">
-            <Link
-              href="/app/clients"
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition inline-flex items-center gap-2"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Client Contract</span>
-            </Link>
-          </div>
         </div>
       ) : (
         /* Contract Cards */
         <div className="grid grid-cols-1 gap-4">
           {filteredClients.map((item) => {
             const renewalDate = item.contractRenewalDate ? new Date(item.contractRenewalDate) : null;
+            const startDate = item.contractStartDate ? new Date(item.contractStartDate) : null;
             const daysLeft = renewalDate
               ? Math.ceil((renewalDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
               : null;
@@ -273,7 +351,9 @@ export default function ContractsRenewalsPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-900 text-sm">{item.name}</span>
-                      <span className="text-xs text-slate-400">({item.brandName || "Account"})</span>
+                      {item.brandName && (
+                        <span className="text-xs text-slate-400">({item.brandName})</span>
+                      )}
                       {isExpiringSoon && (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
                           <AlertTriangle className="w-3 h-3" />
@@ -286,9 +366,22 @@ export default function ContractsRenewalsPage() {
                           <span>Expired {Math.abs(daysLeft!)} days ago</span>
                         </span>
                       )}
+                      {!isExpiringSoon && !isOverdue && daysLeft !== null && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          {daysLeft} days remaining
+                        </span>
+                      )}
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {item.activePackage || "Custom Agency Retainer"}
+                    <div className="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                      <span className="font-medium text-emerald-700">{item.activePackage || "Growth Retainer"}</span>
+                      <span>•</span>
+                      <span>Billing: <strong className="text-slate-700">{item.billingCycle || "MONTHLY"}</strong></span>
+                      {item.accountManagerName && (
+                        <>
+                          <span>•</span>
+                          <span>AM: <strong className="text-slate-700">{item.accountManagerName}</strong></span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -301,11 +394,11 @@ export default function ContractsRenewalsPage() {
                     </div>
 
                     <div>
-                      <div className="text-[11px] text-slate-400 uppercase font-semibold">Contract Renewal</div>
+                      <div className="text-[11px] text-slate-400 uppercase font-semibold">Renewal Date</div>
                       <div className="text-sm font-bold text-emerald-700 mt-0.5 flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5" />
                         <span>
-                          {renewalDate ? renewalDate.toLocaleDateString("en-IN") : "Rolling Monthly"}
+                          {renewalDate ? renewalDate.toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }) : "Rolling Monthly"}
                         </span>
                       </div>
                     </div>
@@ -313,7 +406,7 @@ export default function ContractsRenewalsPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleOpenRenew(item)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/60 hover:bg-emerald-100 text-xs font-semibold transition"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/60 hover:bg-emerald-100 text-xs font-semibold transition cursor-pointer"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
                         <span>Extend / Renew</span>
@@ -346,7 +439,7 @@ export default function ContractsRenewalsPage() {
               </h2>
               <button
                 onClick={() => setShowRenewModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -369,30 +462,60 @@ export default function ContractsRenewalsPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Active Package / Service Scope
+                  Service Package Plan
                 </label>
                 <select
                   value={activePackage}
-                  onChange={(e) => setActivePackage(e.target.value)}
+                  onChange={(e) => {
+                    setActivePackage(e.target.value);
+                    const pkg = getPackageByName(e.target.value);
+                    if (pkg) setMonthlyRetainer(String(pkg.price));
+                  }}
                   className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 >
-                  <option value="Growth Retainer">Growth Retainer (Social + Ads + SEO)</option>
-                  <option value="Scale Omnichannel">Scale Omnichannel (Performance + Creatives)</option>
-                  <option value="Enterprise Creative Pod">Enterprise Creative Pod (Dedicated Lead)</option>
-                  <option value="Paid Media Accelerator">Paid Media Accelerator (Meta + Google)</option>
-                  <option value="Custom Agreement">Custom Bespoke Retainer</option>
+                  <optgroup label="Standardized Core Tiers">
+                    {SERVICE_PACKAGES.filter((p) => p.category === "CORE_RETAINER").map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name} (₹{p.price.toLocaleString("en-IN")})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Specialized Retainers">
+                    {SERVICE_PACKAGES.filter((p) => p.category !== "CORE_RETAINER").map((p) => (
+                      <option key={p.id} value={p.name}>
+                        {p.name} (₹{p.price.toLocaleString("en-IN")})
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Next Contract Renewal Date
+                  Billing Frequency
+                </label>
+                <select
+                  value={billingCycle}
+                  onChange={(e) => setBillingCycle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                >
+                  <option value="MONTHLY">Monthly Advance</option>
+                  <option value="QUARTERLY">Quarterly</option>
+                  <option value="SEMI_ANNUAL">Semi-Annual</option>
+                  <option value="ANNUAL">Annual Contract</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Next Contract Renewal Date *
                 </label>
                 <input
                   type="date"
+                  required
                   value={contractRenewalDate}
                   onChange={(e) => setContractRenewalDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-semibold"
                 />
                 {/* Quick Date Presets */}
                 <div className="flex items-center gap-1.5 mt-2">
@@ -400,21 +523,21 @@ export default function ContractsRenewalsPage() {
                   <button
                     type="button"
                     onClick={() => addMonthsToDate(3)}
-                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold transition"
+                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold transition cursor-pointer"
                   >
                     +3 Months
                   </button>
                   <button
                     type="button"
                     onClick={() => addMonthsToDate(6)}
-                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold transition"
+                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold transition cursor-pointer"
                   >
                     +6 Months
                   </button>
                   <button
                     type="button"
                     onClick={() => addMonthsToDate(12)}
-                    className="px-2 py-0.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-semibold transition"
+                    className="px-2 py-0.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-semibold transition cursor-pointer"
                   >
                     +1 Year
                   </button>
@@ -430,10 +553,10 @@ export default function ContractsRenewalsPage() {
                   onChange={(e) => setStatus(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold"
                 >
-                  <option value="ACTIVE">ACTIVE (Good Standing)</option>
-                  <option value="RENEWED">RENEWED (Extension Locked)</option>
-                  <option value="UNDER_REVIEW">UNDER REVIEW (Negotiation)</option>
+                  <option value="ACTIVE">ACTIVE (In Good Standing)</option>
+                  <option value="ONBOARDING">ONBOARDING</option>
                   <option value="PAUSED">PAUSED</option>
+                  <option value="CHURNED">CHURNED</option>
                 </select>
               </div>
 
@@ -441,14 +564,14 @@ export default function ContractsRenewalsPage() {
                 <button
                   type="button"
                   onClick={() => setShowRenewModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5"
+                  className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   <span>Save Extension</span>
@@ -461,4 +584,3 @@ export default function ContractsRenewalsPage() {
     </div>
   );
 }
-

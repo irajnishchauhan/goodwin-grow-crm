@@ -23,6 +23,17 @@ export async function GET(
       seoTrackers: { orderBy: { currentRank: "asc" } },
       invoices: { orderBy: { issueDate: "desc" } },
       expenses: { orderBy: { date: "desc" } },
+      _count: {
+        select: {
+          notes: true,
+          projects: true,
+          tasks: true,
+          contentPosts: true,
+          creativeAssets: true,
+          adCampaigns: true,
+          invoices: true,
+        },
+      },
     },
   });
 
@@ -38,7 +49,38 @@ export async function GET(
     );
   }
 
-  return NextResponse.json({ success: true, data: client });
+  // Check confidential access permission for notes & records
+  const isSuperAdmin = Boolean(
+    tenantCtx.isPlatformAdmin ||
+    tenantCtx.membership.isOwner ||
+    tenantCtx.primaryRole === "Super Admin" ||
+    tenantCtx.roles.includes("Agency Admin") ||
+    tenantCtx.roles.includes("Company Admin") ||
+    tenantCtx.roles.includes("Company Owner") ||
+    tenantCtx.roles.includes("Tenant Admin")
+  );
+
+  const userNameLower = tenantCtx.user.fullName?.toLowerCase().trim() || "";
+  const clientManagerNameLower = client.accountManagerName?.toLowerCase().trim() || "";
+  const isAssignedAdmin = Boolean(
+    (client.accountManagerId && client.accountManagerId === tenantCtx.user.id) ||
+    (clientManagerNameLower && userNameLower && (
+      userNameLower.includes(clientManagerNameLower) ||
+      clientManagerNameLower.includes(userNameLower)
+    ))
+  );
+
+  return NextResponse.json({
+    success: true,
+    data: {
+      ...client,
+      confidentialAccess: {
+        canAccessNotes: isSuperAdmin || isAssignedAdmin,
+        isSuperAdmin,
+        isAssignedAdmin,
+      },
+    },
+  });
 }
 
 export async function PUT(
@@ -86,11 +128,19 @@ export async function PUT(
         postsPlanned: body.postsPlanned !== undefined ? Number(body.postsPlanned) : existing.postsPlanned,
         postsCompleted: body.postsCompleted !== undefined ? Number(body.postsCompleted) : existing.postsCompleted,
         accountManagerName: body.accountManagerName ?? existing.accountManagerName,
+        accountManagerId: body.accountManagerId !== undefined ? body.accountManagerId : existing.accountManagerId,
         leadDesignerName: body.leadDesignerName ?? existing.leadDesignerName,
         contentWriterName: body.contentWriterName ?? existing.contentWriterName,
         mediaBuyerName: body.mediaBuyerName ?? existing.mediaBuyerName,
         brandGuidelines: body.brandGuidelines ?? existing.brandGuidelines,
+        contractStartDate: body.contractStartDate ? new Date(body.contractStartDate) : existing.contractStartDate,
         contractRenewalDate: body.contractRenewalDate ? new Date(body.contractRenewalDate) : existing.contractRenewalDate,
+        contractEndDate: body.contractEndDate ? new Date(body.contractEndDate) : existing.contractEndDate,
+        billingCycle: body.billingCycle ?? existing.billingCycle,
+        packageStatus: body.packageStatus ?? existing.packageStatus,
+        addOnServices: body.addOnServices !== undefined ? (typeof body.addOnServices === "string" ? JSON.parse(body.addOnServices) : body.addOnServices) : existing.addOnServices,
+        customPricing: body.customPricing !== undefined ? Boolean(body.customPricing) : existing.customPricing,
+        estimatedDeliveryCost: body.estimatedDeliveryCost !== undefined ? Number(body.estimatedDeliveryCost) : existing.estimatedDeliveryCost,
       },
     });
 
@@ -142,6 +192,7 @@ export async function DELETE(
         await prisma.creativeAsset.deleteMany({ where: { id: { in: assetIds } } }).catch(() => {});
       }
 
+      await prisma.agencyClientNote.deleteMany({ where: { clientId: id } }).catch(() => {});
       await prisma.contentPost.deleteMany({ where: { clientId: id } }).catch(() => {});
       await prisma.adCampaign.deleteMany({ where: { clientId: id } }).catch(() => {});
       await prisma.seoTracker.deleteMany({ where: { clientId: id } }).catch(() => {});

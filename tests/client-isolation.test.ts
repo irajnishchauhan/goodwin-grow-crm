@@ -41,7 +41,6 @@ describe("P0 Client Isolation & Role Boundaries Verification", () => {
           tenantId,
           name: "Account Manager",
           isSystem: true,
-          permissions: ["creatives:review_internal", "leads:write", "tasks:write"],
         },
       });
     }
@@ -53,7 +52,6 @@ describe("P0 Client Isolation & Role Boundaries Verification", () => {
           tenantId,
           name: "Designer",
           isSystem: true,
-          permissions: ["creatives:version", "creatives:read", "tasks:read"],
         },
       });
     }

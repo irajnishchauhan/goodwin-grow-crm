@@ -104,7 +104,37 @@ export async function ensureDatabaseSchema() {
       "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );`,
 
-    // 10. Performance Indexes
+    // 10. Agency Clients Contract & Package Enhancements
+    `ALTER TABLE "agency_clients" ADD COLUMN IF NOT EXISTS "billing_cycle" TEXT DEFAULT 'MONTHLY';`,
+    `ALTER TABLE "agency_clients" ADD COLUMN IF NOT EXISTS "package_status" TEXT DEFAULT 'ACTIVE';`,
+    `ALTER TABLE "agency_clients" ADD COLUMN IF NOT EXISTS "contract_end_date" TIMESTAMP(3);`,
+    `ALTER TABLE "agency_clients" ADD COLUMN IF NOT EXISTS "add_on_services" JSONB DEFAULT '[]'::jsonb;`,
+    `ALTER TABLE "agency_clients" ADD COLUMN IF NOT EXISTS "custom_pricing" BOOLEAN DEFAULT false;`,
+    `ALTER TABLE "agency_clients" ADD COLUMN IF NOT EXISTS "estimated_delivery_cost" DECIMAL(14, 2) DEFAULT 0.00;`,
+    `ALTER TABLE "agency_clients" ADD COLUMN IF NOT EXISTS "account_manager_id" TEXT;`,
+
+    // 11. Agency Client Notes (Confidential Records)
+    `DO $$ BEGIN
+      CREATE TYPE "ClientNoteCategory" AS ENUM ('REQUIREMENT', 'MEETING_NOTE', 'STRATEGY', 'FOLLOW_UP', 'IMPORTANT_INFO');
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$;`,
+    `CREATE TABLE IF NOT EXISTS "agency_client_notes" (
+      "id" TEXT PRIMARY KEY,
+      "tenant_id" TEXT NOT NULL,
+      "client_id" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "content" TEXT NOT NULL,
+      "category" "ClientNoteCategory" NOT NULL DEFAULT 'IMPORTANT_INFO',
+      "is_confidential" BOOLEAN NOT NULL DEFAULT true,
+      "created_by_id" TEXT NOT NULL,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );`,
+    `CREATE INDEX IF NOT EXISTS "agency_client_notes_tenant_client_idx" ON "agency_client_notes"("tenant_id", "client_id");`,
+    `CREATE INDEX IF NOT EXISTS "agency_client_notes_tenant_category_idx" ON "agency_client_notes"("tenant_id", "category");`,
+
+    // 12. Performance Indexes
     `CREATE INDEX IF NOT EXISTS "tenant_memberships_agency_client_idx" ON "tenant_memberships"("tenant_id", "agency_client_id");`,
     `CREATE INDEX IF NOT EXISTS "leads_client_id_idx" ON "leads"("tenant_id", "client_id");`,
     `CREATE INDEX IF NOT EXISTS "tasks_client_id_idx" ON "tasks"("tenant_id", "client_id");`,

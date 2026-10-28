@@ -22,8 +22,15 @@ import {
   Layers,
   ChevronRight,
   Flame,
+  Lock,
+  AlertTriangle,
+  ShieldCheck,
+  CreditCard,
+  Receipt,
+  Percent,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { SERVICE_PACKAGES, getPackageByName } from "@/lib/agency/packages";
 import { BatteriesDashboardView } from "@/components/batteries/BatteriesDashboardView";
 
 export default async function DashboardPage() {
@@ -115,14 +122,57 @@ export default async function DashboardPage() {
           },
         },
       }),
+      prisma.agencyClientNote.count({ where: { tenantId } }),
     ]);
 
-    const totalRetainerMRR = clients.reduce((acc, c) => acc + Number(c.monthlyRetainer), 0);
+    const activeClients = clients.filter((c) => c.status === "ACTIVE");
+    const onboardingClients = clients.filter((c) => c.status === "ONBOARDING");
+    const totalRetainerMRR = activeClients.reduce((acc, c) => acc + Number(c.monthlyRetainer), 0);
+    const totalARR = totalRetainerMRR * 12;
     const totalPlanned = clients.reduce((acc, c) => acc + (c.postsPlanned || 0), 0);
     const totalCompleted = clients.reduce((acc, c) => acc + (c.postsCompleted || 0), 0);
     const completionRate = totalPlanned > 0 ? Math.round((totalCompleted / totalPlanned) * 100) : 72;
     const totalAdSpend = adCampaigns.reduce((acc, ad) => acc + Number(ad.spent), 0);
     const totalLeads = adCampaigns.reduce((acc, ad) => acc + ad.leadsCount, 0);
+
+    // Contract renewals
+    const in30Days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const upcomingRenewals = clients.filter((c) => {
+      if (!c.contractRenewalDate) return false;
+      const d = new Date(c.contractRenewalDate);
+      return d >= now && d <= in30Days;
+    });
+    const overdueRenewals = clients.filter((c) => {
+      if (!c.contractRenewalDate) return false;
+      return new Date(c.contractRenewalDate) < now;
+    });
+
+    // Invoices & Overdue Payment Tracking
+    const overdueInvoices = invoices.filter(
+      (inv) => inv.status === "OVERDUE" || (inv.status !== "PAID" && new Date(inv.dueDate) < now)
+    );
+    const totalOverdueAmount = overdueInvoices.reduce((acc, inv) => acc + Number(inv.totalAmount || 0), 0);
+
+    // Package-wise Revenue Breakdown
+    const packageMap = new Map<string, { name: string; clientCount: number; mrr: number; margin: number }>();
+    clients.forEach((c) => {
+      const pkg = c.activePackage || "Growth Retainer (Social + Local SEO)";
+      if (!packageMap.has(pkg)) {
+        const pkgDef = getPackageByName(pkg);
+        packageMap.set(pkg, {
+          name: pkg,
+          clientCount: 0,
+          mrr: 0,
+          margin: pkgDef ? pkgDef.targetGrossMarginPercent : 70.0,
+        });
+      }
+      const p = packageMap.get(pkg)!;
+      p.clientCount += 1;
+      if (c.status === "ACTIVE") {
+        p.mrr += Number(c.monthlyRetainer || 0);
+      }
+    });
+    const packageBreakdown = Array.from(packageMap.values()).sort((a, b) => b.mrr - a.mrr);
 
     return (
       <div className="space-y-6">
@@ -167,43 +217,43 @@ export default async function DashboardPage() {
               ₹{(totalRetainerMRR / 100000).toFixed(2)} Lakhs
             </div>
             <div className="text-[11px] text-emerald-600 font-medium mt-0.5">
-              {clients.length} active marketing clients
+              Annualized ARR: ₹{(totalARR / 100000).toFixed(1)} Lakhs
             </div>
           </div>
 
           <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Monthly Deliverables Completed
+              Active Retainers
             </div>
             <div className="text-2xl font-black text-emerald-700 mt-1">
-              {completionRate}% Done
+              {activeClients.length} Accounts
             </div>
             <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-              {totalCompleted} completed / {totalPlanned} planned
+              {onboardingClients.length} onboarding • {clients.length} total clients
             </div>
           </div>
 
           <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Pending Approvals
+              Upcoming Renewals (30d)
             </div>
             <div className="text-2xl font-black text-amber-600 mt-1">
-              {pendingApprovals.length} Assets
+              {upcomingRenewals.length + overdueRenewals.length} Contracts
             </div>
             <div className="text-[11px] text-amber-700 font-medium mt-0.5">
-              Awaiting internal or client review
+              {upcomingRenewals.length} next 30 days • {overdueRenewals.length} overdue
             </div>
           </div>
 
           <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Overdue Follow-ups
+              Overdue Receivables
             </div>
             <div className="text-2xl font-black text-rose-600 mt-1">
-              {overdueFollowUps.length} Leads
+              ₹{totalOverdueAmount > 0 ? (totalOverdueAmount / 100000).toFixed(2) + " Lakhs" : "0"}
             </div>
             <div className="text-[11px] text-rose-600 font-medium mt-0.5">
-              Follow-up scheduled time passed
+              {overdueInvoices.length} invoices awaiting payment
             </div>
           </div>
         </div>
@@ -273,6 +323,129 @@ export default async function DashboardPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        {/* 2. Management Analytics Widgets: Package Performance & Upcoming Renewals / Collections */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Package Performance & Revenue Breakdown */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-emerald-600" />
+                <span>Package-Wise Revenue & Performance</span>
+              </h3>
+              <Link href="/app/clients/retainers" className="text-xs font-semibold text-emerald-700 hover:text-emerald-800">
+                All 10 Packages →
+              </Link>
+            </div>
+
+            <div className="space-y-3">
+              {packageBreakdown.slice(0, 4).map((pkg, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 truncate">
+                      {pkg.name}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      {pkg.clientCount} {pkg.clientCount === 1 ? "Client" : "Clients"} Enrolled • Target Margin: <strong className="text-emerald-700">{pkg.margin}%</strong>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-black text-slate-900">
+                      ₹{pkg.mrr.toLocaleString("en-IN")}
+                      <span className="text-[10px] text-slate-400 font-normal"> /mo</span>
+                    </div>
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                      Active MRR
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Upcoming Contract Renewals & Collections Watchlist */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-500" />
+                <span>Upcoming Renewals & Overdue Invoices</span>
+              </h3>
+              <Link href="/app/clients/renewals" className="text-xs font-semibold text-amber-700 hover:text-amber-800">
+                Contracts Register →
+              </Link>
+            </div>
+
+            <div className="space-y-3">
+              {/* Overdue Invoices Alert */}
+              {overdueInvoices.length > 0 && (
+                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-rose-600" />
+                    <div>
+                      <span className="text-xs font-bold text-rose-900">Overdue Client Invoices</span>
+                      <p className="text-[10px] text-rose-700">
+                        {overdueInvoices.length} invoice(s) totaling ₹{totalOverdueAmount.toLocaleString("en-IN")} overdue for payment
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/app/payments"
+                    className="px-2.5 py-1 rounded-lg bg-rose-600 text-white text-[10px] font-bold hover:bg-rose-700 transition"
+                  >
+                    Collect
+                  </Link>
+                </div>
+              )}
+
+              {/* Upcoming Renewals List */}
+              {upcomingRenewals.length === 0 && overdueRenewals.length === 0 ? (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  No contracts expiring in the next 30 days.
+                </div>
+              ) : (
+                [...overdueRenewals, ...upcomingRenewals].slice(0, 3).map((c) => {
+                  const renewalDate = new Date(c.contractRenewalDate!);
+                  const diffDays = Math.ceil((renewalDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  const isPast = diffDays < 0;
+
+                  return (
+                    <div
+                      key={c.id}
+                      className={`p-3 rounded-2xl border flex items-center justify-between ${
+                        isPast ? "bg-rose-50/50 border-rose-100" : "bg-amber-50/50 border-amber-100"
+                      }`}
+                    >
+                      <div>
+                        <div className="text-xs font-bold text-slate-900">{c.name}</div>
+                        <div className="text-[10px] text-slate-500">
+                          ₹{Number(c.monthlyRetainer).toLocaleString("en-IN")}/mo • AM: {c.accountManagerName || "Unassigned"}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isPast ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800"
+                        }`}>
+                          {isPast ? `Expired ${Math.abs(diffDays)}d ago` : `Renews in ${diffDays}d`}
+                        </span>
+                        <Link
+                          href="/app/clients/renewals"
+                          className="block text-[10px] font-bold text-slate-700 hover:text-emerald-700 mt-1"
+                        >
+                          Renew Agreement →
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
 

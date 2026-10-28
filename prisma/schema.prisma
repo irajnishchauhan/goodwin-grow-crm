@@ -59,6 +59,7 @@ model Tenant {
   agencyInvoices       AgencyInvoice[]
   agencyExpenses       AgencyExpense[]
   marketingFestivals   MarketingFestival[]
+  agencyClientNotes    AgencyClientNote[]
 
   // Battery Manufacturing & Distribution Relations
   batteryPartners       BatteryPartner[]
@@ -143,6 +144,7 @@ model User {
   performedActivities Activity[]            @relation("PerformedActivities")
   createdQuotations   Quotation[]           @relation("CreatedQuotations")
   createdNotes        Note[]                @relation("CreatedNotes")
+  createdClientNotes  AgencyClientNote[]    @relation("CreatedClientNotes")
   auditLogs           AuditLog[]
   stageChanges        DealStageHistory[]    @relation("StageChangedBy")
 
@@ -789,12 +791,19 @@ model AgencyClient {
   contentWriterName   String?      @map("content_writer_name")
   mediaBuyerName      String?      @map("media_buyer_name")
   brandGuidelines     String?      @map("brand_guidelines")
-  contractStartDate   DateTime?    @map("contract_start_date")
-  contractRenewalDate DateTime?    @map("contract_renewal_date")
-  createdAt           DateTime     @default(now()) @map("created_at")
-  updatedAt           DateTime     @updatedAt @map("updated_at")
+  contractStartDate    DateTime?          @map("contract_start_date")
+  contractRenewalDate  DateTime?          @map("contract_renewal_date")
+  contractEndDate      DateTime?          @map("contract_end_date")
+  billingCycle         String             @default("MONTHLY") @map("billing_cycle")
+  packageStatus        String             @default("ACTIVE") @map("package_status")
+  addOnServices        Json               @default("[]") @map("add_on_services")
+  customPricing        Boolean            @default(false) @map("custom_pricing")
+  estimatedDeliveryCost Decimal           @default(0.00) @map("estimated_delivery_cost") @db.Decimal(14, 2)
+  accountManagerId     String?            @map("account_manager_id")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   memberships    TenantMembership[]
   leads          Lead[]
   crmTasks       Task[]
@@ -806,9 +815,39 @@ model AgencyClient {
   seoTrackers    SeoTracker[]
   invoices       AgencyInvoice[]
   expenses       AgencyExpense[]
+  notes          AgencyClientNote[]
 
   @@index([tenantId, status])
   @@map("agency_clients")
+}
+
+enum ClientNoteCategory {
+  REQUIREMENT
+  MEETING_NOTE
+  STRATEGY
+  FOLLOW_UP
+  IMPORTANT_INFO
+}
+
+model AgencyClientNote {
+  id             String             @id @default(uuid())
+  tenantId       String             @map("tenant_id")
+  clientId       String             @map("client_id")
+  title          String
+  content        String             @db.Text
+  category       ClientNoteCategory @default(IMPORTANT_INFO)
+  isConfidential Boolean            @default(true) @map("is_confidential")
+  createdById    String             @map("created_by_id")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client    AgencyClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User         @relation("CreatedClientNotes", fields: [createdById], references: [id])
+
+  @@index([tenantId, clientId])
+  @@index([tenantId, category])
+  @@map("agency_client_notes")
 }
 
 enum ProjectStatus {
