@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
+import { verifyClientConfidentialAccess } from "@/lib/agency/auth-guard";
 
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
@@ -57,7 +58,20 @@ export async function GET(req: Request) {
     },
   });
 
-  return NextResponse.json({ success: true, data: clients });
+  const clientsWithAccess = clients.map((c) => {
+    const access = verifyClientConfidentialAccess(tenantCtx, c);
+    return {
+      ...c,
+      confidentialAccess: {
+        canAccessNotes: access.canAccessConfidentialNotes,
+        isSuperAdmin: access.isSuperAdmin,
+        isAssignedAdmin: access.isAssignedAdmin,
+        roleDescription: access.roleDescription,
+      },
+    };
+  });
+
+  return NextResponse.json({ success: true, data: clientsWithAccess });
 }
 
 export async function POST(req: Request) {

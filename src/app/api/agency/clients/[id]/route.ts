@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
+import { verifyClientConfidentialAccess } from "@/lib/agency/auth-guard";
 
 export async function GET(
   req: Request,
@@ -51,34 +52,17 @@ export async function GET(
   }
 
   // Check confidential access permission for notes & records
-  const isSuperAdmin = Boolean(
-    tenantCtx.isPlatformAdmin ||
-    tenantCtx.membership.isOwner ||
-    tenantCtx.primaryRole === "Super Admin" ||
-    tenantCtx.roles.includes("Agency Admin") ||
-    tenantCtx.roles.includes("Company Admin") ||
-    tenantCtx.roles.includes("Company Owner") ||
-    tenantCtx.roles.includes("Tenant Admin")
-  );
-
-  const userNameLower = tenantCtx.user.fullName?.toLowerCase().trim() || "";
-  const clientManagerNameLower = client.accountManagerName?.toLowerCase().trim() || "";
-  const isAssignedAdmin = Boolean(
-    (client.accountManagerId && client.accountManagerId === tenantCtx.user.id) ||
-    (clientManagerNameLower && userNameLower && (
-      userNameLower.includes(clientManagerNameLower) ||
-      clientManagerNameLower.includes(userNameLower)
-    ))
-  );
+  const access = verifyClientConfidentialAccess(tenantCtx, client);
 
   return NextResponse.json({
     success: true,
     data: {
       ...client,
       confidentialAccess: {
-        canAccessNotes: isSuperAdmin || isAssignedAdmin,
-        isSuperAdmin,
-        isAssignedAdmin,
+        canAccessNotes: access.canAccessConfidentialNotes,
+        isSuperAdmin: access.isSuperAdmin,
+        isAssignedAdmin: access.isAssignedAdmin,
+        roleDescription: access.roleDescription,
       },
     },
   });
