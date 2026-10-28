@@ -326,13 +326,22 @@ export default function ClientOnboardingPage() {
                   <span className="text-slate-500">
                     Lead Pod Manager: <strong className="text-slate-700">{c.accountManagerName || "Unassigned"}</strong>
                   </span>
-                  <Link
-                    href={`/app/clients`}
-                    className="font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
-                  >
-                    <span>View Client Workspace</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/app/clients`}
+                      className="font-semibold text-amber-700 hover:text-amber-800 flex items-center gap-1"
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                      <span>Logins Vault</span>
+                    </Link>
+                    <Link
+                      href={`/app/clients`}
+                      className="font-semibold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+                    >
+                      <span>Client 360°</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
                 </div>
               </div>
             );

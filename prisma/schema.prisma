@@ -60,6 +60,7 @@ model Tenant {
   agencyExpenses       AgencyExpense[]
   marketingFestivals   MarketingFestival[]
   agencyClientNotes    AgencyClientNote[]
+  agencyClientCredentials AgencyClientCredential[]
 
   // Battery Manufacturing & Distribution Relations
   batteryPartners       BatteryPartner[]
@@ -145,6 +146,7 @@ model User {
   createdQuotations   Quotation[]           @relation("CreatedQuotations")
   createdNotes        Note[]                @relation("CreatedNotes")
   createdClientNotes  AgencyClientNote[]    @relation("CreatedClientNotes")
+  createdClientCredentials AgencyClientCredential[] @relation("CreatedClientCredentials")
   auditLogs           AuditLog[]
   stageChanges        DealStageHistory[]    @relation("StageChangedBy")
 
@@ -816,6 +818,7 @@ model AgencyClient {
   invoices       AgencyInvoice[]
   expenses       AgencyExpense[]
   notes          AgencyClientNote[]
+  credentials    AgencyClientCredential[]
 
   @@index([tenantId, status])
   @@map("agency_clients")
@@ -848,6 +851,31 @@ model AgencyClientNote {
   @@index([tenantId, clientId])
   @@index([tenantId, category])
   @@map("agency_client_notes")
+}
+
+model AgencyClientCredential {
+  id                 String   @id @default(uuid())
+  tenantId           String   @map("tenant_id")
+  clientId           String   @map("client_id")
+  platform           String   // e.g. "Meta Business Suite", "Google Ads", "Shopify", "WordPress", "Instagram", "cPanel/Hosting", "Other"
+  accountIdentifier  String   @map("account_identifier") // username, email, ad account ID
+  encryptedPassword  String?  @map("encrypted_password") @db.Text
+  loginUrl           String?  @map("login_url")
+  recoveryDetails    String?  @map("recovery_details") @db.Text // 2FA notes, recovery email, phone
+  accessLevel        String   @default("ADMIN") @map("access_level") // ADMIN, PARTNER, EDITOR, VIEWER
+  notes              String?  @db.Text
+  isVerified         Boolean  @default(true) @map("is_verified")
+  createdById        String?  @map("created_by_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client    AgencyClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("CreatedClientCredentials", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, clientId])
+  @@index([tenantId, platform])
+  @@map("agency_client_credentials")
 }
 
 enum ProjectStatus {
@@ -1117,21 +1145,23 @@ enum InvoiceStatus {
 }
 
 model AgencyInvoice {
-  id            String        @id @default(uuid())
-  tenantId      String        @map("tenant_id")
-  clientId      String?       @map("client_id")
-  invoiceNumber String        @map("invoice_number")
-  issueDate     DateTime      @default(now()) @map("issue_date")
-  dueDate       DateTime      @map("due_date")
-  subtotal      Decimal       @default(0.00) @db.Decimal(14, 2)
-  taxAmount     Decimal       @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
-  totalAmount   Decimal       @default(0.00) @map("total_amount") @db.Decimal(14, 2)
-  status        InvoiceStatus @default(DRAFT)
-  items         Json          @default("[]")
-  paymentMethod String?       @map("payment_method")
-  paidAt        DateTime?     @map("paid_at")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
+  id                   String        @id @default(uuid())
+  tenantId             String        @map("tenant_id")
+  clientId             String?       @map("client_id")
+  clientName           String?       @map("client_name")
+  clientBillingDetails Json?         @map("client_billing_details")
+  invoiceNumber        String        @map("invoice_number")
+  issueDate            DateTime      @default(now()) @map("issue_date")
+  dueDate              DateTime      @map("due_date")
+  subtotal             Decimal       @default(0.00) @db.Decimal(14, 2)
+  taxAmount            Decimal       @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
+  totalAmount          Decimal       @default(0.00) @map("total_amount") @db.Decimal(14, 2)
+  status               InvoiceStatus @default(DRAFT)
+  items                Json          @default("[]")
+  paymentMethod        String?       @map("payment_method")
+  paidAt               DateTime?     @map("paid_at")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
 
   tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   client AgencyClient? @relation(fields: [clientId], references: [id], onDelete: SetNull)

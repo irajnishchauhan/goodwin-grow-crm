@@ -63,10 +63,73 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { clientId, subtotal, taxAmount, totalAmount, dueDate, items } = body;
+    const {
+      clientId,
+      isNewClient,
+      newClientName,
+      newClientBrand,
+      newClientEmail,
+      newClientPhone,
+      newClientGstin,
+      autoEnrollClient,
+      subtotal,
+      taxAmount,
+      totalAmount,
+      dueDate,
+      items,
+      paymentMethod,
+    } = body;
 
-    if (!clientId) {
-      return NextResponse.json({ success: false, error: "Client is required" }, { status: 400 });
+    let targetClientId: string | null = clientId && clientId !== "NEW" ? clientId : null;
+    let targetClientName: string | null = null;
+    let billingDetails: any = null;
+
+    if (isNewClient || clientId === "NEW") {
+      if (!newClientName?.trim() && !newClientBrand?.trim()) {
+        return NextResponse.json(
+          { success: false, error: "New client name or brand name is required" },
+          { status: 400 }
+        );
+      }
+      targetClientName = (newClientName?.trim() || newClientBrand?.trim())!;
+      billingDetails = {
+        brandName: newClientBrand?.trim() || null,
+        email: newClientEmail?.trim() || null,
+        phone: newClientPhone?.trim() || null,
+        gstin: newClientGstin?.trim() || null,
+      };
+
+      if (autoEnrollClient) {
+        const enrolled = await prisma.agencyClient.create({
+          data: {
+            tenantId: tenantCtx.tenant.id,
+            name: targetClientName || "New Agency Client",
+            brandName: newClientBrand?.trim() || null,
+            email: newClientEmail?.trim() || null,
+            phone: newClientPhone?.trim() || null,
+            status: "ACTIVE",
+            activePackage: items?.[0]?.description || "Basic — Digital Foundation & Local Leads",
+            monthlyRetainer: subtotal ? Number(subtotal) : 18000,
+            billingCycle: "MONTHLY",
+          },
+        });
+        targetClientId = enrolled.id;
+      }
+    } else {
+      if (!targetClientId) {
+        return NextResponse.json({ success: false, error: "Client is required" }, { status: 400 });
+      }
+      const existingClient = await prisma.agencyClient.findFirst({
+        where: { id: targetClientId, tenantId: tenantCtx.tenant.id },
+      });
+      if (existingClient) {
+        targetClientName = existingClient.brandName || existingClient.name;
+        billingDetails = {
+          brandName: existingClient.brandName,
+          email: existingClient.email,
+          phone: existingClient.phone,
+        };
+      }
     }
 
     const count = await prisma.agencyInvoice.count({ where: { tenantId: tenantCtx.tenant.id } });
@@ -79,7 +142,9 @@ export async function POST(req: Request) {
     const invoice = await prisma.agencyInvoice.create({
       data: {
         tenantId: tenantCtx.tenant.id,
-        clientId,
+        clientId: targetClientId,
+        clientName: targetClientName,
+        clientBillingDetails: billingDetails || undefined,
         invoiceNumber,
         issueDate: new Date(),
         dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 10 * 86400000),
@@ -88,10 +153,10 @@ export async function POST(req: Request) {
         totalAmount: total,
         status: "SENT",
         items: items || [],
-        paymentMethod: "Bank Transfer / UPI",
+        paymentMethod: paymentMethod || "Bank Transfer / UPI",
       },
       include: {
-        client: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true, brandName: true, email: true, phone: true } },
       },
     });
 

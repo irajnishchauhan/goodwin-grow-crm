@@ -42,6 +42,11 @@ import {
   CreditCard,
   Receipt,
   RotateCcw,
+  Key,
+  Eye,
+  EyeOff,
+  Copy,
+  Shield,
 } from "lucide-react";
 import { SERVICE_PACKAGES, ADD_ON_SERVICES, getPackageByName, calculatePackageProfitability } from "@/lib/agency/packages";
 
@@ -58,6 +63,28 @@ interface ClientNote {
     fullName: string;
     email: string;
     avatarUrl?: string | null;
+  };
+}
+
+interface ClientCredentialItem {
+  id: string;
+  tenantId: string;
+  clientId: string;
+  platform: string;
+  accountIdentifier: string;
+  password?: string;
+  decryptedPassword?: string;
+  maskedPassword?: string;
+  loginUrl?: string | null;
+  recoveryDetails?: string | null;
+  accessLevel: string;
+  notes?: string | null;
+  isVerified: boolean;
+  createdAt: string;
+  createdBy?: {
+    id: string;
+    fullName: string;
+    email: string;
   };
 }
 
@@ -98,6 +125,7 @@ interface Client {
   };
   _count?: {
     notes?: number;
+    credentials?: number;
     projects?: number;
     tasks?: number;
     contentPosts?: number;
@@ -113,7 +141,7 @@ export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
-  const [client360Tab, setClient360Tab] = useState<"overview" | "notes" | "package" | "billing">("overview");
+  const [client360Tab, setClient360Tab] = useState<"overview" | "credentials" | "notes" | "package" | "billing">("overview");
 
   // Client Modal State
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -131,6 +159,23 @@ export default function ClientsPage() {
     content: "",
     category: "REQUIREMENT",
     isConfidential: true,
+  });
+
+  // Client Credentials Vault State
+  const [credentials, setCredentials] = useState<ClientCredentialItem[]>([]);
+  const [credentialsLoading, setCredentialsLoading] = useState(false);
+  const [isAddCredModalOpen, setIsAddCredModalOpen] = useState(false);
+  const [savingCred, setSavingCred] = useState(false);
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [copiedCredId, setCopiedCredId] = useState<string | null>(null);
+  const [credForm, setCredForm] = useState({
+    platform: "Meta Business Suite",
+    accountIdentifier: "",
+    password: "",
+    loginUrl: "",
+    recoveryDetails: "",
+    accessLevel: "ADMIN",
+    notes: "",
   });
 
   // Client Form State
@@ -214,7 +259,7 @@ export default function ClientsPage() {
     }
   }
 
-  async function openClient360(client: Client, defaultTab: "overview" | "notes" | "package" | "billing" = "overview") {
+  async function openClient360(client: Client, defaultTab: "overview" | "credentials" | "notes" | "package" | "billing" = "overview") {
     try {
       setClient360Tab(defaultTab);
       const res = await fetch(`/api/agency/clients/${client.id}`);
@@ -228,10 +273,9 @@ export default function ClientsPage() {
       };
       setSelectedClient(sanitized);
 
-      // If user opens notes or has access, fetch notes
-      if (defaultTab === "notes" || sanitized.confidentialAccess?.canAccessNotes) {
-        fetchNotesForClient(client.id);
-      }
+      // Fetch confidential notes & credentials
+      fetchNotesForClient(client.id);
+      fetchCredentialsForClient(client.id);
     } catch (err) {
       setSelectedClient({
         ...client,
@@ -239,7 +283,94 @@ export default function ClientsPage() {
         leadDesignerName: sanitizePodMember(client.leadDesignerName),
         contentWriterName: sanitizePodMember(client.contentWriterName),
       });
+      fetchNotesForClient(client.id);
+      fetchCredentialsForClient(client.id);
     }
+  }
+
+  async function fetchCredentialsForClient(clientId: string) {
+    try {
+      setCredentialsLoading(true);
+      const res = await fetch(`/api/agency/clients/${clientId}/credentials`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setCredentials(data.data);
+      } else {
+        setCredentials([]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch credentials:", err);
+      setCredentials([]);
+    } finally {
+      setCredentialsLoading(false);
+    }
+  }
+
+  async function handleCreateCredential(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedClient) return;
+
+    try {
+      setSavingCred(true);
+      const res = await fetch(`/api/agency/clients/${selectedClient.id}/credentials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(credForm),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setCredForm({
+          platform: "Meta Business Suite",
+          accountIdentifier: "",
+          password: "",
+          loginUrl: "",
+          recoveryDetails: "",
+          accessLevel: "ADMIN",
+          notes: "",
+        });
+        setIsAddCredModalOpen(false);
+        fetchCredentialsForClient(selectedClient.id);
+        fetchClients(); // Refresh credentials count
+      } else {
+        alert(data.error || "Failed to save client credential");
+      }
+    } catch (err: any) {
+      alert(err.message || "An error occurred");
+    } finally {
+      setSavingCred(false);
+    }
+  }
+
+  async function handleDeleteCredential(credId: string) {
+    if (!selectedClient) return;
+    if (!confirm("Are you sure you want to permanently delete this client login credential?")) return;
+
+    try {
+      const res = await fetch(`/api/agency/clients/${selectedClient.id}/credentials/${credId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCredentials(credentials.filter((c) => c.id !== credId));
+        fetchClients();
+      } else {
+        alert(data.error || "Failed to delete credential");
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to delete credential");
+    }
+  }
+
+  function handleCopyPassword(credId: string, pass?: string) {
+    if (!pass) return;
+    navigator.clipboard.writeText(pass);
+    setCopiedCredId(credId);
+    setTimeout(() => setCopiedCredId(null), 2000);
+  }
+
+  function toggleRevealPassword(credId: string) {
+    setRevealedPasswords((prev) => ({ ...prev, [credId]: !prev[credId] }));
   }
 
   async function fetchNotesForClient(clientId: string) {
@@ -627,6 +758,7 @@ export default function ClientsPage() {
                 <th className="py-3.5 px-4">Contract & Renewal</th>
                 <th className="py-3.5 px-4">Account Manager</th>
                 <th className="py-3.5 px-4">Confidential Records</th>
+                <th className="py-3.5 px-4">Credentials Vault</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-5 text-right">Actions</th>
               </tr>
@@ -634,13 +766,13 @@ export default function ClientsPage() {
             <tbody className="divide-y divide-slate-100 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     Loading clients...
                   </td>
                 </tr>
               ) : clients.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No clients found matching the filter.
                   </td>
                 </tr>
@@ -752,6 +884,20 @@ export default function ClientsPage() {
                         </button>
                       </td>
 
+                      {/* Client Login Credentials Vault */}
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openClient360(client, "credentials");
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 font-semibold text-[11px] transition"
+                        >
+                          <Key className="w-3 h-3 text-amber-600" />
+                          <span>{client._count?.credentials || 0} Logins</span>
+                        </button>
+                      </td>
+
                       {/* Status */}
                       <td className="py-3.5 px-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -856,6 +1002,24 @@ export default function ClientsPage() {
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>Deliverables & Pod</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setClient360Tab("credentials");
+                  fetchCredentialsForClient(selectedClient.id);
+                }}
+                className={`px-4 py-3 text-xs font-bold border-b-2 flex items-center gap-2 transition cursor-pointer ${
+                  client360Tab === "credentials"
+                    ? "border-amber-600 text-amber-900 bg-white"
+                    : "border-transparent text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Key className="w-3.5 h-3.5 text-amber-600" />
+                <span>Credentials & Vault</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800 font-bold">
+                  {selectedClient._count?.credentials || credentials.length || 0}
+                </span>
               </button>
 
               <button
@@ -1123,6 +1287,203 @@ export default function ClientsPage() {
                       </a>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ========================================================================= */}
+              {/* TAB: SECURE CLIENT LOGIN CREDENTIALS & VAULT */}
+              {/* ========================================================================= */}
+              {client360Tab === "credentials" && (
+                <div className="space-y-4">
+                  {/* Security Notice Banner */}
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Key className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                            Encrypted Client Login Credentials & Access Vault
+                          </h4>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/80 text-amber-900 border border-amber-300">
+                            AES-256 Bit Encryption
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-800 mt-0.5">
+                          Restricted to <strong className="font-semibold">Super Admin</strong> and <strong className="font-semibold">Account Manager assigned to {selectedClient.name}</strong> ({selectedClient.accountManagerName || "Unassigned"}). Passwords and access tokens are encrypted at rest.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setIsAddCredModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Credential</span>
+                    </button>
+                  </div>
+
+                  {/* Credentials List */}
+                  {credentialsLoading ? (
+                    <div className="p-12 text-center">
+                      <div className="w-8 h-8 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-xs text-slate-500 font-medium">Decrypting client vault records securely...</p>
+                    </div>
+                  ) : credentials.length === 0 ? (
+                    <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
+                        <Key className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-sm font-bold text-slate-800">No Credentials Stored Yet</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
+                        Securely store Meta Business Suite, Google Ads, CMS, Instagram, or hosting logins for {selectedClient.name}.
+                      </p>
+                      <button
+                        onClick={() => setIsAddCredModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add First Login Credential</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {credentials.map((cred) => {
+                        const isRevealed = !!revealedPasswords[cred.id];
+                        const isCopied = copiedCredId === cred.id;
+                        return (
+                          <div
+                            key={cred.id}
+                            className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:border-amber-300 transition space-y-3 flex flex-col justify-between"
+                          >
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
+                                    <Key className="w-4 h-4" />
+                                  </span>
+                                  <div>
+                                    <h4 className="text-sm font-bold text-slate-900">{cred.platform}</h4>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700">
+                                        {cred.accessLevel}
+                                      </span>
+                                      {cred.isVerified && (
+                                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                          Verified
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => handleDeleteCredential(cred.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Delete Credential"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="space-y-2 text-xs pt-3">
+                                {/* Account ID / Username */}
+                                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Username / Account ID</span>
+                                    <span className="font-mono font-medium text-slate-800 text-xs truncate block">{cred.accountIdentifier}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyPassword(cred.id + "-user", cred.accountIdentifier)}
+                                    className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
+                                    title="Copy Username"
+                                  >
+                                    {copiedCredId === cred.id + "-user" ? (
+                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Password / Key */}
+                                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Password / Secret Key</span>
+                                    <span className="font-mono font-semibold text-slate-800 text-xs tracking-wider block">
+                                      {isRevealed ? (cred.password || cred.decryptedPassword || cred.maskedPassword || "••••••••••••") : (cred.maskedPassword || "••••••••••••")}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleRevealPassword(cred.id)}
+                                      className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
+                                      title={isRevealed ? "Hide password" : "Show password"}
+                                    >
+                                      {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyPassword(cred.id, cred.password || cred.decryptedPassword)}
+                                      className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
+                                      title="Copy Password"
+                                    >
+                                      {isCopied ? (
+                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                      ) : (
+                                        <Copy className="w-3.5 h-3.5" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Login URL */}
+                                {cred.loginUrl && (
+                                  <div className="flex items-center justify-between text-[11px] pt-1">
+                                    <span className="text-slate-400">Login Portal:</span>
+                                    <a
+                                      href={cred.loginUrl.startsWith("http") ? cred.loginUrl : `https://${cred.loginUrl}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1 hover:underline truncate max-w-[220px]"
+                                    >
+                                      <span>{cred.loginUrl.replace(/^https?:\/\//, "")}</span>
+                                      <ExternalLink className="w-3 h-3 shrink-0" />
+                                    </a>
+                                  </div>
+                                )}
+
+                                {/* Recovery / 2FA Details */}
+                                {cred.recoveryDetails && (
+                                  <div className="p-2 rounded-lg bg-amber-50/50 border border-amber-100 text-[11px] text-amber-900">
+                                    <span className="font-semibold block text-[10px] text-amber-700 uppercase">2FA / Recovery:</span>
+                                    <span>{cred.recoveryDetails}</span>
+                                  </div>
+                                )}
+
+                                {/* Notes */}
+                                {cred.notes && (
+                                  <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                    <span className="font-semibold block text-[10px] text-slate-400 uppercase">Notes:</span>
+                                    <span>{cred.notes}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                              <span>Added by {cred.createdBy?.fullName || "Admin"}</span>
+                              <span>{new Date(cred.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1998,6 +2359,156 @@ export default function ClientsPage() {
                   className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50"
                 >
                   {savingNote ? "Saving..." : "Save Confidential Record"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ADD CLIENT LOGIN CREDENTIAL MODAL (ENCRYPTED STORAGE) */}
+      {/* ========================================================================= */}
+      {isAddCredModalOpen && selectedClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <Key className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Add Login Credential</h3>
+                  <p className="text-xs text-slate-500">
+                    Encrypted storage for <strong className="text-slate-800">{selectedClient.name}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddCredModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCredential} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Platform / Service *</label>
+                <select
+                  required
+                  value={credForm.platform}
+                  onChange={(e) => setCredForm({ ...credForm, platform: e.target.value })}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 font-semibold"
+                >
+                  <option value="Meta Business Suite">Meta Business Suite / Facebook Ads</option>
+                  <option value="Google Ads / MCC">Google Ads / MCC Account</option>
+                  <option value="Google Analytics 4">Google Analytics 4 (GA4)</option>
+                  <option value="Google Tag Manager">Google Tag Manager (GTM)</option>
+                  <option value="Instagram Business">Instagram Business Account</option>
+                  <option value="Shopify Admin">Shopify Store Admin</option>
+                  <option value="WordPress / CMS">WordPress / Website CMS Admin</option>
+                  <option value="Web Hosting / CPanel">Hosting / CPanel / DNS Server</option>
+                  <option value="LinkedIn Campaign Manager">LinkedIn Campaign Manager</option>
+                  <option value="WhatsApp Business API">WhatsApp Business API</option>
+                  <option value="Custom / Other">Custom / Other Service</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Account Identifier / Username / Email *</label>
+                <input
+                  type="text"
+                  required
+                  value={credForm.accountIdentifier}
+                  onChange={(e) => setCredForm({ ...credForm, accountIdentifier: e.target.value })}
+                  placeholder="e.g. ads@brand.com or ACT-928174921"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Password / API Key / Access Token *</label>
+                <input
+                  type="text"
+                  required
+                  value={credForm.password}
+                  onChange={(e) => setCredForm({ ...credForm, password: e.target.value })}
+                  placeholder="Enter password or secret token (encrypted via AES-256)"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Login URL / Portal</label>
+                  <input
+                    type="text"
+                    value={credForm.loginUrl}
+                    onChange={(e) => setCredForm({ ...credForm, loginUrl: e.target.value })}
+                    placeholder="https://business.facebook.com"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Access Level</label>
+                  <select
+                    value={credForm.accessLevel}
+                    onChange={(e) => setCredForm({ ...credForm, accessLevel: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 font-medium"
+                  >
+                    <option value="ADMIN">Administrator / Full Access</option>
+                    <option value="EDITOR">Standard / Editor Access</option>
+                    <option value="VIEWER">Read / Viewer Only</option>
+                    <option value="AGENCY_PARTNER">Agency Partner Delegation</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">2FA & Recovery Instructions (Optional)</label>
+                <input
+                  type="text"
+                  value={credForm.recoveryDetails}
+                  onChange={(e) => setCredForm({ ...credForm, recoveryDetails: e.target.value })}
+                  placeholder="e.g. 2FA sent to client CEO WhatsApp +91-98... or Backup OTPs in Vault"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Internal Instructions / Notes (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={credForm.notes}
+                  onChange={(e) => setCredForm({ ...credForm, notes: e.target.value })}
+                  placeholder="e.g. Do not modify pixel settings. Use Ad Account #3 for campaigns."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <span>
+                  This credential will be encrypted with AES-256 and restricted to Super Admin & assigned Account Manager.
+                </span>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCredModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCred}
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                >
+                  {savingCred ? "Encrypting & Saving..." : "Save to Vault"}
                 </button>
               </div>
             </form>

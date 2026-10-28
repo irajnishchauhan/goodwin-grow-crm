@@ -134,7 +134,31 @@ export async function ensureDatabaseSchema() {
     `CREATE INDEX IF NOT EXISTS "agency_client_notes_tenant_client_idx" ON "agency_client_notes"("tenant_id", "client_id");`,
     `CREATE INDEX IF NOT EXISTS "agency_client_notes_tenant_category_idx" ON "agency_client_notes"("tenant_id", "category");`,
 
-    // 12. Performance Indexes
+    // 12. Client Credentials Vault
+    `CREATE TABLE IF NOT EXISTS "agency_client_credentials" (
+      "id" TEXT PRIMARY KEY,
+      "tenant_id" TEXT NOT NULL,
+      "client_id" TEXT NOT NULL,
+      "platform" TEXT NOT NULL,
+      "account_identifier" TEXT NOT NULL,
+      "encrypted_password" TEXT,
+      "login_url" TEXT,
+      "recovery_details" TEXT,
+      "access_level" TEXT NOT NULL DEFAULT 'ADMIN',
+      "notes" TEXT,
+      "is_verified" BOOLEAN NOT NULL DEFAULT true,
+      "created_by_id" TEXT,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );`,
+    `CREATE INDEX IF NOT EXISTS "agency_client_credentials_tenant_client_idx" ON "agency_client_credentials"("tenant_id", "client_id");`,
+    `CREATE INDEX IF NOT EXISTS "agency_client_credentials_tenant_platform_idx" ON "agency_client_credentials"("tenant_id", "platform");`,
+
+    // 13. Agency Invoices Ad-Hoc / New Client Columns
+    `ALTER TABLE "agency_invoices" ADD COLUMN IF NOT EXISTS "client_name" TEXT;`,
+    `ALTER TABLE "agency_invoices" ADD COLUMN IF NOT EXISTS "client_billing_details" JSONB;`,
+
+    // 14. Performance Indexes
     `CREATE INDEX IF NOT EXISTS "tenant_memberships_agency_client_idx" ON "tenant_memberships"("tenant_id", "agency_client_id");`,
     `CREATE INDEX IF NOT EXISTS "leads_client_id_idx" ON "leads"("tenant_id", "client_id");`,
     `CREATE INDEX IF NOT EXISTS "tasks_client_id_idx" ON "tasks"("tenant_id", "client_id");`,

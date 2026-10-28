@@ -2,6 +2,7 @@ export interface ServicePackage {
   id: string;
   name: string;
   category: "CORE_RETAINER" | "SPECIALIZED_RETAINER" | "DEVELOPMENT" | "ENTERPRISE";
+  tier?: "BASIC" | "STANDARD" | "PREMIUM" | "ENTERPRISE";
   price: number;
   cadence: string;
   defaultPostsPlanned: number;
@@ -29,19 +30,20 @@ export interface AddOnService {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Standardized 5 Core Retainer Packages + 5 New Demand-Driven Retainers
+// 1. Standardized Retainer Packages: Basic, Standard, Premium & Specialized
 // ---------------------------------------------------------------------------
 export const SERVICE_PACKAGES: ServicePackage[] = [
-  // --- 5 STANDARDIZED EXISTING PACKAGES ---
+  // --- 1. BASIC PLAN (AFFORDABLE ENTRY POINT) ---
   {
-    id: "starter-presence",
-    name: "Starter Digital Presence & Local Leads",
+    id: "basic-plan",
+    name: "Basic — Digital Foundation & Local Leads",
     category: "CORE_RETAINER",
-    price: 25000,
+    tier: "BASIC",
+    price: 18000,
     cadence: "per month",
-    defaultPostsPlanned: 8,
-    estimatedDeliveryCost: 8500,
-    targetGrossMarginPercent: 66.0,
+    defaultPostsPlanned: 6,
+    estimatedDeliveryCost: 6000,
+    targetGrossMarginPercent: 66.7,
     contractTerms: {
       minCommitmentMonths: 3,
       noticePeriodDays: 30,
@@ -50,21 +52,24 @@ export const SERVICE_PACKAGES: ServicePackage[] = [
       summary: "3-Month Minimum Commitment • 30-Day Written Notice • Billed Monthly in Advance",
     },
     deliverables: [
-      "8 Social Media Posts & Custom Creatives",
-      "Google Business Profile (GBP) Local SEO Ranking",
-      "Monthly Customer Review Management & Citation Updates",
-      "Dedicated Account Executive & WhatsApp Support Group",
+      "6 Branded Social Creatives & Feeds per Month",
+      "Google Business Profile (GBP) Local SEO Ranking & Map Optimization",
+      "Monthly Customer Review Monitoring & Citation Updates",
+      "Dedicated WhatsApp Support Group & Monthly Performance Summary",
     ],
-    description: "Designed for local businesses, clinics, and retail stores establishing consistent local footfall and social authority.",
+    description: "Affordable entry-level package designed for local retail stores, clinics, solo practitioners, and emerging startups.",
   },
+
+  // --- 2. STANDARD PLAN (GROWTH RETAINER - MOST POPULAR) ---
   {
-    id: "growth-retainer",
-    name: "Growth Retainer (Social + Local SEO)",
+    id: "standard-plan",
+    name: "Standard — Growth Retainer (Social + Ads + SEO)",
     category: "CORE_RETAINER",
-    price: 50000,
+    tier: "STANDARD",
+    price: 45000,
     cadence: "per month",
     defaultPostsPlanned: 12,
-    estimatedDeliveryCost: 15000,
+    estimatedDeliveryCost: 13500,
     targetGrossMarginPercent: 70.0,
     isPopular: true,
     contractTerms: {
@@ -72,24 +77,27 @@ export const SERVICE_PACKAGES: ServicePackage[] = [
       noticePeriodDays: 30,
       billingFrequency: "MONTHLY",
       paymentDueDay: 5,
-      summary: "6-Month Minimum Commitment • 30-Day Written Notice • Quarterly Strategic Review",
+      summary: "6-Month Minimum Commitment • 30-Day Written Notice • Bi-Weekly Pod Review",
     },
     deliverables: [
-      "12 High-Impact Instagram/FB Reels & Carousels",
-      "Complete Local SEO Keyword Optimization (Target Top 3 Google Map Pack)",
-      "Meta Lead Ads WhatsApp Funnel Setup & Basic Optimization",
-      "Bi-weekly Strategy & Deliverables Review Call",
+      "12 High-Impact Creatives + 2 Viral Video Reels",
+      "Local SEO & Top 3 Google Map Pack Optimization",
+      "Meta Ads Management (up to ₹75k monthly ad spend)",
+      "Bi-Weekly Strategy & Deliverables Review Sync",
       "Dedicated Account Manager & Graphic Designer Pod",
     ],
-    description: "Ideal for fast-scaling local service businesses, auto care spas, salons, and regional retailers.",
+    description: "Our flagship growth engine for fast-scaling local service businesses, coaching academies, legal chambers, and regional retailers.",
   },
+
+  // --- 3. PREMIUM PLAN (OMNICHANNEL HYPER-GROWTH) ---
   {
-    id: "enterprise-creative-ads",
-    name: "Enterprise Creative & Meta Ads Retainer",
+    id: "premium-plan",
+    name: "Premium — Omnichannel Hyper-Growth & Performance",
     category: "CORE_RETAINER",
+    tier: "PREMIUM",
     price: 100000,
     cadence: "per month",
-    defaultPostsPlanned: 20,
+    defaultPostsPlanned: 24,
     estimatedDeliveryCost: 28000,
     targetGrossMarginPercent: 72.0,
     contractTerms: {
@@ -100,250 +108,251 @@ export const SERVICE_PACKAGES: ServicePackage[] = [
       summary: "6-Month Commitment • Bi-Weekly Creative Sprints • 45-Day Cancellation Terms",
     },
     deliverables: [
-      "20 High-Converting Brand Assets, 4K Video Ads & Product Shoots",
-      "End-to-End Meta Ads Funnel (Instant Forms, Landing Pages & WhatsApp)",
+      "24 High-Converting Brand Creatives & 6 Edited 4K Video Reels",
+      "Full Meta Ads + Google Search & Shopping Ads Management",
+      "Technical On-Page & Off-Page SEO with 4 High-Authority Articles",
       "Custom Creative Review & Approval Dashboard (Unlimited Revisions)",
-      "Dedicated Creative Director, Senior Copywriter & Paid Media Buyer",
-      "Monthly Competitor Benchmarking & Creative Velocity Report",
+      "Full Dedicated Pod (Lead AM, Senior Visualizer, Copywriter, Media Buyer)",
     ],
-    description: "Full creative pod with senior visualizers, copywriters, and paid media campaign management.",
+    description: "Complete creative and paid growth engine for established brands, multi-location healthcare centers, and scaling D2C brands.",
   },
+
+  // --- 4. CUSTOM ENTERPRISE RETAINER ---
   {
-    id: "hyper-growth-performance",
-    name: "Goodwin Hyper-Growth Performance Retainer",
-    category: "CORE_RETAINER",
-    price: 280000,
+    id: "custom-enterprise",
+    name: "Custom Enterprise — 360° Corporate Brand Retainer",
+    category: "ENTERPRISE",
+    tier: "ENTERPRISE",
+    price: 250000,
     cadence: "per month",
-    defaultPostsPlanned: 25,
-    estimatedDeliveryCost: 65000,
-    targetGrossMarginPercent: 76.8,
-    contractTerms: {
-      minCommitmentMonths: 6,
-      noticePeriodDays: 45,
-      billingFrequency: "MONTHLY",
-      paymentDueDay: 1,
-      summary: "6-Month Agreement • Monthly ROAS True-Up • Dedicated Multi-Channel Performance Pod",
-    },
-    deliverables: [
-      "25+ Dynamic Video Ad Variations & High-Converting Landing Pages",
-      "Google Search, Performance Max, YouTube & Meta Multi-Channel Media Buying",
-      "Server-Side Conversions API (CAPI) & ROAS Optimization",
-      "Guaranteed 3.5x+ ROAS Framework for E-commerce & Direct Response",
-      "Real-time Looker Studio Executive Dashboard & Weekly Sprints",
-    ],
-    description: "ROI-driven multi-channel media buying across Meta, Google Ads, YouTube, and programmatic networks.",
-  },
-  {
-    id: "corporate-360-vernacular",
-    name: "360° Corporate Brand Experience & Vernacular Engine",
-    category: "CORE_RETAINER",
-    price: 450000,
-    cadence: "per month",
-    defaultPostsPlanned: 30,
-    estimatedDeliveryCost: 95000,
-    targetGrossMarginPercent: 78.9,
+    defaultPostsPlanned: 35,
+    estimatedDeliveryCost: 60000,
+    targetGrossMarginPercent: 76.0,
     contractTerms: {
       minCommitmentMonths: 12,
       noticePeriodDays: 60,
       billingFrequency: "QUARTERLY",
       paymentDueDay: 1,
-      summary: "12-Month Annual Enterprise Master Services Agreement (MSA) • 5-Specialist Pod • SLA Guarantee",
+      summary: "12-Month Master Services Agreement • Executive Steering Committee • 60-Day Terms",
     },
     deliverables: [
-      "30+ Multi-Format Content Assets (Reels, Long-Form Thought Leadership, Tech Blogs)",
-      "Regional Vernacular Influencers & Localization (Hindi, Tamil, Marathi)",
-      "24/7 Social Listening & Crisis Online Reputation Management (ORM)",
-      "Executive On-Site Strategy Workshops & C-Suite Performance Reviews",
-      "Full IP Handover of All Creative Raw Footage and Vector Files",
+      "35+ Omnichannel Assets, Corporate Films & On-Site Video Shoots",
+      "Regional Multi-Lingual Vernacular Creative Localization",
+      "Enterprise Multi-Channel Paid Media (Meta, Google, LinkedIn & YouTube)",
+      "24/7 Crisis PR, Brand Reputation & Social Listening",
+      "Dedicated Growth Pod & Weekly Director-Level Strategic Review",
     ],
-    description: "Enterprise tier for national brands, fintechs, and venture-backed startups scaling across Tier 1 to Tier 3 India.",
+    description: "Enterprise governance, multi-regional campaigns, and corporate branding for large corporations, manufacturing leaders, and hospital networks.",
   },
 
-  // --- 5 NEW DEMAND-DRIVEN SERVICE PACKAGES ---
-  {
-    id: "seo-organic-growth",
-    name: "SEO & Organic Growth Retainer",
-    category: "SPECIALIZED_RETAINER",
-    price: 35000,
-    cadence: "per month",
-    defaultPostsPlanned: 4,
-    estimatedDeliveryCost: 10500,
-    targetGrossMarginPercent: 70.0,
-    contractTerms: {
-      minCommitmentMonths: 6,
-      noticePeriodDays: 30,
-      billingFrequency: "MONTHLY",
-      paymentDueDay: 5,
-      summary: "6-Month Minimum Commitment (SEO Indexation Ramp-up) • Monthly Technical Audit",
-    },
-    deliverables: [
-      "In-depth Technical SEO Audit, Core Web Vitals & Schema Markup Remediation",
-      "4 Pillar SEO Blog Articles & Keyword Gap Content Generation/Month",
-      "High-Authority Backlink Acquisition & Digital PR Outreach (4 DA 40+ Links/Mo)",
-      "Google Search Console & Rank Tracking Dashboard (Top 50 Focus Keywords)",
-      "Monthly Organic Traffic, Keyword Movements & Conversion Report",
-    ],
-    description: "Dominant organic search ranking for brands seeking long-term compounding search traffic without constant ad spend.",
-  },
+  // --- 5. PERFORMANCE MARKETING — ADS ONLY ---
   {
     id: "performance-ads-only",
     name: "Performance Marketing — Ads Management Only",
     category: "SPECIALIZED_RETAINER",
-    price: 45000,
+    price: 35000,
     cadence: "per month",
-    defaultPostsPlanned: 0,
-    estimatedDeliveryCost: 12000,
-    targetGrossMarginPercent: 73.3,
+    defaultPostsPlanned: 4,
+    estimatedDeliveryCost: 10000,
+    targetGrossMarginPercent: 71.4,
     contractTerms: {
       minCommitmentMonths: 3,
-      noticePeriodDays: 15,
+      noticePeriodDays: 30,
       billingFrequency: "MONTHLY",
-      paymentDueDay: 1,
-      summary: "3-Month Commitment • Ad Spend Funded Directly by Client Card • 15-Day Renewal Notice",
+      paymentDueDay: 5,
+      summary: "3-Month Minimum Commitment • Daily ROAS Tracking • 30-Day Notice",
     },
     deliverables: [
-      "Meta Ads & Google Ads Account Architecture Setup & Daily Media Buying",
-      "Continuous A/B Audience Segmentation & Creative Testing Matrix",
-      "Conversion Tracking Verification (GA4, Meta Pixel, GTM, Server-side CAPI)",
-      "Weekly ROAS Optimization & Cost-Per-Lead (CPL) Minimization",
-      "Ad Spend Scaling Strategy (from ₹50K to ₹10L+ monthly ad budgets)",
+      "Full Funnel Meta (Facebook/Instagram) & Google Ads Campaign Architecture",
+      "Conversion Tracking, Meta Pixel & Server-Side CAPI Implementation",
+      "Weekly Ad Creative A/B Testing & Audience Segmentation",
+      "Live Databox / Looker Studio ROAS Dashboard",
+      "Dedicated Senior Media Buyer",
     ],
-    description: "Pure performance media buying for clients who supply their own creative assets and require surgical ad spend optimization.",
+    description: "Dedicated ad spend scaling service for clients who have existing creative assets but need specialized media buying and ROAS optimization.",
   },
+
+  // --- 6. SEO & ORGANIC GROWTH RETAINER ---
+  {
+    id: "seo-organic-growth",
+    name: "SEO & Organic Growth Retainer",
+    category: "SPECIALIZED_RETAINER",
+    price: 30000,
+    cadence: "per month",
+    defaultPostsPlanned: 4,
+    estimatedDeliveryCost: 9000,
+    targetGrossMarginPercent: 70.0,
+    contractTerms: {
+      minCommitmentMonths: 6,
+      noticePeriodDays: 30,
+      billingFrequency: "MONTHLY",
+      paymentDueDay: 5,
+      summary: "6-Month Minimum Commitment (Organic SEO Cycle) • 30-Day Notice",
+    },
+    deliverables: [
+      "Comprehensive Technical SEO Audit & Core Web Vitals Fixes",
+      "Keyword Research & Search Intent Mapping (25 Priority Keywords)",
+      "4 High-Intent SEO Articles / Month (1,200+ Words with Schema Markup)",
+      "High-Authority Backlink Acquisition (5 Contextual Backlinks/Month)",
+      "Monthly Keyword Ranking & Google Search Console Traffic Report",
+    ],
+    description: "Long-term organic authority and search visibility package to drive sustainable search traffic without ongoing ad spend.",
+  },
+
+  // --- 7. SOCIAL MEDIA MANAGEMENT ONLY ---
   {
     id: "social-media-only",
     name: "Social Media Management Only",
     category: "SPECIALIZED_RETAINER",
-    price: 30000,
+    price: 25000,
     cadence: "per month",
-    defaultPostsPlanned: 16,
-    estimatedDeliveryCost: 9000,
+    defaultPostsPlanned: 12,
+    estimatedDeliveryCost: 7500,
     targetGrossMarginPercent: 70.0,
     contractTerms: {
       minCommitmentMonths: 3,
       noticePeriodDays: 30,
       billingFrequency: "MONTHLY",
       paymentDueDay: 5,
-      summary: "3-Month Commitment • Monthly Content Calendar Approval by 25th • 30-Day Notice",
+      summary: "3-Month Minimum Commitment • 30-Day Written Notice",
     },
     deliverables: [
-      "16 Static & Carousel Posts + 8 Engaging Interactive Stories Per Month",
-      "Active Daily Community Management & DM Response Framework",
-      "Trending Audio, Trend Hijacking & Hashtag Cluster Optimization",
-      "Monthly Follower Growth, Profile Impressions & Engagement Analytics Report",
-      "Covers Instagram, LinkedIn, Facebook, and X (Twitter)",
+      "12 Organic Social Posts (Carousels, Statics & 2 Reels)",
+      "Captions, Hashtag Research & Aesthetic Grid Planning",
+      "Story Highlights, Bio Optimization & Community Engagement",
+      "Social Listening & Direct Message Response Protocol",
     ],
-    description: "Dedicated organic social media voice and visual aesthetics for consumer brands and founders.",
+    description: "Organic community building and creative content for brands focusing purely on organic Instagram, LinkedIn, and Facebook presence.",
   },
+
+  // --- 8. WEBSITE DESIGN & DEVELOPMENT ---
   {
     id: "website-design-dev",
     name: "Website Design & Development",
     category: "DEVELOPMENT",
-    price: 75000,
-    cadence: "one-time / project",
+    price: 65000,
+    cadence: "one-time",
     defaultPostsPlanned: 0,
-    estimatedDeliveryCost: 22000,
-    targetGrossMarginPercent: 70.7,
+    estimatedDeliveryCost: 19000,
+    targetGrossMarginPercent: 70.8,
     contractTerms: {
       minCommitmentMonths: 1,
-      noticePeriodDays: 14,
+      noticePeriodDays: 15,
       billingFrequency: "MILESTONE",
       paymentDueDay: 1,
-      summary: "Milestone Billing (50% Advance / 25% Design Approval / 25% Final Launch) • 30 Days Free Maintenance",
+      summary: "50% Advance • 30% Design Approval • 20% Launch • 30-Day Free Post-Launch Support",
     },
     deliverables: [
-      "Custom UI/UX High-Fidelity Prototype (Figma) Tailored to Brand Identity",
-      "Modern Responsive Web Development (Next.js / Tailwind or Premium WordPress)",
-      "On-Page Technical SEO, Fast Loading Score (90+ Google Lighthouse), & Schema",
-      "Lead Capture Forms, WhatsApp Click-to-Chat & CRM Webhook Integration",
-      "Complete Source Code Handover, Admin Training Video & 30 Days Post-Launch Bug Warranty",
+      "Modern, Responsive 6-8 Page Website Built on Next.js or WordPress",
+      "Mobile-First UI/UX Design with Dark/Light Palette & Micro-Animations",
+      "On-Page Technical SEO, Schema Markup & Sub-Second Page Speeds",
+      "WhatsApp Chatbot, Lead Capture Forms & CRM API Integration",
+      "Domain Setup, SSL Certificate & 30-Day Post-Launch Technical Warranty",
     ],
-    description: "High-conversion, lightning-fast digital storefronts and marketing websites built for maximum lead generation.",
-  },
-  {
-    id: "custom-enterprise-retainer",
-    name: "Custom Enterprise Retainer",
-    category: "ENTERPRISE",
-    price: 150000,
-    cadence: "custom / month",
-    defaultPostsPlanned: 20,
-    estimatedDeliveryCost: 35000,
-    targetGrossMarginPercent: 76.7,
-    contractTerms: {
-      minCommitmentMonths: 6,
-      noticePeriodDays: 60,
-      billingFrequency: "MONTHLY",
-      paymentDueDay: 1,
-      summary: "Bespoke Master Services Agreement (MSA) • Custom Statement of Work (SOW) • Flexible Terms",
-    },
-    deliverables: [
-      "Bespoke Omnichannel Marketing Mix Engineered to Exact Brand OKRs",
-      "Dedicated Hybrid Pod (Creative Director, Copywriter, 2 Designers, Media Buyer)",
-      "Custom Integrations (CRM, WhatsApp API, ERP, Custom Analytics)",
-      "Quarterly On-Site Executive Strategy Sessions & Quarterly Business Reviews (QBR)",
-      "Strict SLA Guarantees with Dedicated Enterprise Relationship Lead",
-    ],
-    description: "Tailor-made solution with customizable pricing, dedicated pods, and flexible scope for unique enterprise requirements.",
+    description: "High-converting corporate website and e-commerce storefront development tailored for modern conversions.",
   },
 ];
 
 // ---------------------------------------------------------------------------
-// 2. Standardized Optional Add-on Services
+// 2. Standardized Optional Add-On Services Catalog
 // ---------------------------------------------------------------------------
 export const ADD_ON_SERVICES: AddOnService[] = [
   {
-    id: "addon-whatsapp-crm",
+    id: "whatsapp-crm-automation",
     name: "WhatsApp CRM & Chatbot Automation Setup",
     price: 15000,
     pricingType: "ONE_TIME",
-    description: "Automated WhatsApp replies, catalog triggers, and instant lead notification workflows.",
-    deliverablesSummary: "Meta WhatsApp Cloud API setup, 3 custom automated flow triggers, CRM lead webhook sync.",
+    description: "Official WhatsApp Cloud API verification, green tick assistance, and interactive lead routing bot.",
+    deliverablesSummary: "Green Tick Application • 5 Automated Chat Flow Templates • Team Inbox Integration",
   },
   {
-    id: "addon-shoot-day",
+    id: "extra-reels-shoot-day",
     name: "Extra Reels & On-Site Product Shoot Day",
     price: 20000,
     pricingType: "ONE_TIME",
-    description: "Full 1-day shoot with 4K camera gear, lighting setup, and director on client premises.",
-    deliverablesSummary: "1 Full-day shoot (up to 8 hours), raw footage archive, 10 edited reel drafts.",
+    description: "Dedicated on-site videographer with 4K cinema gear, audio kits, and lighting for 1 full day.",
+    deliverablesSummary: "1 Full Day On-Site Shoot • Raw B-Roll Footage Archive • 8 Edited Cinematic Reels",
   },
   {
-    id: "addon-vernacular-localization",
+    id: "vernacular-localization",
     name: "Regional Vernacular Localization",
     price: 12000,
     pricingType: "MONTHLY_RECURRING",
-    description: "Adaptation of creatives and scripts into regional languages (Hindi, Tamil, Marathi, Telugu).",
-    deliverablesSummary: "Translation & localized voiceovers for up to 12 creative assets per month.",
+    description: "Adaptation of monthly creatives, copy, and voiceovers into Hindi, Rajasthani, or regional dialects.",
+    deliverablesSummary: "Bilingual Creatives • Regional Copywriting • Vernacular Audio Dubbing",
   },
   {
-    id: "addon-influencer-whitelisting",
+    id: "influencer-seeding-pack",
     name: "Influencer Seeding & Whitelisting Setup",
     price: 25000,
     pricingType: "ONE_TIME",
-    description: "Coordination with niche micro-creators and Meta advertiser partnership whitelisting.",
-    deliverablesSummary: "Shortlisting 10 creators, outreach negotiation, creator Meta ads access linking.",
+    description: "Outreach, contract negotiation, and Meta ad account access granting for 5 micro/nano creators.",
+    deliverablesSummary: "5 Vetted Creators • Product Gifting Management • Creator Ads Whitelisting",
   },
   {
-    id: "addon-landing-page",
+    id: "landing-page-sprint",
     name: "Custom High-Converting Landing Page",
     price: 18000,
     pricingType: "ONE_TIME",
-    description: "Dedicated conversion-focused landing page for specific product or campaign launches.",
-    deliverablesSummary: "Copywriting, responsive design, tracking pixels, speed optimization, and lead form.",
+    description: "Dedicated single-page sales funnel built for paid campaigns with A/B testing setup.",
+    deliverablesSummary: "1 Custom High-Speed Page • Copywriting • Heatmap & Pixel Attribution",
   },
   {
-    id: "addon-crisis-orm",
+    id: "crisis-pr-monitoring",
     name: "Crisis PR & 24/7 Social Listening",
     price: 30000,
     pricingType: "MONTHLY_RECURRING",
-    description: "Round-the-clock monitoring of brand mentions, sentiment tracking, and rapid response handling.",
-    deliverablesSummary: "Social listening dashboard, negative review escalation SLA < 15 mins, weekly sentiment report.",
+    description: "Continuous brand sentiment monitoring, negative review suppression, and crisis response escalation.",
+    deliverablesSummary: "24/7 Keyword Alerts • Escalation Playbook • Review Remediation SOP",
   },
 ];
 
 // ---------------------------------------------------------------------------
-// 3. Helper Functions
+// 3. Standardized Invoicing Catalog for Dropdowns & Quick Invoicing
 // ---------------------------------------------------------------------------
+export interface InvoiceCatalogItem {
+  id: string;
+  name: string;
+  category: string;
+  defaultPrice: number;
+  cadence: string;
+  defaultDescription: string;
+}
+
+export const INVOICE_CATALOG_ITEMS: InvoiceCatalogItem[] = [
+  ...SERVICE_PACKAGES.map((pkg) => ({
+    id: pkg.id,
+    name: pkg.name,
+    category: pkg.category === "CORE_RETAINER" ? "Core Retainer" : pkg.category === "SPECIALIZED_RETAINER" ? "Specialized Service" : "Development",
+    defaultPrice: pkg.price,
+    cadence: pkg.cadence,
+    defaultDescription: `${pkg.name} — ${pkg.deliverables.slice(0, 3).join("; ")}.`,
+  })),
+  ...ADD_ON_SERVICES.map((addon) => ({
+    id: addon.id,
+    name: addon.name,
+    category: "Add-On Service",
+    defaultPrice: addon.price,
+    cadence: addon.pricingType === "MONTHLY_RECURRING" ? "per month" : "one-time",
+    defaultDescription: `${addon.name} — ${addon.deliverablesSummary}`,
+  })),
+  {
+    id: "custom-agency-deliverable",
+    name: "Custom Agency Deliverable / Retainer",
+    category: "Custom",
+    defaultPrice: 25000,
+    cadence: "flexible",
+    defaultDescription: "Custom strategic marketing consultation and creative production deliverable.",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// 4. Utility Functions
+// ---------------------------------------------------------------------------
+export function getPackageById(id: string): ServicePackage | undefined {
+  return SERVICE_PACKAGES.find((p) => p.id === id);
+}
+
 export function getPackageByName(name?: string | null): ServicePackage | undefined {
   if (!name) return undefined;
   const lower = name.toLowerCase().trim();

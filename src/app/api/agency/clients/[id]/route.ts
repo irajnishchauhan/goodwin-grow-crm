@@ -26,6 +26,7 @@ export async function GET(
       _count: {
         select: {
           notes: true,
+          credentials: true,
           projects: true,
           tasks: true,
           contentPosts: true,

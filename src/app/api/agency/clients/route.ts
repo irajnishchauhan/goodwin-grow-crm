@@ -51,6 +51,7 @@ export async function GET(req: Request) {
           adCampaigns: true,
           invoices: true,
           notes: true,
+          credentials: true,
         },
       },
     },

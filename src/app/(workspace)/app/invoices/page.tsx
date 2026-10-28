@@ -19,7 +19,11 @@ import {
   Trash2,
   Loader2,
   Save,
+  Sparkles,
+  UserPlus,
+  ChevronDown,
 } from "lucide-react";
+import { INVOICE_CATALOG_ITEMS } from "@/lib/agency/packages";
 
 interface AgencyInvoice {
   id: string;
@@ -33,6 +37,8 @@ interface AgencyInvoice {
   items: any;
   paymentMethod?: string | null;
   paidAt?: string | null;
+  clientName?: string | null;
+  clientBillingDetails?: any;
   client?: {
     id: string;
     name: string;
@@ -51,11 +57,25 @@ export default function InvoicesPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Create Modal
+  // Create Modal State
   const [modalOpen, setModalOpen] = useState(false);
+  const [clientType, setClientType] = useState<"EXISTING" | "NEW">("EXISTING");
   const [clientId, setClientId] = useState("");
-  const [serviceDescription, setServiceDescription] = useState("Monthly Social Media & Performance Retainer");
-  const [subtotal, setSubtotal] = useState("50000");
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientBrand, setNewClientBrand] = useState("");
+  const [newClientEmail, setNewClientEmail] = useState("");
+  const [newClientPhone, setNewClientPhone] = useState("");
+  const [newClientGstin, setNewClientGstin] = useState("");
+  const [autoEnrollClient, setAutoEnrollClient] = useState(true);
+
+  // Service Selection & Flexible Line Items
+  const [selectedCatalogId, setSelectedCatalogId] = useState("");
+  const [lineItems, setLineItems] = useState<Array<{ description: string; amount: number }>>([
+    {
+      description: "Basic — Digital Foundation & Local Leads (6 Creatives, Local SEO & Review Monitoring)",
+      amount: 18000,
+    },
+  ]);
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 14);
@@ -104,31 +124,97 @@ export default function InvoicesPage() {
     }
   }
 
+  function handleSelectCatalogItem(id: string) {
+    setSelectedCatalogId(id);
+    const found = INVOICE_CATALOG_ITEMS.find((it) => it.id === id);
+    if (!found) return;
+
+    setLineItems([
+      {
+        description: found.defaultDescription,
+        amount: found.defaultPrice,
+      },
+    ]);
+  }
+
+  function handleAddLineItem() {
+    setLineItems((prev) => [
+      ...prev,
+      { description: "Additional Strategic Deliverable / Ad-on Service", amount: 12000 },
+    ]);
+  }
+
+  function handleRemoveLineItem(idx: number) {
+    if (lineItems.length <= 1) return;
+    setLineItems((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function handleLineItemChange(idx: number, field: "description" | "amount", val: any) {
+    setLineItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, [field]: field === "amount" ? Number(val) || 0 : val } : it))
+    );
+  }
+
+  const computedSubtotal = lineItems.reduce((acc, it) => acc + (Number(it.amount) || 0), 0);
+  const computedTax = Math.round(computedSubtotal * 0.18);
+  const computedTotal = computedSubtotal + computedTax;
+
   async function handleCreateInvoice(e: React.FormEvent) {
     e.preventDefault();
+    if (clientType === "EXISTING" && !clientId) {
+      alert("Please select an enrolled client");
+      return;
+    }
+    if (clientType === "NEW" && !newClientName.trim() && !newClientBrand.trim()) {
+      alert("Please enter the client or brand name");
+      return;
+    }
+    if (lineItems.length === 0 || computedSubtotal <= 0) {
+      alert("Please add at least one line item with a valid price");
+      return;
+    }
+
     setSaving(true);
     try {
-      const subVal = Number(subtotal);
-      const taxVal = subVal * 0.18;
-      const totalVal = subVal + taxVal;
-
       const res = await fetch("/api/agency/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId,
-          subtotal: subVal,
-          taxAmount: taxVal,
-          totalAmount: totalVal,
+          clientId: clientType === "EXISTING" ? clientId : "NEW",
+          isNewClient: clientType === "NEW",
+          newClientName,
+          newClientBrand,
+          newClientEmail,
+          newClientPhone,
+          newClientGstin,
+          autoEnrollClient,
+          subtotal: computedSubtotal,
+          taxAmount: computedTax,
+          totalAmount: computedTotal,
           dueDate,
-          items: [{ description: serviceDescription, amount: subVal }],
+          items: lineItems,
+          paymentMethod: "Bank Transfer / UPI",
         }),
       });
 
       const data = await res.json();
       if (data.success) {
         setModalOpen(false);
+        // Reset form
+        setClientId("");
+        setNewClientName("");
+        setNewClientBrand("");
+        setNewClientEmail("");
+        setNewClientPhone("");
+        setNewClientGstin("");
+        setLineItems([
+          {
+            description: "Basic — Digital Foundation & Local Leads (6 Creatives, Local SEO & Review Monitoring)",
+            amount: 18000,
+          },
+        ]);
         fetchInvoices();
+        fetchClients();
       } else {
         alert(data.error || "Failed to create invoice");
       }
@@ -507,14 +593,35 @@ export default function InvoicesPage() {
             <div className="p-8 overflow-y-auto space-y-6 text-xs text-slate-700">
               {/* Brand and Invoice Info */}
               <div className="flex justify-between items-start border-b border-slate-100 pb-6">
-                <div>
-                  <div className="text-lg font-black text-slate-900 flex items-center gap-1.5">
-                    GOODWIN GROW <span className="text-emerald-600 font-black">AI</span>
+                <div className="flex items-center gap-3.5">
+                  {/* Official Goodwin Grow AI Vector Logo */}
+                  <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/25 p-2">
+                    <svg viewBox="0 0 40 40" className="w-9 h-9" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="40" height="40" rx="10" fill="url(#gg-gradient)" />
+                      <path d="M12 28V12L20 8L28 12V28L20 32L12 28Z" stroke="white" strokeWidth="2" strokeLinejoin="round" />
+                      <path d="M20 14V26M14 23L20 26L26 23M14 17L20 20L26 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <defs>
+                        <linearGradient id="gg-gradient" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                          <stop stopColor="#059669" />
+                          <stop offset="0.5" stopColor="#0d9488" />
+                          <stop offset="1" stopColor="#4f46e5" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
                   </div>
-                  <div className="text-slate-500 text-[11px] mt-1 leading-relaxed">
-                    Level 9, Cyber City Tower B<br />
-                    DLF Cyber City, Gurugram, Haryana - 122002<br />
-                    GSTIN: 06AABCU9603R1ZM • support@goodwingrowai.com
+                  <div>
+                    <div className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-1.5">
+                      GOODWIN GROW <span className="text-emerald-600 font-black">AI</span>
+                    </div>
+                    <div className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider flex items-center gap-1">
+                      <span>Agency Operating System</span>
+                      <span>•</span>
+                      <span>18% GST Compliant</span>
+                    </div>
+                    <div className="text-slate-500 text-[11px] mt-1 leading-relaxed">
+                      Level 9, Cyber City Tower B, DLF Cyber City, Gurugram, Haryana - 122002<br />
+                      GSTIN: 06AABCU9603R1ZM • support@goodwingrowai.com
+                    </div>
                   </div>
                 </div>
 
@@ -545,14 +652,23 @@ export default function InvoicesPage() {
                   Billed To Client:
                 </div>
                 <div className="text-sm font-bold text-slate-900">
-                  {selectedInvoice.client?.name}
+                  {selectedInvoice.client?.name || selectedInvoice.clientName || "Direct Client"}
                 </div>
-                {selectedInvoice.client?.brandName && (
-                  <div className="text-slate-500 font-medium">{selectedInvoice.client.brandName}</div>
+                {(selectedInvoice.client?.brandName || selectedInvoice.clientBillingDetails?.brandName) && (
+                  <div className="text-slate-500 font-medium">
+                    {selectedInvoice.client?.brandName || selectedInvoice.clientBillingDetails?.brandName}
+                  </div>
                 )}
                 <div className="text-slate-400 text-[11px] mt-0.5">
-                  {selectedInvoice.client?.email && <span>Email: {selectedInvoice.client.email} • </span>}
-                  {selectedInvoice.client?.phone && <span>Phone: {selectedInvoice.client.phone}</span>}
+                  {(selectedInvoice.client?.email || selectedInvoice.clientBillingDetails?.email) && (
+                    <span>Email: {selectedInvoice.client?.email || selectedInvoice.clientBillingDetails?.email} • </span>
+                  )}
+                  {(selectedInvoice.client?.phone || selectedInvoice.clientBillingDetails?.phone) && (
+                    <span>Phone: {selectedInvoice.client?.phone || selectedInvoice.clientBillingDetails?.phone}</span>
+                  )}
+                  {selectedInvoice.clientBillingDetails?.gstin && (
+                    <span> • GSTIN: {selectedInvoice.clientBillingDetails.gstin}</span>
+                  )}
                 </div>
               </div>
 
@@ -616,92 +732,281 @@ export default function InvoicesPage() {
       {/* Create Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Generate Client Invoice</h3>
-                <p className="text-xs text-slate-500">Issue an 18% GST tax invoice.</p>
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Generate Client Tax Invoice</h3>
+                  <p className="text-xs text-slate-500">18% GST Compliant • Goodwin Grow AI Official Invoice</p>
+                </div>
               </div>
-              <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg text-slate-400">
+              <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateInvoice} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Select Client *</label>
+            <form onSubmit={handleCreateInvoice} className="p-6 overflow-y-auto space-y-5 text-xs">
+              {/* Client Selection Mode */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-800">1. Client Billing Entity</label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setClientType("EXISTING")}
+                    className={`py-2 px-3 rounded-lg font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                      clientType === "EXISTING"
+                        ? "bg-white text-emerald-800 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Building2 className="w-4 h-4 text-emerald-600" />
+                    <span>Enrolled CRM Client</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClientType("NEW")}
+                    className={`py-2 px-3 rounded-lg font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                      clientType === "NEW"
+                        ? "bg-white text-emerald-800 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <UserPlus className="w-4 h-4 text-emerald-600" />
+                    <span>New / Ad-Hoc Client</span>
+                  </button>
+                </div>
+
+                {clientType === "EXISTING" ? (
+                  <div className="mt-2">
+                    <select
+                      required
+                      value={clientId}
+                      onChange={(e) => setClientId(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                    >
+                      <option value="">Select an enrolled client from CRM...</option>
+                      {clients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} {c.brandName ? `(${c.brandName})` : ""} — ₹{Number(c.monthlyRetainer).toLocaleString("en-IN")}/mo
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3 mt-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Client Contact Name *</label>
+                        <input
+                          type="text"
+                          required={clientType === "NEW"}
+                          placeholder="e.g. Vikramaditya Sharma"
+                          value={newClientName}
+                          onChange={(e) => setNewClientName(e.target.value)}
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Brand / Business Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Sharma Jewels & Co"
+                          value={newClientBrand}
+                          onChange={(e) => setNewClientBrand(e.target.value)}
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Billing Email</label>
+                        <input
+                          type="email"
+                          placeholder="accounts@clientbrand.com"
+                          value={newClientEmail}
+                          onChange={(e) => setNewClientEmail(e.target.value)}
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Billing Phone</label>
+                        <input
+                          type="tel"
+                          placeholder="+91 98290 12345"
+                          value={newClientPhone}
+                          onChange={(e) => setNewClientPhone(e.target.value)}
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">Client GSTIN (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 08AABCS1429B1Z0"
+                        value={newClientGstin}
+                        onChange={(e) => setNewClientGstin(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl font-mono uppercase"
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 pt-1 text-slate-700 font-medium cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoEnrollClient}
+                        onChange={(e) => setAutoEnrollClient(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span>Auto-enroll this new client profile directly in CRM</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* Standard Service Dropdown Selection */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    2. Service Catalog Selector
+                  </label>
+                  <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Quick-fill rate & deliverables</span>
+                  </span>
+                </div>
                 <select
-                  required
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  value={selectedCatalogId}
+                  onChange={(e) => handleSelectCatalogItem(e.target.value)}
+                  className="w-full px-3 py-2.5 text-xs bg-emerald-50/50 border border-emerald-200 rounded-xl font-semibold text-emerald-900 cursor-pointer"
                 >
-                  <option value="">Select an enrolled client</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} (₹{Number(c.monthlyRetainer).toLocaleString("en-IN")}/mo)
-                    </option>
-                  ))}
+                  <option value="">Choose a Standard Service Package or Retainer...</option>
+                  <optgroup label="Standard Retainer Packages (Basic, Standard, Premium)">
+                    {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Core Retainer").map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Specialized Services & Retainers">
+                    {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Specialized Service").map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Development & Add-On Services">
+                    {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Add-On Service" || it.category === "Development" || it.category === "Custom").map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Service Description</label>
-                <input
-                  type="text"
-                  required
-                  value={serviceDescription}
-                  onChange={(e) => setServiceDescription(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Subtotal (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    value={subtotal}
-                    onChange={(e) => setSubtotal(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
-                  />
+              {/* Flexible Line Items */}
+              <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    3. Service Line Items & Pricing (Customizable)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddLineItem}
+                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Item</span>
+                  </button>
                 </div>
 
+                <div className="space-y-2.5">
+                  {lineItems.map((item, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Line Item #{idx + 1}</span>
+                        {lineItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLineItem(idx)}
+                            className="text-rose-500 hover:text-rose-700 text-[11px] font-semibold"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        rows={2}
+                        required
+                        value={item.description}
+                        onChange={(e) => handleLineItemChange(idx, "description", e.target.value)}
+                        placeholder="Deliverable details, posts count, platform scope..."
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500 text-[11px] font-medium">Taxable Amount (₹):</span>
+                        <input
+                          type="number"
+                          required
+                          value={item.amount}
+                          onChange={(e) => handleLineItemChange(idx, "amount", e.target.value)}
+                          className="w-36 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-right font-bold text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Due Date & Financial Totals */}
+              <div className="pt-2 border-t border-slate-100 space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Due Date</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Invoice Payment Due Date</label>
                   <input
                     type="date"
                     required
                     value={dueDate}
                     onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
                   />
+                </div>
+
+                <div className="p-4 rounded-2xl bg-emerald-50/75 border border-emerald-200 space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Taxable Subtotal:</span>
+                    <span className="font-bold text-slate-900">₹{computedSubtotal.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>GST (18% Total: CGST 9% + SGST 9%):</span>
+                    <span className="font-bold text-slate-900">₹{computedTax.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-black text-emerald-950 pt-2 border-t border-emerald-200">
+                    <span>Grand Total Receivable:</span>
+                    <span className="text-emerald-700 text-base">₹{computedTotal.toLocaleString("en-IN")}</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-emerald-50 text-emerald-900 text-xs font-medium border border-emerald-100 flex justify-between">
-                <span>Total with 18% GST:</span>
-                <span className="font-bold">
-                  ₹{(Number(subtotal) * 1.18).toLocaleString("en-IN")}
-                </span>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>Issue Invoice</span>
+                  <span>Generate & Issue Invoice</span>
                 </button>
               </div>
             </form>
