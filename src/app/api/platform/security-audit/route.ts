@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getCurrentSession } from "@/lib/auth/session";
 
 export async function POST() {
   return runAudit();
@@ -10,6 +11,14 @@ export async function GET() {
 }
 
 async function runAudit() {
+  const session = await getCurrentSession();
+  if (!session || !session.user.isPlatformAdmin) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden: Platform Super Admin access required" },
+      { status: 403 }
+    );
+  }
+
   const startTime = Date.now();
   const tests = [];
 

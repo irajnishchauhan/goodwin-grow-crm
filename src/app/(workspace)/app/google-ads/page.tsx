@@ -65,7 +65,9 @@ export default function GoogleAdsPage() {
   const [editBudget, setEditBudget] = useState("");
   const [editSpent, setEditSpent] = useState("");
   const [editClicks, setEditClicks] = useState("");
+  const [editImpressions, setEditImpressions] = useState("");
   const [editLeads, setEditLeads] = useState("");
+  const [editCpl, setEditCpl] = useState("");
   const [editRoas, setEditRoas] = useState("");
   const [editStatus, setEditStatus] = useState("ACTIVE");
   const [editClientId, setEditClientId] = useState("");
@@ -142,7 +144,9 @@ export default function GoogleAdsPage() {
     setEditBudget(String(c.budget));
     setEditSpent(String(c.spent));
     setEditClicks(String(c.clicks || 0));
+    setEditImpressions(String(c.impressions || 0));
     setEditLeads(String(c.leadsCount));
+    setEditCpl(String(c.cpl || 0));
     setEditRoas(String(c.roas));
     setEditStatus(c.status);
     setEditClientId(c.client?.id || "");
@@ -154,7 +158,7 @@ export default function GoogleAdsPage() {
     if (!editingCampaign) return;
     setSaving(true);
 
-    const calcCpl = Number(editLeads) > 0 ? Number(editSpent) / Number(editLeads) : 0;
+    const calcCpl = editCpl !== "" ? Number(editCpl) : (Number(editLeads) > 0 ? Number(editSpent) / Number(editLeads) : 0);
 
     // Optimistic UI update
     setCampaigns((prev) =>
@@ -167,6 +171,7 @@ export default function GoogleAdsPage() {
               budget: Number(editBudget),
               spent: Number(editSpent),
               clicks: Number(editClicks),
+              impressions: Number(editImpressions || 0),
               leadsCount: Number(editLeads),
               cpl: calcCpl,
               roas: Number(editRoas),
@@ -178,17 +183,18 @@ export default function GoogleAdsPage() {
 
     try {
       const res = await fetch(`/api/agency/ads/${editingCampaign.id}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           campaignName: editName,
           objective: editObjective,
-          budget: editBudget,
-          spent: editSpent,
-          clicks: editClicks,
-          leadsCount: editLeads,
+          budget: Number(editBudget),
+          spent: Number(editSpent),
+          clicks: Number(editClicks),
+          impressions: Number(editImpressions || 0),
+          leadsCount: Number(editLeads),
           cpl: calcCpl,
-          roas: editRoas,
+          roas: Number(editRoas),
           status: editStatus,
           clientId: editClientId || null,
         }),
@@ -256,7 +262,11 @@ export default function GoogleAdsPage() {
   const totalSpent = campaigns.reduce((acc, c) => acc + Number(c.spent), 0);
   const totalConversions = campaigns.reduce((acc, c) => acc + (c.leadsCount || 0), 0);
   const totalClicks = campaigns.reduce((acc, c) => acc + (c.clicks || 0), 0);
-  const avgCPC = totalClicks > 0 ? (totalSpent / totalClicks).toFixed(2) : "9.03";
+  const avgCPC = totalClicks > 0 ? (totalSpent / totalClicks).toFixed(2) : "0.00";
+  const avgROAS =
+    campaigns.length > 0
+      ? (campaigns.reduce((acc, c) => acc + Number(c.roas), 0) / campaigns.length).toFixed(2)
+      : "0.0";
 
   return (
     <div className="space-y-6">
@@ -328,7 +338,7 @@ export default function GoogleAdsPage() {
             Average Google ROAS
           </div>
           <div className="text-2xl font-black text-purple-700 mt-1">
-            4.15x
+            {avgROAS}x
           </div>
           <div className="text-[11px] text-purple-600 font-medium mt-0.5">
             High e-commerce revenue
@@ -692,6 +702,40 @@ export default function GoogleAdsPage() {
                     type="number"
                     value={editLeads}
                     onChange={(e) => setEditLeads(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Target ROAS</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editRoas}
+                    onChange={(e) => setEditRoas(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">CPL (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editCpl}
+                    onChange={(e) => setEditCpl(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Impressions</label>
+                  <input
+                    type="number"
+                    value={editImpressions}
+                    onChange={(e) => setEditImpressions(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>

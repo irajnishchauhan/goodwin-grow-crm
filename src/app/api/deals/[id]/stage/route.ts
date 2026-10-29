@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
+import { processAutomationRules } from "@/lib/automation/engine";
 
 export async function PATCH(
   req: Request,
@@ -11,6 +12,13 @@ export async function PATCH(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!tenantCtx.hasPermission("deals:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing deals:write permission" }, { status: 403 });
     }
 
     const tenantId = tenantCtx.tenant.id;
@@ -82,6 +90,40 @@ export async function PATCH(
         },
       }),
     ]);
+
+    processAutomationRules({
+      tenantId,
+      triggerEvent: "deal.stage_changed",
+      entityType: "Deal",
+      entityId: deal.id,
+      data: updatedDeal,
+      payload: {
+        ...updatedDeal,
+        stage: targetStage.name,
+        ownerId: updatedDeal.assignedOwnerId,
+        assignedOwnerId: updatedDeal.assignedOwnerId,
+      },
+    }).catch(() => {});
+
+    if (status === "WON") {
+      processAutomationRules({
+        tenantId,
+        triggerEvent: "deal.won",
+        entityType: "Deal",
+        entityId: deal.id,
+        data: updatedDeal,
+        payload: updatedDeal,
+      }).catch(() => {});
+    } else if (status === "LOST") {
+      processAutomationRules({
+        tenantId,
+        triggerEvent: "deal.lost",
+        entityType: "Deal",
+        entityId: deal.id,
+        data: updatedDeal,
+        payload: updatedDeal,
+      }).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, data: updatedDeal });
   } catch (err: any) {

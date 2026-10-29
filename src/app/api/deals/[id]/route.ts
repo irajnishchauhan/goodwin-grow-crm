@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
-import { processAutomationRules } from "@/lib/automation/engine";
+import { evaluateAutomations } from "@/lib/automation/engine";
 
 export async function GET(
   req: Request,
@@ -11,6 +11,9 @@ export async function GET(
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
   const deal = await prisma.deal.findFirst({
@@ -60,13 +63,17 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
 
     if (!tenantCtx.hasPermission("deals:write")) {
       return NextResponse.json({ success: false, error: "Forbidden: Missing deals:write permission" }, { status: 403 });
     }
 
+    const tenantId = tenantCtx.tenant.id;
     const deal = await prisma.deal.findFirst({
-      where: { id, tenantId: tenantCtx.tenant.id },
+      where: { id, tenantId },
       include: { stage: true },
     });
 
@@ -80,6 +87,7 @@ export async function PUT(
       value,
       probability,
       expectedCloseDate,
+      pipelineId,
       stageId,
       companyId,
       contactId,
@@ -88,48 +96,99 @@ export async function PUT(
       lostReason,
     } = body;
 
+    if (pipelineId) {
+      const validPipe = await prisma.pipeline.findFirst({ where: { id: pipelineId, tenantId } });
+      if (!validPipe) {
+        return NextResponse.json({ success: false, error: "Invalid pipeline for this tenant" }, { status: 400 });
+      }
+    }
+
+    let targetStage: any = null;
+    if (stageId) {
+      targetStage = await prisma.pipelineStage.findFirst({
+        where: { id: stageId, tenantId },
+      });
+      if (!targetStage) {
+        return NextResponse.json({ success: false, error: "Invalid stage for this tenant" }, { status: 400 });
+      }
+    }
+
+    if (companyId) {
+      const validComp = await prisma.company.findFirst({ where: { id: companyId, tenantId } });
+      if (!validComp) {
+        return NextResponse.json({ success: false, error: "Invalid company for this tenant" }, { status: 400 });
+      }
+    }
+
+    if (contactId) {
+      const validContact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
+      if (!validContact) {
+        return NextResponse.json({ success: false, error: "Invalid contact for this tenant" }, { status: 400 });
+      }
+    }
+
     const previousStageId = deal.stageId;
-    const stageChanged = stageId && stageId !== previousStageId;
+    const previousStatus = deal.status;
+    const stageChanged = Boolean(stageId && stageId !== previousStageId);
 
-    const updated = await prisma.deal.update({
-      where: { id: deal.id },
-      data: {
-        title: title ?? deal.title,
-        value: value !== undefined ? Number(value) : deal.value,
-        probability: probability !== undefined ? Number(probability) : deal.probability,
-        expectedCloseDate: expectedCloseDate !== undefined ? (expectedCloseDate ? new Date(expectedCloseDate) : null) : deal.expectedCloseDate,
-        stageId: stageId ?? deal.stageId,
-        companyId: companyId !== undefined ? companyId : deal.companyId,
-        contactId: contactId !== undefined ? contactId : deal.contactId,
-        assignedOwnerId: assignedOwnerId !== undefined ? assignedOwnerId : deal.assignedOwnerId,
-        status: status ?? deal.status,
-        lostReason: lostReason !== undefined ? lostReason : deal.lostReason,
-      },
-      include: {
-        stage: true,
-        company: true,
-        contact: true,
-        assignedOwner: { select: { id: true, fullName: true, email: true } },
-      },
-    });
+    const resolvedProbability =
+      probability !== undefined
+        ? Number(probability)
+        : stageChanged && targetStage
+        ? targetStage.winProbability
+        : deal.probability;
 
-    if (stageChanged) {
-      await prisma.dealStageHistory.create({
+    const updated = await prisma.$transaction(async (tx) => {
+      const upd = await tx.deal.update({
+        where: { id: deal.id },
         data: {
-          tenantId: tenantCtx.tenant.id,
-          dealId: deal.id,
-          fromStageId: previousStageId,
-          toStageId: stageId,
-          changedById: tenantCtx.user.id,
+          title: title ?? deal.title,
+          value: value !== undefined ? Number(value) : deal.value,
+          probability: resolvedProbability,
+          expectedCloseDate:
+            expectedCloseDate !== undefined
+              ? expectedCloseDate
+                ? new Date(expectedCloseDate)
+                : null
+              : deal.expectedCloseDate,
+          pipelineId: pipelineId ?? deal.pipelineId,
+          stageId: stageId ?? deal.stageId,
+          companyId: companyId !== undefined ? companyId : deal.companyId,
+          contactId: contactId !== undefined ? contactId : deal.contactId,
+          assignedOwnerId: assignedOwnerId !== undefined ? assignedOwnerId : deal.assignedOwnerId,
+          status: status ?? deal.status,
+          lostReason: lostReason !== undefined ? lostReason : deal.lostReason,
+        },
+        include: {
+          stage: true,
+          company: true,
+          contact: true,
+          assignedOwner: { select: { id: true, fullName: true, email: true } },
         },
       });
 
-      // Fire workflow automations asynchronously
-      processAutomationRules({
-        tenantId: tenantCtx.tenant.id,
-        triggerEvent: "deal.stage_changed",
+      if (stageChanged) {
+        await tx.dealStageHistory.create({
+          data: {
+            tenantId,
+            dealId: deal.id,
+            fromStageId: previousStageId,
+            toStageId: stageId,
+            changedById: tenantCtx.user.id,
+          },
+        });
+      }
+
+      return upd;
+    });
+
+    if (stageChanged) {
+      evaluateAutomations({
+        tenantId,
+        triggerEvent: "DEAL_STAGE_CHANGED",
         entityType: "Deal",
         entityId: deal.id,
+        data: updated,
         payload: {
           dealId: deal.id,
           dealTitle: updated.title,
@@ -137,8 +196,31 @@ export async function PUT(
           stage: updated.stage.name,
           value: Number(updated.value),
           ownerId: updated.assignedOwnerId,
+          assignedOwnerId: updated.assignedOwnerId,
         },
-      }).catch(console.error);
+      }).catch(() => {});
+    }
+
+    if (updated.status !== previousStatus) {
+      if (updated.status === "WON") {
+        evaluateAutomations({
+          tenantId,
+          triggerEvent: "DEAL_WON",
+          entityType: "Deal",
+          entityId: deal.id,
+          data: updated,
+          payload: updated,
+        }).catch(() => {});
+      } else if (updated.status === "LOST") {
+        evaluateAutomations({
+          tenantId,
+          triggerEvent: "DEAL_LOST",
+          entityType: "Deal",
+          entityId: deal.id,
+          data: updated,
+          payload: updated,
+        }).catch(() => {});
+      }
     }
 
     return NextResponse.json({ success: true, data: updated });
@@ -146,6 +228,8 @@ export async function PUT(
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export const PATCH = PUT;
 
 export async function DELETE(
   req: Request,
@@ -156,6 +240,9 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
     if (!tenantCtx.hasPermission("deals:delete")) {

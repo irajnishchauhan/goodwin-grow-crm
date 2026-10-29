@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
+import { evaluateAutomations } from "@/lib/automation/engine";
 
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);
@@ -15,29 +19,11 @@ export async function GET(req: Request) {
   const assignedOwnerId = searchParams.get("assignedOwnerId");
   const clientId = searchParams.get("clientId");
 
-  // Client Isolation: One client must NEVER access another client's leads
-  if (tenantCtx.isClientUser) {
-    if (!tenantCtx.agencyClientId) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: No client workspace associated with account" },
-        { status: 403 }
-      );
-    }
-    if (clientId && clientId !== tenantCtx.agencyClientId) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Cross-client leads access is strictly prohibited" },
-        { status: 403 }
-      );
-    }
-  }
-
   const whereClause: any = {
     tenantId: tenantCtx.tenant.id,
   };
 
-  if (tenantCtx.isClientUser) {
-    whereClause.clientId = tenantCtx.agencyClientId;
-  } else if (clientId && clientId !== "ALL") {
+  if (clientId && clientId !== "ALL") {
     whereClause.clientId = clientId;
   }
 
@@ -89,6 +75,9 @@ export async function POST(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
 
     if (!tenantCtx.hasPermission("leads:write")) {
       return NextResponse.json(
@@ -97,6 +86,7 @@ export async function POST(req: Request) {
       );
     }
 
+    const tenantId = tenantCtx.tenant.id;
     const body = await req.json();
     const {
       firstName,
@@ -124,6 +114,24 @@ export async function POST(req: Request) {
       );
     }
 
+    if (assignedOwnerId) {
+      const validMember = await prisma.tenantMembership.findFirst({
+        where: { tenantId, userId: assignedOwnerId },
+      });
+      if (!validMember) {
+        return NextResponse.json({ success: false, error: "Invalid assigned owner for this tenant" }, { status: 400 });
+      }
+    }
+
+    if (clientId) {
+      const validClient = await prisma.agencyClient.findFirst({
+        where: { id: clientId, tenantId },
+      });
+      if (!validClient) {
+        return NextResponse.json({ success: false, error: "Invalid client for this tenant" }, { status: 400 });
+      }
+    }
+
     // Duplicate Detection: Check email and phone in tenant
     const trimmedEmail = email?.trim() || null;
     const trimmedPhone = phone?.trim() || null;
@@ -139,7 +147,7 @@ export async function POST(req: Request) {
 
       const duplicate = await prisma.lead.findFirst({
         where: {
-          tenantId: tenantCtx.tenant.id,
+          tenantId,
           OR: duplicateConditions,
         },
       });
@@ -161,11 +169,11 @@ export async function POST(req: Request) {
       }
     }
 
-    const targetClientId = tenantCtx.isClientUser ? tenantCtx.agencyClientId : (clientId || null);
+    const targetClientId = clientId || null;
 
     const lead = await prisma.lead.create({
       data: {
-        tenantId: tenantCtx.tenant.id,
+        tenantId,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         companyName: companyName?.trim() || null,
@@ -192,7 +200,7 @@ export async function POST(req: Request) {
     // Log Activity for Audit History
     await prisma.activity.create({
       data: {
-        tenantId: tenantCtx.tenant.id,
+        tenantId,
         type: "NOTE",
         title: "Lead Created",
         description: `Lead created for ${firstName} ${lastName} (${companyName || "No Company"})${serviceRequired ? ` - Service: ${serviceRequired}` : ""}`,
@@ -200,6 +208,15 @@ export async function POST(req: Request) {
         leadId: lead.id,
       },
     });
+
+    evaluateAutomations({
+      tenantId,
+      triggerEvent: "LEAD_CREATED",
+      entityType: "Lead",
+      entityId: lead.id,
+      data: lead,
+      payload: lead,
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, data: lead });
   } catch (err: any) {

@@ -31,7 +31,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
+async function updateOrder(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -40,6 +40,9 @@ export async function PATCH(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot update orders" }, { status: 403 });
     }
 
     const order = await prisma.batteryOrder.findFirst({
@@ -51,17 +54,30 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { status, deliveryAddress, notes, erpOrderRef, items } = body;
+    const { status, deliveryAddress, notes, erpOrderRef, erpSyncStatus, totalAmount, items, triggerErpSync } = body;
+
+    const updateData: any = {
+      ...(status && { status: status as BatteryOrderStatus }),
+      ...(deliveryAddress !== undefined && { deliveryAddress }),
+      ...(notes !== undefined && { notes }),
+      ...(erpOrderRef !== undefined && { erpOrderRef }),
+      ...(erpSyncStatus !== undefined && { erpSyncStatus }),
+      ...(totalAmount !== undefined && { totalAmount: Number(totalAmount) }),
+      ...(items !== undefined && { items }),
+    };
+
+    if (triggerErpSync || (status === "APPROVED" && !order.erpOrderRef && !erpOrderRef)) {
+      const randErpRef = `ERP-SO-${Math.floor(Math.random() * 9000 + 1000)}`;
+      updateData.erpSyncStatus = "ERP_CONFIRMED_SYNCED";
+      updateData.erpOrderRef = randErpRef;
+      if (!status) {
+        updateData.status = BatteryOrderStatus.APPROVED;
+      }
+    }
 
     const updated = await prisma.batteryOrder.update({
       where: { id: order.id },
-      data: {
-        ...(status && { status: status as BatteryOrderStatus }),
-        ...(deliveryAddress !== undefined && { deliveryAddress }),
-        ...(notes !== undefined && { notes }),
-        ...(erpOrderRef !== undefined && { erpOrderRef }),
-        ...(items !== undefined && { items }),
-      },
+      data: updateData,
       include: {
         partner: true,
       },
@@ -73,6 +89,20 @@ export async function PATCH(
   }
 }
 
+export async function PUT(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateOrder(req, context);
+}
+
+export async function PATCH(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateOrder(req, context);
+}
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -82,6 +112,9 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot delete orders" }, { status: 403 });
     }
 
     const order = await prisma.batteryOrder.findFirst({

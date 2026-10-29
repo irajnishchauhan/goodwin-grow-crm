@@ -26,6 +26,8 @@ export default function DealsPage() {
   const [stages, setStages] = useState<any[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
   const [assignedOwnerFilter, setAssignedOwnerFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +36,9 @@ export default function DealsPage() {
   const [title, setTitle] = useState("");
   const [value, setValue] = useState(250000);
   const [stageId, setStageId] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const [contactId, setContactId] = useState("");
+  const [expectedCloseDate, setExpectedCloseDate] = useState("");
   const [assignedOwnerId, setAssignedOwnerId] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -43,11 +48,16 @@ export default function DealsPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editValue, setEditValue] = useState(0);
   const [editStageId, setEditStageId] = useState("");
+  const [editCompanyId, setEditCompanyId] = useState("");
+  const [editContactId, setEditContactId] = useState("");
+  const [editExpectedCloseDate, setEditExpectedCloseDate] = useState("");
+  const [editStatus, setEditStatus] = useState("OPEN");
   const [editAssignedOwnerId, setEditAssignedOwnerId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     fetchTeam();
+    fetchCompaniesAndContacts();
   }, []);
 
   useEffect(() => {
@@ -63,6 +73,21 @@ export default function DealsPage() {
       }
     } catch (err) {
       console.error("Failed to fetch team members", err);
+    }
+  }
+
+  async function fetchCompaniesAndContacts() {
+    try {
+      const [compRes, contRes] = await Promise.all([
+        fetch("/api/companies"),
+        fetch("/api/contacts"),
+      ]);
+      const compData = await compRes.json();
+      const contData = await contRes.json();
+      if (compData.success) setCompanies(compData.data || []);
+      if (contData.success) setContacts(contData.data || []);
+    } catch (err) {
+      console.error("Failed to fetch companies/contacts", err);
     }
   }
 
@@ -135,6 +160,9 @@ export default function DealsPage() {
           value,
           pipelineId: pipeline?.id,
           stageId: stageId || stages[0]?.id,
+          companyId: companyId || null,
+          contactId: contactId || null,
+          expectedCloseDate: expectedCloseDate || null,
           assignedOwnerId: assignedOwnerId || null,
         }),
       });
@@ -144,6 +172,9 @@ export default function DealsPage() {
         setNewDealModal(false);
         setTitle("");
         setValue(250000);
+        setCompanyId("");
+        setContactId("");
+        setExpectedCloseDate("");
         setAssignedOwnerId("");
         fetchPipelineAndDeals();
       } else {
@@ -161,6 +192,12 @@ export default function DealsPage() {
     setEditTitle(deal.title);
     setEditValue(Number(deal.value));
     setEditStageId(deal.stageId);
+    setEditCompanyId(deal.companyId || "");
+    setEditContactId(deal.contactId || "");
+    setEditExpectedCloseDate(
+      deal.expectedCloseDate ? new Date(deal.expectedCloseDate).toISOString().slice(0, 10) : ""
+    );
+    setEditStatus(deal.status || "OPEN");
     setEditAssignedOwnerId(deal.assignedOwnerId || "");
     setEditDealModal(true);
   }
@@ -178,6 +215,10 @@ export default function DealsPage() {
           title: editTitle,
           value: editValue,
           stageId: editStageId,
+          companyId: editCompanyId || null,
+          contactId: editContactId || null,
+          expectedCloseDate: editExpectedCloseDate || null,
+          status: editStatus,
           assignedOwnerId: editAssignedOwnerId || null,
         }),
       });
@@ -451,6 +492,56 @@ export default function DealsPage() {
                 </select>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Company
+                  </label>
+                  <select
+                    value={companyId}
+                    onChange={(e) => setCompanyId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="">No Company</option>
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Contact
+                  </label>
+                  <select
+                    value={contactId}
+                    onChange={(e) => setContactId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="">No Contact</option>
+                    {contacts.map((ct) => (
+                      <option key={ct.id} value={ct.id}>
+                        {ct.firstName} {ct.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Expected Close Date
+                </label>
+                <input
+                  type="date"
+                  value={expectedCloseDate}
+                  onChange={(e) => setExpectedCloseDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Assigned Employee Owner
@@ -547,6 +638,73 @@ export default function DealsPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Company
+                  </label>
+                  <select
+                    value={editCompanyId}
+                    onChange={(e) => setEditCompanyId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="">No Company</option>
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Contact
+                  </label>
+                  <select
+                    value={editContactId}
+                    onChange={(e) => setEditContactId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  >
+                    <option value="">No Contact</option>
+                    {contacts.map((ct) => (
+                      <option key={ct.id} value={ct.id}>
+                        {ct.firstName} {ct.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Expected Close Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editExpectedCloseDate}
+                    onChange={(e) => setEditExpectedCloseDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Deal Status
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-bold"
+                  >
+                    <option value="OPEN">OPEN</option>
+                    <option value="WON">WON</option>
+                    <option value="LOST">LOST</option>
+                  </select>
+                </div>
               </div>
 
               <div>

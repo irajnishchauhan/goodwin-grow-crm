@@ -78,7 +78,7 @@ export default function LeadsPage() {
   const [source, setSource] = useState("Website Inbound");
   const [serviceRequired, setServiceRequired] = useState(serviceOptions[0]);
   const [dealValue, setDealValue] = useState<number | string>(150000);
-  const [nextFollowUp, setNextFollowUp] = useState("2026-10-22T15:00");
+  const [nextFollowUp, setNextFollowUp] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 16));
   const [priority, setPriority] = useState("MEDIUM");
   const [score, setScore] = useState(65);
   const [assignedOwnerId, setAssignedOwnerId] = useState("");
@@ -102,6 +102,8 @@ export default function LeadsPage() {
   const [editNextFollowUp, setEditNextFollowUp] = useState("");
   const [editLostReason, setEditLostReason] = useState("");
   const [editAssignedOwnerId, setEditAssignedOwnerId] = useState("");
+  const [editClientId, setEditClientId] = useState("");
+  const [editTagsInput, setEditTagsInput] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
   // Lead Detail & Activity History Slideover / Modal
@@ -236,7 +238,7 @@ export default function LeadsPage() {
     setSource("Website Inbound");
     setServiceRequired(serviceOptions[0]);
     setDealValue(150000);
-    setNextFollowUp("2026-10-22T15:00");
+    setNextFollowUp(new Date(Date.now() + 86400000).toISOString().slice(0, 16));
     setPriority("MEDIUM");
     setScore(65);
     setAssignedOwnerId("");
@@ -283,6 +285,8 @@ export default function LeadsPage() {
     );
     setEditLostReason(lead.lostReason || "");
     setEditAssignedOwnerId(lead.assignedOwnerId || "");
+    setEditClientId(lead.clientId || "");
+    setEditTagsInput(Array.isArray(lead.tags) ? lead.tags.join(", ") : "");
     setEditModalOpen(true);
   }
 
@@ -292,6 +296,11 @@ export default function LeadsPage() {
     setSavingEdit(true);
 
     try {
+      const tags = editTagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
       const res = await fetch(`/api/leads/${editingLead.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -303,13 +312,16 @@ export default function LeadsPage() {
           phone: editPhone || null,
           status: editStatus,
           priority: editPriority,
-          score: editScore,
+          score: Number(editScore) || 0,
+          tags,
           source: editSource,
           serviceRequired: editServiceRequired || null,
           dealValue: editDealValue ? Number(editDealValue) : null,
           nextFollowUp: editNextFollowUp ? new Date(editNextFollowUp) : null,
           lostReason: editStatus === "LOST" ? editLostReason : null,
           assignedOwnerId: editAssignedOwnerId || null,
+          clientId: editClientId || null,
+          convertToDeal: editStatus === "CONVERTED" && editingLead.status !== "CONVERTED",
         }),
       });
 
@@ -364,16 +376,42 @@ export default function LeadsPage() {
     setConvertModalOpen(true);
   }
 
+  async function handleConvertToClient(lead: any) {
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "CONVERTED",
+          convertToDeal: true,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchLeads();
+      } else {
+        alert(data.error || "Conversion failed");
+      }
+    } catch {
+      alert("Error converting lead");
+    }
+  }
+
   async function handleConvert(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedLead) return;
 
     setConverting(true);
     try {
-      const res = await fetch(`/api/leads/${selectedLead.id}/convert`, {
-        method: "POST",
+      const res = await fetch(`/api/leads/${selectedLead.id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealTitle: convertDealTitle, dealValue: convertDealValue }),
+        body: JSON.stringify({
+          status: "CONVERTED",
+          convertToDeal: true,
+          dealTitle: convertDealTitle,
+          dealValue: convertDealValue,
+        }),
       });
 
       const data = await res.json();
@@ -438,6 +476,12 @@ export default function LeadsPage() {
 
   function exportCSV() {
     if (leads.length === 0) return;
+    const escapeCell = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      let str = String(val);
+      if (/^[=+\-@]/.test(str)) str = `'${str}`;
+      return `"${str.replace(/"/g, '""')}"`;
+    };
     const headers = [
       "First Name",
       "Last Name",
@@ -454,22 +498,22 @@ export default function LeadsPage() {
       "Lost Reason",
     ];
     const rows = leads.map((l) => [
-      l.firstName,
-      l.lastName,
-      l.companyName || "",
-      l.email || "",
-      l.phone || "",
-      l.source || "",
-      l.serviceRequired || "",
-      l.dealValue || 0,
-      l.assignedOwner?.fullName || "Unassigned",
-      l.status,
-      l.priority,
-      l.nextFollowUp ? new Date(l.nextFollowUp).toISOString() : "",
-      l.lostReason || "",
+      escapeCell(l.firstName),
+      escapeCell(l.lastName),
+      escapeCell(l.companyName || ""),
+      escapeCell(l.email || ""),
+      escapeCell(l.phone || ""),
+      escapeCell(l.source || ""),
+      escapeCell(l.serviceRequired || ""),
+      escapeCell(l.dealValue || 0),
+      escapeCell(l.assignedOwner?.fullName || "Unassigned"),
+      escapeCell(l.status),
+      escapeCell(l.priority),
+      escapeCell(l.nextFollowUp ? new Date(l.nextFollowUp).toISOString() : ""),
+      escapeCell(l.lostReason || ""),
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.map(escapeCell).join(","), ...rows.map((e) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -1129,6 +1173,30 @@ export default function LeadsPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Lead Score (0-100)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={score}
+                    onChange={(e) => setScore(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tags (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={tagsInput}
+                    onChange={(e) => setTagsInput(e.target.value)}
+                    placeholder="e.g. inbound, priority, retainer"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  />
+                </div>
+              </div>
+
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
@@ -1333,6 +1401,45 @@ export default function LeadsPage() {
                     {teamMembers.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Lead Score (0-100)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={editScore}
+                    onChange={(e) => setEditScore(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tags</label>
+                  <input
+                    type="text"
+                    value={editTagsInput}
+                    onChange={(e) => setEditTagsInput(e.target.value)}
+                    placeholder="inbound, vip"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Client Workspace</label>
+                  <select
+                    value={editClientId}
+                    onChange={(e) => setEditClientId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+                  >
+                    <option value="">None</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
                       </option>
                     ))}
                   </select>

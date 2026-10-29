@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Building2,
@@ -25,6 +25,8 @@ import {
   Sparkles,
   Phone,
   AlertTriangle,
+  Download,
+  Plus,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -105,25 +107,114 @@ interface BatteriesDashboardProps {
 
 export function BatteriesDashboardView({
   user,
-  metrics,
+  metrics: initialMetrics,
   recentOrders: initialOrders,
-  collections,
-  fieldVisits,
-  warrantyCases,
+  collections: initialCollections,
+  fieldVisits: initialFieldVisits,
+  warrantyCases: initialWarrantyCases,
 }: BatteriesDashboardProps) {
-  const [orders, setOrders] = useState(initialOrders);
+  const [metrics, setMetrics] = useState(initialMetrics);
+  const [orders, setOrders] = useState(initialOrders || []);
+  const [collections, setCollections] = useState(initialCollections || []);
+  const [fieldVisits, setFieldVisits] = useState(initialFieldVisits || []);
+  const [warrantyCases, setWarrantyCases] = useState(initialWarrantyCases || []);
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchLiveDashboardData() {
+      try {
+        const [dealersRes, ordersRes, collectionsRes, warrantyRes, visitsRes] = await Promise.all([
+          fetch("/api/batteries/dealers").then((r) => r.json()).catch(() => null),
+          fetch("/api/batteries/orders").then((r) => r.json()).catch(() => null),
+          fetch("/api/batteries/collections").then((r) => r.json()).catch(() => null),
+          fetch("/api/batteries/warranty").then((r) => r.json()).catch(() => null),
+          fetch("/api/batteries/field-visits").then((r) => r.json()).catch(() => null),
+        ]);
+
+        if (ordersRes?.success && Array.isArray(ordersRes.data)) {
+          setOrders(ordersRes.data);
+        }
+        if (collectionsRes?.success && Array.isArray(collectionsRes.data)) {
+          setCollections(collectionsRes.data.filter((c: any) => c.status !== "PAID"));
+        }
+        if (warrantyRes?.success && Array.isArray(warrantyRes.data)) {
+          setWarrantyCases(warrantyRes.data);
+        }
+        if (visitsRes?.success && Array.isArray(visitsRes.data)) {
+          setFieldVisits(visitsRes.data);
+        }
+
+        setMetrics((prev) => ({
+          ...prev,
+          activeDealers: dealersRes?.summary?.activeDealers ?? prev.activeDealers,
+          totalDealers: dealersRes?.summary?.total ?? prev.totalDealers,
+          distributorsCount: dealersRes?.summary?.distributors ?? prev.distributorsCount,
+          retailersCount: dealersRes?.summary?.retailers ?? prev.retailersCount,
+          pendingOrders: ordersRes?.summary?.pendingCount ?? prev.pendingOrders,
+          pendingOrdersValue: ordersRes?.summary?.pendingValue ?? prev.pendingOrdersValue,
+          collectionFollowUps: collectionsRes?.ageing?.followUpsCount ?? prev.collectionFollowUps,
+          totalOutstanding: collectionsRes?.ageing?.totalOutstanding ?? prev.totalOutstanding,
+        }));
+      } catch (err) {
+        console.error("Failed to fetch live battery dashboard data:", err);
+      }
+    }
+    fetchLiveDashboardData();
+  }, []);
+
+  // Export MIS Report CSV
+  const handleExportMIS = () => {
+    const rows = [
+      ["Metric / Category", "Reference / ID", "Partner", "Status", "Value (INR)"],
+      ["KPI Summary", "ACTIVE_DEALERS", "All Territories", "ACTIVE", String(metrics.activeDealers)],
+      ["KPI Summary", "PENDING_ORDERS", "All Channels", "PENDING_APPROVAL", String(metrics.pendingOrdersValue)],
+      ["KPI Summary", "TOTAL_OUTSTANDING", "Receivables", "OVERDUE/PENDING", String(metrics.totalOutstanding)],
+      ...orders.map((o) => [
+        "Purchase Order",
+        o.orderNumber,
+        o.partner?.businessName || "Unknown",
+        o.status,
+        String(o.totalAmount || 0),
+      ]),
+      ...collections.map((c) => [
+        "Receivable",
+        c.invoiceNumber,
+        c.partner?.businessName || "Unknown",
+        c.status,
+        String(Number(c.amountDue || 0) - Number(c.amountPaid || 0)),
+      ]),
+      ...warrantyCases.map((w) => [
+        "Warranty Claim",
+        w.claimNumber,
+        w.partner?.businessName || w.customerName,
+        w.status,
+        w.batterySerialNumber,
+      ]),
+    ];
+
+    const csvContent = rows
+      .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Goodwin_Batteries_MIS_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // 1-Click Approve & Push to ERP
   const handleApproveOrder = async (orderId: string) => {
     setSyncingOrderId(orderId);
     try {
-      const res = await fetch("/api/batteries/orders", {
+      const res = await fetch(`/api/batteries/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: orderId,
           status: "APPROVED",
           triggerErpSync: true,
         }),
@@ -179,12 +270,20 @@ export function BatteriesDashboardView({
 
         {/* Quick Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportMIS}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold text-xs shadow-xs transition cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            Export MIS Report
+          </button>
           <Link
             href="/app/orders"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs transition shadow-amber-600/20"
           >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            Book Dealer Order
+            <Plus className="w-3.5 h-3.5" />
+            + New Order (DMS)
           </Link>
           <Link
             href="/app/leads"

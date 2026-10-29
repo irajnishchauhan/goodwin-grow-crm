@@ -13,6 +13,12 @@ export async function GET(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot access confidential notes" },
+        { status: 403 }
+      );
+    }
 
     const client = await prisma.agencyClient.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
@@ -95,6 +101,12 @@ export async function POST(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot access confidential notes" },
+        { status: 403 }
+      );
     }
 
     const client = await prisma.agencyClient.findFirst({

@@ -13,6 +13,12 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify confidential notes" },
+        { status: 403 }
+      );
+    }
 
     const client = await prisma.agencyClient.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
@@ -76,6 +82,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string; noteId: string }> }
@@ -85,6 +93,12 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify confidential notes" },
+        { status: 403 }
+      );
     }
 
     const client = await prisma.agencyClient.findFirst({

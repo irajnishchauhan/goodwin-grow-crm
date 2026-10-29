@@ -29,7 +29,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
+async function updateClaim(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -38,6 +38,9 @@ export async function PATCH(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot update warranty claims" }, { status: 403 });
     }
 
     const claim = await prisma.batteryWarrantyClaim.findFirst({
@@ -49,15 +52,32 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { status, technicianNotes, replacementSerial, resolutionDate } = body;
+    const { status, technicianNotes, replacementSerial, resolutionDate, erpSyncStatus } = body;
+
+    const isResolvedStatus =
+      status === "APPROVED_REPLACEMENT" ||
+      status === "APPROVED_PRORATA" ||
+      status === "REJECTED" ||
+      status === "CLOSED";
 
     const updated = await prisma.batteryWarrantyClaim.update({
       where: { id: claim.id },
       data: {
         ...(status && { status: status as WarrantyClaimStatus }),
         ...(technicianNotes !== undefined && { technicianNotes }),
-        ...(replacementSerial !== undefined && { replacementSerial }),
-        resolutionDate: resolutionDate ? new Date(resolutionDate) : (status === "APPROVED" || status === "REPLACED" || status === "REJECTED" ? new Date() : undefined),
+        ...(replacementSerial !== undefined && {
+          replacementSerial: replacementSerial ? replacementSerial.trim().toUpperCase() : null,
+        }),
+        ...(erpSyncStatus !== undefined
+          ? { erpSyncStatus }
+          : replacementSerial
+          ? { erpSyncStatus: "CREDIT_MEMO_PENDING_IN_ERP" }
+          : {}),
+        resolutionDate: resolutionDate
+          ? new Date(resolutionDate)
+          : isResolvedStatus || replacementSerial
+          ? new Date()
+          : undefined,
       },
       include: { partner: true },
     });
@@ -66,6 +86,20 @@ export async function PATCH(
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
+}
+
+export async function PUT(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateClaim(req, context);
+}
+
+export async function PATCH(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateClaim(req, context);
 }
 
 export async function DELETE(
@@ -77,6 +111,9 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot delete warranty claims" }, { status: 403 });
     }
 
     const claim = await prisma.batteryWarrantyClaim.findFirst({

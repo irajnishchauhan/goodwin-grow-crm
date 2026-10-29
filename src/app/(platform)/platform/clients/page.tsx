@@ -10,13 +10,17 @@ import {
   Shield,
   X,
   Key,
+  Download,
+  Filter,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { PlatformNavbar } from "@/components/layout/PlatformNavbar";
 
 export default function PlatformClientsPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [successInfo, setSuccessInfo] = useState<any | null>(null);
@@ -31,7 +35,7 @@ export default function PlatformClientsPage() {
   const [planCode, setPlanCode] = useState("growth");
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("GoodwinAdmin@2026!");
+  const [adminPassword, setAdminPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,6 +46,10 @@ export default function PlatformClientsPage() {
     try {
       setLoading(true);
       const res = await fetch("/api/platform/clients");
+      if (res.status === 401 || res.status === 403) {
+        window.location.href = "/login";
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         setClients(data.data || []);
@@ -51,6 +59,52 @@ export default function PlatformClientsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleToggleStatus(client: any) {
+    const nextStatus = client.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+    try {
+      const res = await fetch("/api/platform/clients", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: client.id, status: nextStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setClients((prev) =>
+          prev.map((c) => (c.id === client.id ? { ...c, status: nextStatus } : c))
+        );
+      } else {
+        alert(data.error || "Failed to update status");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error updating status");
+    }
+  }
+
+  function handleExportCsv() {
+    const rows = [
+      ["Company Name", "Code", "Plan", "Users", "Seat Limit", "Leads", "Deals", "Status", "Created At"],
+      ...filteredClients.map((c) => [
+        `"${(c.name || "").replace(/"/g, '""')}"`,
+        c.code,
+        c.subscription?.planName || "Starter",
+        c.stats?.membersCount || 1,
+        c.settings?.seatLimit || 10,
+        c.stats?.leadsCount || 0,
+        c.stats?.dealsCount || 0,
+        c.status,
+        c.createdAt ? new Date(c.createdAt).toISOString().split("T")[0] : "",
+      ]),
+    ];
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map((r) => r.join(",")).join("\n");
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `Platform_Clients_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   function handleNameChange(val: string) {
@@ -116,37 +170,51 @@ export default function PlatformClientsPage() {
     setPlanCode("growth");
     setAdminName("");
     setAdminEmail("");
-    setAdminPassword("GoodwinAdmin@2026!");
+    setAdminPassword("");
   }
 
-  const filteredClients = clients.filter(
-    (c) =>
+  const filteredClients = clients.filter((c) => {
+    const matchesSearch =
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.code.toLowerCase().includes(search.toLowerCase())
-  );
+      c.code.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "ALL" || c.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Client Companies</h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Manage multi-tenant client accounts, seat limits, and workspace provisioning.
-          </p>
-        </div>
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+      <PlatformNavbar />
+      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Client Companies</h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Manage multi-tenant client accounts, seat limits, and workspace provisioning.
+            </p>
+          </div>
 
-        <button
-          onClick={() => {
-            setSuccessInfo(null);
-            setModalOpen(true);
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Client Company</span>
-        </button>
-      </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 font-bold text-xs transition cursor-pointer"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              <span>Export CSV</span>
+            </button>
+            <button
+              onClick={() => {
+                setSuccessInfo(null);
+                setModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs shadow-md shadow-emerald-500/20 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New Client Company</span>
+            </button>
+          </div>
+        </div>
 
       {/* Success Banner */}
       {successInfo && (
@@ -177,16 +245,32 @@ export default function PlatformClientsPage() {
 
       {/* Table Card */}
       <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-        {/* Search */}
-        <div className="max-w-md relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search by company name or code..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
-          />
+        {/* Search & Status Filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="max-w-md w-full relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by company name or code..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="TRIAL">Trial</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
         </div>
 
         {/* Table */}
@@ -202,18 +286,19 @@ export default function PlatformClientsPage() {
                 <th className="py-3 px-4">Deals</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Created Date</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-300">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     Loading client companies...
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     No client companies found matching criteria.
                   </td>
                 </tr>
@@ -236,11 +321,26 @@ export default function PlatformClientsPage() {
                     <td className="py-3 px-4">{c.stats?.leadsCount || 0}</td>
                     <td className="py-3 px-4">{c.stats?.dealsCount || 0}</td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          c.status === "ACTIVE"
+                            ? "bg-emerald-500/20 text-emerald-300"
+                            : "bg-rose-500/20 text-rose-300"
+                        }`}
+                      >
                         {c.status}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-slate-400">{formatDate(c.createdAt)}</td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(c)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold transition cursor-pointer"
+                      >
+                        {c.status === "ACTIVE" ? "Suspend" : "Activate"}
+                      </button>
+                    </td>
                   </tr>
                 ))
               )}
@@ -305,7 +405,7 @@ export default function PlatformClientsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
                     Industry
@@ -328,6 +428,19 @@ export default function PlatformClientsPage() {
                     value={businessEmail}
                     onChange={(e) => setBusinessEmail(e.target.value)}
                     placeholder="info@company.com"
+                    className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Business Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+91 9876543210"
                     className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
                   />
                 </div>
@@ -433,6 +546,7 @@ export default function PlatformClientsPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

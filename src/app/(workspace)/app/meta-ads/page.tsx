@@ -65,7 +65,10 @@ export default function MetaAdsPage() {
   const [editBudget, setEditBudget] = useState("");
   const [editSpent, setEditSpent] = useState("");
   const [editLeads, setEditLeads] = useState("");
+  const [editCpl, setEditCpl] = useState("");
   const [editRoas, setEditRoas] = useState("");
+  const [editImpressions, setEditImpressions] = useState("");
+  const [editClicks, setEditClicks] = useState("");
   const [editStatus, setEditStatus] = useState("ACTIVE");
   const [editClientId, setEditClientId] = useState("");
 
@@ -140,7 +143,10 @@ export default function MetaAdsPage() {
     setEditBudget(String(c.budget));
     setEditSpent(String(c.spent));
     setEditLeads(String(c.leadsCount));
+    setEditCpl(String(c.cpl || 0));
     setEditRoas(String(c.roas));
+    setEditImpressions(String(c.impressions || 0));
+    setEditClicks(String(c.clicks || 0));
     setEditStatus(c.status);
     setEditClientId(c.client?.id || "");
     setEditModalOpen(true);
@@ -151,7 +157,7 @@ export default function MetaAdsPage() {
     if (!editingCampaign) return;
     setSaving(true);
 
-    const calcCpl = Number(editLeads) > 0 ? Number(editSpent) / Number(editLeads) : 0;
+    const calcCpl = editCpl !== "" ? Number(editCpl) : (Number(editLeads) > 0 ? Number(editSpent) / Number(editLeads) : 0);
 
     // Optimistic UI update
     setCampaigns((prev) =>
@@ -166,6 +172,8 @@ export default function MetaAdsPage() {
               leadsCount: Number(editLeads),
               cpl: calcCpl,
               roas: Number(editRoas),
+              impressions: Number(editImpressions || 0),
+              clicks: Number(editClicks || 0),
               status: editStatus,
             }
           : c
@@ -174,16 +182,18 @@ export default function MetaAdsPage() {
 
     try {
       const res = await fetch(`/api/agency/ads/${editingCampaign.id}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           campaignName: editName,
           objective: editObjective,
-          budget: editBudget,
-          spent: editSpent,
-          leadsCount: editLeads,
+          budget: Number(editBudget),
+          spent: Number(editSpent),
+          leadsCount: Number(editLeads),
           cpl: calcCpl,
-          roas: editRoas,
+          roas: Number(editRoas),
+          impressions: Number(editImpressions || 0),
+          clicks: Number(editClicks || 0),
           status: editStatus,
           clientId: editClientId || null,
         }),
@@ -256,7 +266,7 @@ export default function MetaAdsPage() {
   const avgROAS =
     campaigns.length > 0
       ? (campaigns.reduce((acc, c) => acc + Number(c.roas), 0) / campaigns.length).toFixed(1)
-      : "5.1";
+      : "0.0";
 
   return (
     <div className="space-y-6">
@@ -694,6 +704,39 @@ export default function MetaAdsPage() {
                     step="0.1"
                     value={editRoas}
                     onChange={(e) => setEditRoas(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">CPL (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editCpl}
+                    onChange={(e) => setEditCpl(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Impressions</label>
+                  <input
+                    type="number"
+                    value={editImpressions}
+                    onChange={(e) => setEditImpressions(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Clicks</label>
+                  <input
+                    type="number"
+                    value={editClicks}
+                    onChange={(e) => setEditClicks(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>

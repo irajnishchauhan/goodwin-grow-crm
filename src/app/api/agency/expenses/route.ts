@@ -8,6 +8,12 @@ export async function GET(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden: Client users cannot access internal agency expenses" },
+      { status: 403 }
+    );
+  }
 
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("clientId");
@@ -93,6 +99,12 @@ export async function POST(req: Request) {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot create internal agency expenses" },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();

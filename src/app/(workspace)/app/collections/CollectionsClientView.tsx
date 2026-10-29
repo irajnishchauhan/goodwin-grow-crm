@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Wallet,
   Clock,
@@ -63,15 +64,36 @@ export function CollectionsClientView({
   partners,
   tenantName,
 }: CollectionsClientViewProps) {
+  const searchParams = useSearchParams();
   const [collections, setCollections] = useState<CollectionItem[]>(initialCollections);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCollection, setSelectedCollection] = useState<CollectionItem | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMode, setPaymentMode] = useState("NEFT / RTGS");
+  const [selectedStatus, setSelectedStatus] = useState("");
   const [followUpNote, setFollowUpNote] = useState("");
   const [nextFollowUpDate, setNextFollowUpDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // New Collection Invoice Modal State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCollection, setNewCollection] = useState({
+    partnerId: partners[0]?.id || "",
+    invoiceNumber: "",
+    amountDue: "",
+    amountPaid: "0",
+    dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+    followUpNotes: "",
+  });
+
+  useEffect(() => {
+    const partnerParam = searchParams.get("partnerId");
+    if (partnerParam) {
+      setSearchQuery(partnerParam);
+    }
+  }, [searchParams]);
 
   // Ageing Buckets Calculation
   let totalOutstanding = 0;
@@ -103,11 +125,46 @@ export function CollectionsClientView({
         c.invoiceNumber.toLowerCase().includes(q) ||
         c.partner.businessName.toLowerCase().includes(q) ||
         c.partner.code.toLowerCase().includes(q) ||
+        c.partnerId.toLowerCase() === q ||
         (c.followUpNotes && c.followUpNotes.toLowerCase().includes(q))
       );
     }
     return true;
   });
+
+  const handleCreateCollection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/batteries/collections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCollection),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCollections((prev) => [data.data, ...prev]);
+        setShowCreateModal(false);
+        setNewCollection({
+          partnerId: partners[0]?.id || "",
+          invoiceNumber: "",
+          amountDue: "",
+          amountPaid: "0",
+          dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+          followUpNotes: "",
+        });
+        setToastMessage(`Created invoice ${data.data.invoiceNumber} in receivables!`);
+        setTimeout(() => setToastMessage(null), 5000);
+      } else {
+        alert(data.error || "Failed to create collection invoice");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error creating collection invoice");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleUpdateCollection = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,12 +172,13 @@ export function CollectionsClientView({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/batteries/collections", {
-        method: "POST",
+      const res = await fetch(`/api/batteries/collections/${selectedCollection.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: selectedCollection.id,
-          paymentReceived: paymentAmount ? Number(paymentAmount) : 0,
+          paymentAmount: paymentAmount ? Number(paymentAmount) : 0,
+          paymentMode,
+          status: selectedStatus || undefined,
           followUpNotes: followUpNote,
           nextFollowUpDate: nextFollowUpDate || undefined,
         }),
@@ -133,6 +191,7 @@ export function CollectionsClientView({
         );
         setSelectedCollection(null);
         setPaymentAmount("");
+        setSelectedStatus("");
         setFollowUpNote("");
         setNextFollowUpDate("");
         setToastMessage(`Updated ledger for invoice ${selectedCollection.invoiceNumber}!`);
@@ -197,9 +256,18 @@ export function CollectionsClientView({
           </p>
         </div>
 
-        <div className="text-right">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Outstanding</div>
-          <div className="text-2xl font-black text-slate-900">{formatCurrency(totalOutstanding)}</div>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Outstanding</div>
+            <div className="text-2xl font-black text-slate-900">{formatCurrency(totalOutstanding)}</div>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs shadow-xs transition shadow-rose-600/20 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            + New Invoice / Collection
+          </button>
         </div>
       </div>
 
@@ -435,7 +503,7 @@ export function CollectionsClientView({
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div>
-                <h3 className="text-lg font-black text-slate-900">Collection Action & Payment</h3>
+                <h3 className="text-lg font-black text-slate-900">Record Payment / Update Status</h3>
                 <p className="text-xs text-slate-500">{selectedCollection.partner.businessName} • {selectedCollection.invoiceNumber}</p>
               </div>
               <button onClick={() => setSelectedCollection(null)} className="text-slate-400 hover:text-slate-600">
@@ -459,15 +527,45 @@ export function CollectionsClientView({
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Record Payment Received (₹)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 42000"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Payment Mode</label>
+                  <select
+                    value={paymentMode}
+                    onChange={(e) => setPaymentMode(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  >
+                    <option value="NEFT / RTGS">NEFT / RTGS</option>
+                    <option value="UPI / IMPS">UPI / IMPS</option>
+                    <option value="Cheque">Cheque</option>
+                    <option value="Cash">Cash</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Record Payment Received (₹)</label>
-                <input
-                  type="number"
-                  placeholder="e.g. 42000"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
-                />
+                <label className="font-bold text-slate-700 block mb-1">Override Status (Optional)</label>
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                >
+                  <option value="">Auto-compute from payment</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="PARTIAL">PARTIAL</option>
+                  <option value="PAID">PAID</option>
+                  <option value="OVERDUE">OVERDUE</option>
+                </select>
               </div>
 
               <div>
@@ -505,6 +603,116 @@ export function CollectionsClientView({
                   className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold disabled:opacity-50"
                 >
                   {isSubmitting ? "Saving..." : "Save Record"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Invoice / Collection Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">New Receivable Invoice</h3>
+                <p className="text-xs text-slate-500">Log a dealer invoice for credit & ageing tracking.</p>
+              </div>
+              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCollection} className="space-y-4 mt-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Channel Partner *</label>
+                <select
+                  value={newCollection.partnerId}
+                  onChange={(e) => setNewCollection({ ...newCollection, partnerId: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-semibold"
+                >
+                  {partners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.businessName} ({p.code}) • {p.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Invoice Number</label>
+                  <input
+                    type="text"
+                    placeholder="Auto-generated if blank"
+                    value={newCollection.invoiceNumber}
+                    onChange={(e) => setNewCollection({ ...newCollection, invoiceNumber: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Due Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={newCollection.dueDate}
+                    onChange={(e) => setNewCollection({ ...newCollection, dueDate: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Total Invoice Amount (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    placeholder="e.g. 85000"
+                    value={newCollection.amountDue}
+                    onChange={(e) => setNewCollection({ ...newCollection, amountDue: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Initial Advance Paid (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newCollection.amountPaid}
+                    onChange={(e) => setNewCollection({ ...newCollection, amountPaid: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Notes</label>
+                <textarea
+                  rows={2}
+                  placeholder="Optional credit terms or dispatch remarks..."
+                  value={newCollection.followUpNotes}
+                  onChange={(e) => setNewCollection({ ...newCollection, followUpNotes: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold disabled:opacity-50"
+                >
+                  {isSubmitting ? "Creating..." : "Create Invoice"}
                 </button>
               </div>
             </form>

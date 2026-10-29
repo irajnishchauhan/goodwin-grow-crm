@@ -12,6 +12,9 @@ export async function GET(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
 
     const rule = await prisma.automationRule.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
@@ -37,6 +40,13 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!tenantCtx.hasPermission("automations:manage")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing automations:manage permission" }, { status: 403 });
+    }
 
     const existing = await prisma.automationRule.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
@@ -54,8 +64,8 @@ export async function PUT(
       data: {
         name: name !== undefined ? name : existing.name,
         triggerEvent: triggerEvent !== undefined ? triggerEvent : existing.triggerEvent,
-        conditions: conditions !== undefined ? conditions : existing.conditions,
-        actions: actions !== undefined ? actions : existing.actions,
+        conditions: conditions !== undefined ? conditions : (existing.conditions as any),
+        actions: actions !== undefined ? actions : (existing.actions as any),
         isActive: isActive !== undefined ? Boolean(isActive) : existing.isActive,
       },
     });
@@ -66,6 +76,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -75,6 +87,13 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!tenantCtx.hasPermission("automations:manage")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing automations:manage permission" }, { status: 403 });
     }
 
     const existing = await prisma.automationRule.findFirst({

@@ -9,6 +9,12 @@ export async function GET(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot access agency package analytics" },
+        { status: 403 }
+      );
+    }
 
     const tenantId = tenantCtx.tenant.id;
     const now = new Date();

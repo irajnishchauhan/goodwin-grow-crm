@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Building2,
   Users2,
@@ -69,6 +70,7 @@ export function DealersClientView({
   salesUsers,
   tenantName,
 }: DealersClientViewProps) {
+  const searchParams = useSearchParams();
   const [partners, setPartners] = useState<PartnerItem[]>(initialPartners);
   const [activeTab, setActiveTab] = useState<"DEALER" | "DISTRIBUTOR" | "RETAILER" | "PIPELINE">("DEALER");
   const [searchQuery, setSearchQuery] = useState("");
@@ -77,6 +79,19 @@ export function DealersClientView({
   const [selectedPartner, setSelectedPartner] = useState<PartnerItem | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab")?.toUpperCase();
+    if (tabParam === "DEALERS" || tabParam === "DEALER") {
+      setActiveTab("DEALER");
+    } else if (tabParam === "DISTRIBUTORS" || tabParam === "DISTRIBUTOR") {
+      setActiveTab("DISTRIBUTOR");
+    } else if (tabParam === "RETAILERS" || tabParam === "RETAILER") {
+      setActiveTab("RETAILER");
+    } else if (tabParam === "PIPELINE") {
+      setActiveTab("PIPELINE");
+    }
+  }, [searchParams]);
 
   // Edit Partner Form State
   const [showEditModal, setShowEditModal] = useState(false);
@@ -688,6 +703,70 @@ export function DealersClientView({
                   </div>
                 )}
               </div>
+
+              {/* Warranty Claims */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Warranty Claims ({selectedPartner.warrantyClaims?.length || 0})
+                </div>
+                {selectedPartner.warrantyClaims && selectedPartner.warrantyClaims.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedPartner.warrantyClaims.map((w: any) => (
+                      <div
+                        key={w.id}
+                        className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900">{w.claimNumber}</div>
+                          <div className="text-[10px] text-slate-500">
+                            {w.batteryModel} • {w.batterySerialNumber}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            {w.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-slate-400 p-3 bg-slate-50 rounded-xl text-center">
+                    No warranty claims registered for this partner.
+                  </div>
+                )}
+              </div>
+
+              {/* Field Visits */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Recent Field Visits ({selectedPartner.fieldVisits?.length || 0})
+                </div>
+                {selectedPartner.fieldVisits && selectedPartner.fieldVisits.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedPartner.fieldVisits.map((v: any) => (
+                      <div
+                        key={v.id}
+                        className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900">{v.purpose}</div>
+                          <div className="text-[10px] text-slate-400">{formatDate(v.visitDate)}</div>
+                        </div>
+                        {Number(v.orderBooked || 0) > 0 && (
+                          <div className="text-right font-black text-emerald-700">
+                            {formatCurrency(Number(v.orderBooked))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-slate-400 p-3 bg-slate-50 rounded-xl text-center">
+                    No field visits recorded yet.
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Drawer Footer Actions */}
@@ -706,7 +785,7 @@ export function DealersClientView({
       {/* Onboard New Partner Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div>
                 <h3 className="text-lg font-black text-slate-900">Onboard Channel Partner</h3>
@@ -783,6 +862,19 @@ export function DealersClientView({
                   />
                 </div>
                 <div>
+                  <label className="font-bold text-slate-700 block mb-1">Email</label>
+                  <input
+                    type="email"
+                    placeholder="partner@business.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="font-bold text-slate-700 block mb-1">GSTIN</label>
                   <input
                     type="text"
@@ -792,7 +884,46 @@ export function DealersClientView({
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 uppercase"
                   />
                 </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">PAN</label>
+                  <input
+                    type="text"
+                    placeholder="10-digit PAN"
+                    value={formData.pan}
+                    onChange={(e) => setFormData({ ...formData, pan: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 uppercase"
+                  />
+                </div>
               </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Street Address</label>
+                <input
+                  type="text"
+                  placeholder="Shop / Godown No., Industrial Area..."
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              {formData.type !== "DISTRIBUTOR" && distributors.length > 0 && (
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Parent Regional Distributor</label>
+                  <select
+                    value={formData.parentDistributorId}
+                    onChange={(e) => setFormData({ ...formData, parentDistributorId: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                  >
+                    <option value="">Direct Factory Billing (None)</option>
+                    {distributors.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.businessName} ({d.territory})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-3">
                 <div>

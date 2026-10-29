@@ -7,6 +7,9 @@ export async function GET() {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+  }
 
   const products = await prisma.product.findMany({
     where: { tenantId: tenantCtx.tenant.id },
@@ -21,6 +24,12 @@ export async function POST(req: Request) {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("products:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing products:write permission" }, { status: 403 });
     }
 
     const tenantId = tenantCtx.tenant.id;

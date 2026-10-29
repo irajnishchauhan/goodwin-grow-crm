@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   CheckSquare,
   Plus,
@@ -56,13 +57,16 @@ interface AttachmentItem {
 }
 
 export default function TasksPage() {
+  const searchParams = useSearchParams();
+  const initialAssignedToId = searchParams.get("assignedToId") || "ALL";
+
   const [viewMode, setViewMode] = useState<"AGENCY" | "CRM">("CRM");
   const [tasks, setTasks] = useState<any[]>([]);
   const [agencyTasks, setAgencyTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [priorityFilter, setPriorityFilter] = useState("ALL");
-  const [assignedToFilter, setAssignedToFilter] = useState("ALL");
+  const [assignedToFilter, setAssignedToFilter] = useState(initialAssignedToId);
   const [clientFilter, setClientFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -78,7 +82,7 @@ export default function TasksPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [dueDate, setDueDate] = useState("2026-10-25T17:00");
+  const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [assignedToId, setAssignedToId] = useState("");
   const [clientId, setClientId] = useState("");
@@ -91,9 +95,7 @@ export default function TasksPage() {
     { id: "3", text: "Account manager review", completed: false },
   ]);
   const [newChecklistText, setNewChecklistText] = useState("");
-  const [attachments, setAttachments] = useState<AttachmentItem[]>([
-    { id: "1", name: "Brand_Guidelines.pdf", url: "https://example.com/brand.pdf" },
-  ]);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
   const [newAttachmentName, setNewAttachmentName] = useState("");
   const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
 
@@ -116,6 +118,13 @@ export default function TasksPage() {
   const [editNewAttachmentName, setEditNewAttachmentName] = useState("");
   const [editNewAttachmentUrl, setEditNewAttachmentUrl] = useState("");
 
+
+  useEffect(() => {
+    const paramAssignee = searchParams.get("assignedToId");
+    if (paramAssignee) {
+      setAssignedToFilter(paramAssignee);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchTeam();

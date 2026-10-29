@@ -13,6 +13,7 @@ export interface TenantContext {
     name: string;
     code: string;
     status: string;
+    logoUrl?: string | null;
   };
   membership: {
     id: string;
@@ -58,7 +59,7 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
     return null;
   }
 
-  let membership = session.user.memberships.find(
+  let membership: any = session.user.memberships.find(
     (m: any) => m.tenantId === activeTenantId && m.status === "ACTIVE"
   );
 
@@ -66,10 +67,15 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
   if (!membership && session.user.isPlatformAdmin) {
     const targetTenant = await prisma.tenant.findUnique({
       where: { id: activeTenantId },
+      include: {
+        settings: {
+          select: { logoUrl: true },
+        },
+      },
     });
 
     if (targetTenant) {
-      let dbMembership = await prisma.tenantMembership.findUnique({
+      const dbMembership = await prisma.tenantMembership.findUnique({
         where: {
           tenantId_userId: {
             tenantId: activeTenantId,
@@ -93,42 +99,39 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
         },
       });
 
-      if (!dbMembership) {
-        dbMembership = await prisma.tenantMembership.create({
-          data: {
-            tenantId: activeTenantId,
-            userId: session.user.id,
-            status: "ACTIVE",
-            isOwner: true,
-          },
-          include: {
-            roles: {
-              include: {
-                role: {
-                  include: {
-                    permissions: {
-                      include: {
-                        permission: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        });
+      if (dbMembership) {
+        membership = {
+          ...dbMembership,
+          tenant: targetTenant,
+        };
+      } else {
+        // Virtual super admin access: does NOT inject superadmin as an explicit team member into target tenant
+        membership = {
+          id: `virtual-sa-${activeTenantId}`,
+          tenantId: activeTenantId,
+          userId: session.user.id,
+          status: "ACTIVE",
+          isOwner: true,
+          agencyClientId: null,
+          agencyClient: null,
+          roles: [],
+          tenant: targetTenant,
+        };
       }
-
-      membership = {
-        ...dbMembership,
-        tenant: targetTenant,
-      };
     }
   }
 
   if (!membership) {
     return null;
   }
+
+  // Resolve logoUrl
+  const logoUrl =
+    membership.tenant?.settings?.logoUrl ??
+    (await prisma.tenantSettings
+      .findUnique({ where: { tenantId: membership.tenant.id }, select: { logoUrl: true } })
+      .then((s) => s?.logoUrl || null)
+      .catch(() => null));
 
   const roles = (membership.roles || []).map((mr: any) => mr.role?.name).filter(Boolean);
   const permissionSet = new Set<string>();
@@ -154,9 +157,13 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
   const permissions = Array.from(permissionSet);
 
   // Determine client role status and primary role
+  const isClientRole = roles.some((n: string) =>
+    ["client", "client user", "client portal"].includes(n.toLowerCase().trim())
+  );
   const isClientUser = Boolean(
     !session.user.isPlatformAdmin &&
-    (roles.includes("Client") || membership.agencyClientId)
+    !isAgencyAdmin &&
+    (isClientRole || Boolean(membership.agencyClientId))
   );
   const agencyClientId = membership.agencyClientId || null;
 
@@ -185,6 +192,7 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
       name: membership.tenant.name,
       code: membership.tenant.code,
       status: membership.tenant.status,
+      logoUrl: logoUrl || null,
     },
     membership: {
       id: membership.id,
@@ -218,8 +226,8 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
         tenantId: membership.tenant.id,
         ...baseWhere,
       };
-      if (isClientUser && agencyClientId) {
-        where.clientId = agencyClientId;
+      if (isClientUser) {
+        where.clientId = agencyClientId || "__UNASSIGNED_CLIENT__";
       }
       return where;
     },
@@ -247,27 +255,7 @@ export async function switchActiveTenant(userId: string, targetTenantId: string,
   }
 
   if (user.isPlatformAdmin) {
-    // Platform super admin can switch to ANY tenant in the fleet
-    // Ensure membership exists so queries succeed
-    await prisma.tenantMembership.upsert({
-      where: {
-        tenantId_userId: {
-          tenantId: targetTenantId,
-          userId: userId,
-        },
-      },
-      update: {
-        status: "ACTIVE",
-        isOwner: true,
-      },
-      create: {
-        tenantId: targetTenantId,
-        userId: userId,
-        status: "ACTIVE",
-        isOwner: true,
-      },
-    });
-
+    // Platform super admin can switch to ANY tenant in the fleet seamlessly without polluting tenant's team list
     await updateSessionActiveTenant(sessionToken, targetTenantId);
     return { success: true, targetTenantId, tenantName: targetTenant.name, tenantCode: targetTenant.code };
   }

@@ -25,6 +25,8 @@ import {
   Save,
   UserCheck,
   UserX,
+  Upload,
+  Image as ImageIcon,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -92,19 +94,159 @@ function SettingsContent() {
   const [viewRoleModal, setViewRoleModal] = useState(false);
   const [viewingRole, setViewingRole] = useState<any | null>(null);
 
+  // ----------------------------------------------------------------------
+  // 3. Organization Settings State
+  // ----------------------------------------------------------------------
+  const [orgForm, setOrgForm] = useState({
+    name: "",
+    code: "",
+    status: "ACTIVE",
+    logoUrl: "",
+    businessEmail: "",
+    phone: "",
+    website: "",
+    address: "",
+    country: "",
+    currency: "INR",
+    timezone: "Asia/Kolkata",
+    seatLimit: 10,
+  });
+  const [savingOrg, setSavingOrg] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [orgMessage, setOrgMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   useEffect(() => {
     loadAllData();
   }, []);
 
   async function loadAllData() {
     setLoading(true);
-    await Promise.all([fetchSession(), fetchTeam(), fetchRoles()]);
+    await Promise.all([fetchSession(), fetchTeam(), fetchRoles(), fetchOrgSettings()]);
     setLoading(false);
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setOrgMessage({ type: "error", text: "Please upload an image file (PNG, JPG, SVG, WebP)" });
+      return;
+    }
+
+    setUploadingLogo(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 320;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/png", 0.9);
+          setOrgForm((prev) => ({ ...prev, logoUrl: dataUrl }));
+          setOrgMessage({ type: "success", text: "Logo loaded! Click 'Save Changes' to update across all workspace data." });
+        }
+        setUploadingLogo(false);
+      };
+      img.onerror = () => {
+        setOrgMessage({ type: "error", text: "Failed to read image file" });
+        setUploadingLogo(false);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => {
+      setOrgMessage({ type: "error", text: "Failed to load image file" });
+      setUploadingLogo(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function fetchOrgSettings() {
+    try {
+      const res = await fetch("/api/settings", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setOrgForm({
+          name: data.data.name || "",
+          code: data.data.code || "",
+          status: data.data.status || "ACTIVE",
+          logoUrl: data.data.logoUrl || "",
+          businessEmail: data.data.businessEmail || "",
+          phone: data.data.phone || "",
+          website: data.data.website || "",
+          address: data.data.address || "",
+          country: data.data.country || "",
+          currency: data.data.currency || "INR",
+          timezone: data.data.timezone || "Asia/Kolkata",
+          seatLimit: data.data.seatLimit || 10,
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function handleSaveOrgSettings(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingOrg(true);
+    setOrgMessage(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: orgForm.name,
+          logoUrl: orgForm.logoUrl,
+          businessEmail: orgForm.businessEmail,
+          phone: orgForm.phone,
+          website: orgForm.website,
+          address: orgForm.address,
+          country: orgForm.country,
+          currency: orgForm.currency,
+          timezone: orgForm.timezone,
+        }),
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        setOrgMessage({ type: "success", text: resData.message || "Organization profile updated!" });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("workspace-logo-updated", {
+              detail: { logoUrl: orgForm.logoUrl, tenantCode: orgForm.code },
+            })
+          );
+        }
+        await fetchSession();
+      } else {
+        setOrgMessage({ type: "error", text: resData.error || "Failed to update organization settings" });
+      }
+    } catch (err: any) {
+      setOrgMessage({ type: "error", text: err.message || "Error saving organization profile" });
+    } finally {
+      setSavingOrg(false);
+    }
   }
 
   async function fetchSession() {
     try {
-      const res = await fetch("/api/auth/session");
+      const res = await fetch("/api/auth/session", { cache: "no-store" });
       const data = await res.json();
       if (data.success) {
         setSessionData(data.data);
@@ -116,7 +258,7 @@ function SettingsContent() {
 
   async function fetchTeam() {
     try {
-      const res = await fetch("/api/team");
+      const res = await fetch("/api/team", { cache: "no-store" });
       const data = await res.json();
       if (data.success) {
         setTeamMembers(data.data || []);
@@ -128,7 +270,7 @@ function SettingsContent() {
 
   async function fetchRoles() {
     try {
-      const res = await fetch("/api/roles");
+      const res = await fetch("/api/roles", { cache: "no-store" });
       const data = await res.json();
       if (data.success) {
         setRoles(data.data.roles || []);
@@ -396,11 +538,23 @@ function SettingsContent() {
     <div className="space-y-6 max-w-6xl">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Workspace Management & Access</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Team members, role-based access controls (RBAC), and organization settings for {sessionData?.activeTenant?.name || "Goodwin Workspace"}.
-          </p>
+        <div className="flex items-center gap-3.5">
+          {orgForm.logoUrl ? (
+            <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 p-1 flex items-center justify-center shadow-xs shrink-0 overflow-hidden">
+              <img src={orgForm.logoUrl} alt={orgForm.name} className="w-full h-full object-contain" />
+            </div>
+          ) : (
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+              {(orgForm.name || sessionData?.activeTenant?.name || "G").charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Workspace Management & Access</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Team members, role-based access controls (RBAC), and organization settings for{" "}
+              <strong className="text-slate-800">{orgForm.name || sessionData?.activeTenant?.name || "Goodwin Workspace"}</strong>.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -753,37 +907,215 @@ function SettingsContent() {
       {/* ========================================================================================= */}
       {activeTab === "organization" && (
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-900 pb-3 border-b border-slate-100">
-            <Building2 className="w-4 h-4 text-emerald-600" />
-            <span>Workspace Profile & Licensing</span>
+          <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <Building2 className="w-4 h-4 text-emerald-600" />
+              <span>Workspace Profile & Licensing</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="font-mono text-slate-700 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+                {orgForm.code || sessionData?.activeTenant?.code || "goodwin-crm"}
+              </span>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {orgForm.status || sessionData?.activeTenant?.status || "ACTIVE"}
+              </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-xs">
-            <div>
-              <div className="text-slate-400 font-semibold mb-1">Company Workspace</div>
-              <div className="text-slate-900 font-bold text-sm">
-                {sessionData?.activeTenant?.name || "Goodwin Grow CRM"}
+          {orgMessage && (
+            <div
+              className={`p-3 rounded-xl text-xs font-semibold border ${
+                orgMessage.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-rose-50 text-rose-700 border-rose-200"
+              }`}
+            >
+              {orgMessage.text}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveOrgSettings} className="space-y-5">
+            {/* Workspace Brand Logo Upload */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Workspace Brand Logo</h4>
+                  <p className="text-[11px] text-slate-500">
+                    This logo updates across all workspace views: sidebar, header switcher, print tax invoices, dealer portal, and proposals.
+                  </p>
+                </div>
+                {orgForm.logoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setOrgForm({ ...orgForm, logoUrl: "" })}
+                    className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Remove Logo
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-1">
+                <div className="w-16 h-16 rounded-2xl bg-white border-2 border-dashed border-slate-300 flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-xs">
+                  {orgForm.logoUrl ? (
+                    <img src={orgForm.logoUrl} alt="Workspace Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-slate-400">
+                      <ImageIcon className="w-6 h-6 stroke-[1.5]" />
+                      <span className="text-[9px] font-bold uppercase mt-0.5">No Logo</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-2 w-full">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:border-emerald-500 text-slate-700 hover:text-emerald-700 text-xs font-semibold shadow-xs transition cursor-pointer">
+                      <Upload className="w-3.5 h-3.5" />
+                      {uploadingLogo ? "Compressing Image..." : "Upload Logo Image"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={handleFileSelect}
+                        disabled={uploadingLogo}
+                      />
+                    </label>
+                    <span className="text-[10px] text-slate-400">or enter an image URL below</span>
+                  </div>
+
+                  <input
+                    type="url"
+                    value={orgForm.logoUrl || ""}
+                    onChange={(e) => setOrgForm({ ...orgForm, logoUrl: e.target.value })}
+                    placeholder="https://example.com/logo.png or data:image/png;base64,..."
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono text-[11px]"
+                  />
+                  <div className="text-[10px] text-slate-400">
+                    PNG, SVG, or WebP recommended. Uploaded files are automatically compressed client-side and saved into PostgreSQL.
+                  </div>
+                </div>
               </div>
             </div>
-            <div>
-              <div className="text-slate-400 font-semibold mb-1">Workspace Code</div>
-              <div className="font-mono text-slate-800 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 w-fit">
-                {sessionData?.activeTenant?.code || "goodwin-crm"}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Company Workspace Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={orgForm.name}
+                  onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })}
+                  placeholder="Goodwin Grow CRM"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Business Email</label>
+                <input
+                  type="email"
+                  value={orgForm.businessEmail}
+                  onChange={(e) => setOrgForm({ ...orgForm, businessEmail: e.target.value })}
+                  placeholder="contact@company.com"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Phone Number</label>
+                <input
+                  type="tel"
+                  value={orgForm.phone}
+                  onChange={(e) => setOrgForm({ ...orgForm, phone: e.target.value })}
+                  placeholder="+91 98765 43210"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Website</label>
+                <input
+                  type="text"
+                  value={orgForm.website}
+                  onChange={(e) => setOrgForm({ ...orgForm, website: e.target.value })}
+                  placeholder="https://www.company.com"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-slate-600 font-semibold mb-1">Business Address</label>
+                <input
+                  type="text"
+                  value={orgForm.address}
+                  onChange={(e) => setOrgForm({ ...orgForm, address: e.target.value })}
+                  placeholder="Corporate Office Address"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Country</label>
+                <input
+                  type="text"
+                  value={orgForm.country}
+                  onChange={(e) => setOrgForm({ ...orgForm, country: e.target.value })}
+                  placeholder="India"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">Currency</label>
+                  <select
+                    value={orgForm.currency}
+                    onChange={(e) => setOrgForm({ ...orgForm, currency: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="AED">AED</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">Timezone</label>
+                  <select
+                    value={orgForm.timezone}
+                    onChange={(e) => setOrgForm({ ...orgForm, timezone: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+                  >
+                    <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                    <option value="UTC">UTC</option>
+                    <option value="America/New_York">America/New_York (EST)</option>
+                    <option value="Europe/London">Europe/London (GMT)</option>
+                    <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                  </select>
+                </div>
               </div>
             </div>
-            <div>
-              <div className="text-slate-400 font-semibold mb-1">Seat License Occupancy</div>
-              <div className="font-semibold text-slate-800">
-                {teamMembers.length} active seats in this workspace
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
+              <div className="text-slate-500">
+                Seat License Occupancy:{" "}
+                <strong className="text-slate-800">
+                  {teamMembers.length} / {orgForm.seatLimit || 10} active seats
+                </strong>
               </div>
+              <button
+                type="submit"
+                disabled={savingOrg}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{savingOrg ? "Saving..." : "Save Organization Profile"}</span>
+              </button>
             </div>
-            <div>
-              <div className="text-slate-400 font-semibold mb-1">Tenant Status</div>
-              <div className="text-emerald-700 font-bold">
-                {sessionData?.activeTenant?.status || "ACTIVE"}
-              </div>
-            </div>
-          </div>
+          </form>
 
           {/* Workspace Data Sanitation */}
           <div className="pt-5 border-t border-slate-100">

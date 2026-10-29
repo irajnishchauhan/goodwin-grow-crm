@@ -22,6 +22,13 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Invoice not found" }, { status: 404 });
     }
 
+    if (tenantCtx.isClientUser && invoice.clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cross-client invoice access is strictly prohibited" },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({ success: true, data: invoice });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -39,6 +46,13 @@ export async function PUT(
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify invoices" },
+        { status: 403 }
+      );
+    }
+
     const existing = await prisma.agencyInvoice.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
     });
@@ -48,18 +62,35 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { status, paymentMethod, dueDate, items, subtotal, taxAmount, totalAmount } = body;
+    const {
+      clientName,
+      clientBillingDetails,
+      clientId,
+      issueDate,
+      dueDate,
+      items,
+      subtotal,
+      taxAmount,
+      totalAmount,
+      status,
+      paymentMethod,
+    } = body;
 
     const updated = await prisma.agencyInvoice.update({
       where: { id },
       data: {
+        clientId: clientId !== undefined ? (clientId || null) : existing.clientId,
+        clientName: clientName !== undefined ? clientName : existing.clientName,
+        clientBillingDetails:
+          clientBillingDetails !== undefined ? clientBillingDetails : (existing.clientBillingDetails ?? undefined),
+        issueDate: issueDate !== undefined && issueDate ? new Date(issueDate) : existing.issueDate,
+        dueDate: dueDate !== undefined && dueDate ? new Date(dueDate) : existing.dueDate,
+        items: items !== undefined ? items : (existing.items ?? []),
+        subtotal: subtotal !== undefined ? Number(subtotal) : existing.subtotal,
+        taxAmount: taxAmount !== undefined ? Number(taxAmount) : existing.taxAmount,
+        totalAmount: totalAmount !== undefined ? Number(totalAmount) : existing.totalAmount,
         status: status !== undefined ? status : existing.status,
         paymentMethod: paymentMethod !== undefined ? paymentMethod : existing.paymentMethod,
-        dueDate: dueDate !== undefined ? new Date(dueDate) : existing.dueDate,
-        items: items !== undefined ? items : existing.items,
-        subtotal: subtotal !== undefined ? subtotal : existing.subtotal,
-        taxAmount: taxAmount !== undefined ? taxAmount : existing.taxAmount,
-        totalAmount: totalAmount !== undefined ? totalAmount : existing.totalAmount,
         paidAt: status === "PAID" ? (existing.paidAt || new Date()) : (status ? null : existing.paidAt),
       },
       include: { client: true },
@@ -74,6 +105,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -83,6 +116,13 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot delete invoices" },
+        { status: 403 }
+      );
     }
 
     const existing = await prisma.agencyInvoice.findFirst({

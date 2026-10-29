@@ -4,20 +4,37 @@ import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { hashPassword } from "@/lib/auth/password";
 
+function canManageTeam(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
+  const isAdminOrOwner =
+    tenantCtx.isPlatformAdmin ||
+    tenantCtx.membership.isOwner ||
+    tenantCtx.primaryRole === "Super Admin" ||
+    tenantCtx.primaryRole === "Agency Admin" ||
+    tenantCtx.roles.some((r) => ["super admin", "agency admin", "admin", "company admin", "company owner"].includes(r.toLowerCase().trim()));
+  return (
+    isAdminOrOwner ||
+    tenantCtx.hasPermission("team:write") ||
+    tenantCtx.hasPermission("team:manage")
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot invite team members" }, { status: 403 });
+    }
 
-    if (!tenantCtx.hasPermission("team:manage")) {
-      return NextResponse.json({ success: false, error: "Forbidden: Missing team:manage permission" }, { status: 403 });
+    if (!canManageTeam(tenantCtx)) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing team:write or team:manage permission" }, { status: 403 });
     }
 
     const tenantId = tenantCtx.tenant.id;
     const body = await req.json();
-    const { email, roleName = "Sales Executive", fullName } = body;
+    const { email, roleName = "Sales Executive", fullName, password } = body;
 
     if (!email) {
       return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
@@ -65,7 +82,8 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
-      const placeholderHash = await hashPassword(crypto.randomBytes(16).toString("hex"));
+      const passwordToHash = password || crypto.randomBytes(16).toString("hex");
+      const placeholderHash = await hashPassword(passwordToHash);
       user = await prisma.user.create({
         data: {
           email: cleanEmail,
@@ -73,6 +91,14 @@ export async function POST(req: Request) {
           passwordHash: placeholderHash,
           isActive: true,
         },
+      });
+    } else if (password || fullName) {
+      const updateData: any = {};
+      if (fullName) updateData.fullName = fullName;
+      if (password) updateData.passwordHash = await hashPassword(password);
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: updateData,
       });
     }
 

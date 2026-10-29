@@ -33,15 +33,15 @@ export async function GET(
   }
 }
 
-export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+async function updateDealer(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot update partners" }, { status: 403 });
     }
 
     const partner = await prisma.batteryPartner.findFirst({
@@ -70,9 +70,23 @@ export async function PUT(
       type,
       creditLimit,
       creditDays,
+      outstandingBalance,
+      overdueAmount,
       assignedSalesUserId,
       parentDistributorId,
     } = body;
+
+    if (parentDistributorId) {
+      const parentDist = await prisma.batteryPartner.findFirst({
+        where: { id: parentDistributorId, tenantId: tenantCtx.tenant.id },
+      });
+      if (!parentDist) {
+        return NextResponse.json(
+          { success: false, error: "Parent distributor not found in this workspace" },
+          { status: 404 }
+        );
+      }
+    }
 
     const updated = await prisma.batteryPartner.update({
       where: { id: partner.id },
@@ -83,7 +97,7 @@ export async function PUT(
         ...(email !== undefined && { email }),
         ...(gstin !== undefined && { gstin }),
         ...(pan !== undefined && { pan }),
-        ...(address && { address }),
+        ...(address !== undefined && { address }),
         ...(city && { city }),
         ...(state && { state }),
         ...(pincode !== undefined && { pincode }),
@@ -93,6 +107,8 @@ export async function PUT(
         ...(type && { type }),
         ...(creditLimit !== undefined && { creditLimit: Number(creditLimit) || 0 }),
         ...(creditDays !== undefined && { creditDays: Number(creditDays) || 30 }),
+        ...(outstandingBalance !== undefined && { outstandingBalance: Number(outstandingBalance) || 0 }),
+        ...(overdueAmount !== undefined && { overdueAmount: Number(overdueAmount) || 0 }),
         ...(assignedSalesUserId !== undefined && { assignedSalesUserId }),
         ...(parentDistributorId !== undefined && { parentDistributorId }),
       },
@@ -104,6 +120,20 @@ export async function PUT(
   }
 }
 
+export async function PUT(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateDealer(req, context);
+}
+
+export async function PATCH(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateDealer(req, context);
+}
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -113,6 +143,9 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot delete partners" }, { status: 403 });
     }
 
     const partner = await prisma.batteryPartner.findFirst({

@@ -7,6 +7,9 @@ export async function GET() {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+  }
 
   const quotations = await prisma.quotation.findMany({
     where: { tenantId: tenantCtx.tenant.id },
@@ -29,6 +32,12 @@ export async function POST(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("quotations:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing quotations:write permission" }, { status: 403 });
+    }
 
     const tenantId = tenantCtx.tenant.id;
     const body = await req.json();
@@ -48,10 +57,26 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate quotation number (QT-YYYY-XXXX)
-    const count = await prisma.quotation.count({ where: { tenantId } });
+    // Generate quotation number (QT-YYYY-XXXX) safely using highest existing sequence number
     const year = new Date().getFullYear();
-    const quotationNumber = `QT-${year}-${String(count + 1).padStart(4, "0")}`;
+    const prefix = `QT-${year}-`;
+    const existingQuotes = await prisma.quotation.findMany({
+      where: {
+        tenantId,
+        quotationNumber: { startsWith: prefix },
+      },
+      select: { quotationNumber: true },
+    });
+
+    let maxSeq = 0;
+    for (const q of existingQuotes) {
+      const seqPart = q.quotationNumber.slice(prefix.length);
+      const parsed = parseInt(seqPart, 10);
+      if (!isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+      }
+    }
+    const quotationNumber = `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
 
     // Decimal math calculations
     let subtotal = 0;
@@ -73,6 +98,7 @@ export async function POST(req: Request) {
       totalTax += lineTax;
 
       return {
+        productId: item.productId || null,
         description: item.description || "Service Item",
         quantity,
         unitPrice,

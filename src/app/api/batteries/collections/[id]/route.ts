@@ -29,7 +29,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
+async function updateCollection(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -39,9 +39,13 @@ export async function PATCH(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot update collections" }, { status: 403 });
+    }
 
     const collection = await prisma.batteryCollection.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
+      include: { partner: true },
     });
 
     if (!collection) {
@@ -49,15 +53,38 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { paymentAmount, paymentMode, followUpNotes, nextFollowUpDate, status } = body;
+    const {
+      paymentAmount,
+      paymentReceived,
+      amountPaid,
+      paymentDate: reqPaymentDate,
+      paymentMode,
+      followUpNotes,
+      nextFollowUpDate,
+      status,
+    } = body;
 
     let updatedAmountPaid = Number(collection.amountPaid);
     let newStatus = collection.status;
-    let paymentDate = collection.paymentDate;
+    let paymentDate = reqPaymentDate ? new Date(reqPaymentDate) : collection.paymentDate;
+    let deltaPaid = 0;
 
-    if (paymentAmount !== undefined) {
-      updatedAmountPaid += Number(paymentAmount);
-      paymentDate = new Date();
+    if (paymentAmount !== undefined || paymentReceived !== undefined) {
+      deltaPaid = Number(paymentAmount ?? paymentReceived ?? 0);
+      if (deltaPaid > 0) {
+        updatedAmountPaid += deltaPaid;
+        paymentDate = reqPaymentDate ? new Date(reqPaymentDate) : new Date();
+      }
+    } else if (amountPaid !== undefined) {
+      const nextPaid = Number(amountPaid);
+      deltaPaid = Math.max(0, nextPaid - Number(collection.amountPaid));
+      updatedAmountPaid = nextPaid;
+      if (deltaPaid > 0) {
+        paymentDate = reqPaymentDate ? new Date(reqPaymentDate) : new Date();
+      }
+    }
+
+    if (deltaPaid > 0) {
       if (updatedAmountPaid >= Number(collection.amountDue)) {
         newStatus = "PAID";
       } else if (updatedAmountPaid > 0) {
@@ -75,29 +102,48 @@ export async function PATCH(
         amountPaid: updatedAmountPaid,
         status: newStatus,
         paymentDate,
-        ...(paymentMode && { paymentMode }),
+        ...(paymentMode !== undefined && { paymentMode }),
         ...(followUpNotes !== undefined && { followUpNotes }),
-        nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate) : undefined,
+        ...(nextFollowUpDate !== undefined && {
+          nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate) : null,
+        }),
       },
       include: { partner: true },
     });
 
-    // Also adjust partner outstanding balance if payment recorded
-    if (paymentAmount) {
-      await prisma.batteryPartner.update({
-        where: { id: collection.partnerId },
-        data: {
-          outstandingBalance: {
-            decrement: Number(paymentAmount),
+    // Adjust partner outstandingBalance and overdueAmount when additional payment is recorded
+    if (deltaPaid > 0 && collection.partner) {
+      const newBalance = Math.max(0, Number(collection.partner.outstandingBalance) - deltaPaid);
+      const newOverdue = Math.max(0, Number(collection.partner.overdueAmount) - deltaPaid);
+      await prisma.batteryPartner
+        .update({
+          where: { id: collection.partnerId },
+          data: {
+            outstandingBalance: newBalance,
+            overdueAmount: newOverdue,
           },
-        },
-      }).catch(() => {});
+        })
+        .catch(() => {});
     }
 
     return NextResponse.json({ success: true, data: updated });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
+}
+
+export async function PUT(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateCollection(req, context);
+}
+
+export async function PATCH(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateCollection(req, context);
 }
 
 export async function DELETE(
@@ -109,6 +155,9 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot delete collections" }, { status: 403 });
     }
 
     const collection = await prisma.batteryCollection.findFirst({

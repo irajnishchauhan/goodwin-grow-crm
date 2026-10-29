@@ -107,7 +107,7 @@ export default function SocialMediaPage() {
             Total Organic Reach
           </div>
           <div className="text-2xl font-black text-slate-900 mt-1">
-            {(totalReach || 29500).toLocaleString()}
+            {totalReach.toLocaleString()}
           </div>
           <div className="text-[11px] text-emerald-600 font-medium mt-0.5">
             +38% vs previous month
@@ -119,7 +119,7 @@ export default function SocialMediaPage() {
             Total Engagements
           </div>
           <div className="text-2xl font-black text-slate-900 mt-1">
-            {((totalLikes + totalComments) || 2400).toLocaleString()}
+            {(totalLikes + totalComments).toLocaleString()}
           </div>
           <div className="text-[11px] text-indigo-600 font-medium mt-0.5">
             Likes, comments & shares

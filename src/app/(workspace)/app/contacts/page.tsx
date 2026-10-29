@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/utils";
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [assignedOwnerFilter, setAssignedOwnerFilter] = useState("ALL");
@@ -15,6 +16,7 @@ export default function ContactsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [jobTitle, setJobTitle] = useState("");
@@ -26,6 +28,7 @@ export default function ContactsPage() {
   const [editingContact, setEditingContact] = useState<any | null>(null);
   const [editFirstName, setEditFirstName] = useState("");
   const [editLastName, setEditLastName] = useState("");
+  const [editCompanyId, setEditCompanyId] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editJobTitle, setEditJobTitle] = useState("");
@@ -34,6 +37,7 @@ export default function ContactsPage() {
 
   useEffect(() => {
     fetchTeam();
+    fetchCompanies();
   }, []);
 
   useEffect(() => {
@@ -49,6 +53,18 @@ export default function ContactsPage() {
       }
     } catch (err) {
       console.error("Failed to fetch team members", err);
+    }
+  }
+
+  async function fetchCompanies() {
+    try {
+      const res = await fetch("/api/companies");
+      const data = await res.json();
+      if (data.success) {
+        setCompanies(data.data || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch companies", err);
     }
   }
 
@@ -83,6 +99,7 @@ export default function ContactsPage() {
         body: JSON.stringify({
           firstName,
           lastName,
+          companyId: companyId || null,
           email: email || null,
           phone: phone || null,
           jobTitle: jobTitle || null,
@@ -95,6 +112,7 @@ export default function ContactsPage() {
         setModalOpen(false);
         setFirstName("");
         setLastName("");
+        setCompanyId("");
         setEmail("");
         setPhone("");
         setJobTitle("");
@@ -114,6 +132,7 @@ export default function ContactsPage() {
     setEditingContact(c);
     setEditFirstName(c.firstName);
     setEditLastName(c.lastName);
+    setEditCompanyId(c.companyId || "");
     setEditEmail(c.email || "");
     setEditPhone(c.phone || "");
     setEditJobTitle(c.jobTitle || "");
@@ -133,6 +152,7 @@ export default function ContactsPage() {
         body: JSON.stringify({
           firstName: editFirstName,
           lastName: editLastName,
+          companyId: editCompanyId || null,
           email: editEmail || null,
           phone: editPhone || null,
           jobTitle: editJobTitle || null,
@@ -355,6 +375,22 @@ export default function ContactsPage() {
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Company</label>
+                <select
+                  value={companyId}
+                  onChange={(e) => setCompanyId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+                >
+                  <option value="">No Company</option>
+                  {companies.map((comp) => (
+                    <option key={comp.id} value={comp.id}>
+                      {comp.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Email</label>
                 <input
                   type="email"
@@ -454,6 +490,22 @@ export default function ContactsPage() {
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Company</label>
+                <select
+                  value={editCompanyId}
+                  onChange={(e) => setEditCompanyId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl cursor-pointer"
+                >
+                  <option value="">No Company</option>
+                  {companies.map((comp) => (
+                    <option key={comp.id} value={comp.id}>
+                      {comp.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>

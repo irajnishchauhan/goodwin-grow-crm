@@ -132,8 +132,25 @@ export async function POST(req: Request) {
       }
     }
 
-    const count = await prisma.agencyInvoice.count({ where: { tenantId: tenantCtx.tenant.id } });
-    const invoiceNumber = `INV-GGA-2026-${String(count + 1).padStart(3, "0")}`;
+    const existingInvoices = await prisma.agencyInvoice.findMany({
+      where: { tenantId: tenantCtx.tenant.id },
+      select: { invoiceNumber: true },
+    });
+    let maxSeq = existingInvoices.length;
+    for (const inv of existingInvoices) {
+      const match = inv.invoiceNumber?.match(/INV-GGA-\d{4}-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxSeq) maxSeq = num;
+      }
+    }
+    let nextSeq = maxSeq + 1;
+    let invoiceNumber = `INV-GGA-2026-${String(nextSeq).padStart(3, "0")}`;
+    const existingNumberSet = new Set(existingInvoices.map((i) => i.invoiceNumber));
+    while (existingNumberSet.has(invoiceNumber)) {
+      nextSeq += 1;
+      invoiceNumber = `INV-GGA-2026-${String(nextSeq).padStart(3, "0")}`;
+    }
 
     const sub = subtotal ? Number(subtotal) : 0;
     const tax = taxAmount !== undefined ? Number(taxAmount) : sub * 0.18; // default 18% GST

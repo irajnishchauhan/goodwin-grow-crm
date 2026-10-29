@@ -40,21 +40,8 @@ export async function createSession(
   return session;
 }
 
-interface CachedSession {
-  data: any;
-  cachedAt: number;
-}
-const sessionMemoryCache = new Map<string, CachedSession>();
-const CACHE_TTL_MS = 15000; // 15 seconds fast cache
-
 export async function getSessionByToken(token: string) {
   if (!token || !process.env.DATABASE_URL) return null;
-
-  const now = Date.now();
-  const cached = sessionMemoryCache.get(token);
-  if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
-    return cached.data;
-  }
 
   try {
     const session = await prisma.session.findUnique({
@@ -71,6 +58,11 @@ export async function getSessionByToken(token: string) {
                     name: true,
                     code: true,
                     status: true,
+                    settings: {
+                      select: {
+                        logoUrl: true,
+                      },
+                    },
                   },
                 },
                 agencyClient: {
@@ -101,20 +93,16 @@ export async function getSessionByToken(token: string) {
     });
 
     if (!session) {
-      sessionMemoryCache.delete(token);
       return null;
     }
     if (session.expiresAt < new Date()) {
-      sessionMemoryCache.delete(token);
-      await prisma.session.delete({ where: { token } }).catch(() => {});
+      await prisma.session.deleteMany({ where: { token } }).catch(() => {});
       return null;
     }
     if (!session.user.isActive) {
-      sessionMemoryCache.delete(token);
       return null;
     }
 
-    sessionMemoryCache.set(token, { data: session, cachedAt: now });
     return session;
   } catch (error) {
     console.error("Session verification error (database unavailable):", error);
@@ -126,20 +114,33 @@ export async function getCurrentSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
-  return getSessionByToken(token);
+  const session = await getSessionByToken(token);
+  if (!session) return null;
+  if (session.expiresAt < new Date()) {
+    await prisma.session.deleteMany({ where: { token } }).catch(() => {});
+    return null;
+  }
+  return session;
 }
 
-export async function destroySession(token: string) {
-  sessionMemoryCache.delete(token);
+export async function destroySession(tokenParam?: string) {
+  const cookieStore = await cookies();
+  const token = tokenParam || cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (token) {
+    try {
+      await prisma.session.deleteMany({ where: { token } });
+    } catch {
+      // Already deleted or invalid
+    }
+  }
   try {
-    await prisma.session.delete({ where: { token } });
+    cookieStore.delete(SESSION_COOKIE_NAME);
   } catch {
-    // Already deleted or invalid
+    // Ignore if called in read-only cookie context
   }
 }
 
 export async function updateSessionActiveTenant(token: string, newTenantId: string) {
-  sessionMemoryCache.delete(token);
   return prisma.session.update({
     where: { token },
     data: { activeTenantId: newTenantId },

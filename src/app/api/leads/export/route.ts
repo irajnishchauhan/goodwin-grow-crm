@@ -2,40 +2,37 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 
+function sanitizeCsvField(value: any): string {
+  if (value === null || value === undefined) return '""';
+  let str = String(value);
+  if (/^[=+\-@]/.test(str)) {
+    str = `'${str}`;
+  }
+  const escaped = str.replace(/"/g, '""');
+  return `"${escaped}"`;
+}
+
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
-
-  const { searchParams } = new URL(req.url);
-  const targetClientId = searchParams.get("clientId");
-
-  // Client Isolation: One client must NEVER access or export another client's leads
   if (tenantCtx.isClientUser) {
-    if (!tenantCtx.agencyClientId) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: No client associated with account" },
-        { status: 403 }
-      );
-    }
-    if (targetClientId && targetClientId !== tenantCtx.agencyClientId) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: Cross-client lead export is strictly prohibited" },
-        { status: 403 }
-      );
-    }
-  } else if (!tenantCtx.hasPermission("leads:export") && !tenantCtx.hasPermission("*")) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+  }
+
+  if (!tenantCtx.hasPermission("leads:export") && !tenantCtx.hasPermission("*")) {
     return NextResponse.json(
       { success: false, error: "Forbidden: Missing leads:export permission" },
       { status: 403 }
     );
   }
 
+  const { searchParams } = new URL(req.url);
+  const targetClientId = searchParams.get("clientId");
+
   const whereClause: any = { tenantId: tenantCtx.tenant.id };
-  if (tenantCtx.isClientUser) {
-    whereClause.clientId = tenantCtx.agencyClientId;
-  } else if (targetClientId && targetClientId !== "ALL") {
+  if (targetClientId && targetClientId !== "ALL") {
     whereClause.clientId = targetClientId;
   }
 
@@ -70,23 +67,23 @@ export async function GET(req: Request) {
   ];
 
   const rows = leads.map((l) => [
-    `"${l.id}"`,
-    `"${l.firstName}"`,
-    `"${l.lastName}"`,
-    `"${l.companyName || ""}"`,
-    `"${l.email || ""}"`,
-    `"${l.phone || ""}"`,
-    `"${l.status}"`,
-    `"${l.source || ""}"`,
-    `"${l.serviceRequired || ""}"`,
-    `"${l.dealValue ? Number(l.dealValue).toFixed(2) : ""}"`,
-    `"${l.nextFollowUp ? l.nextFollowUp.toISOString() : ""}"`,
-    `"${l.lostReason || ""}"`,
-    `"${l.priority}"`,
+    sanitizeCsvField(l.id),
+    sanitizeCsvField(l.firstName),
+    sanitizeCsvField(l.lastName),
+    sanitizeCsvField(l.companyName || ""),
+    sanitizeCsvField(l.email || ""),
+    sanitizeCsvField(l.phone || ""),
+    sanitizeCsvField(l.status),
+    sanitizeCsvField(l.source || ""),
+    sanitizeCsvField(l.serviceRequired || ""),
+    sanitizeCsvField(l.dealValue ? Number(l.dealValue).toFixed(2) : ""),
+    sanitizeCsvField(l.nextFollowUp ? l.nextFollowUp.toISOString() : ""),
+    sanitizeCsvField(l.lostReason || ""),
+    sanitizeCsvField(l.priority),
     l.score,
-    `"${l.client?.name || ""}"`,
-    `"${l.assignedOwner?.fullName || ""}"`,
-    `"${l.createdAt.toISOString()}"`,
+    sanitizeCsvField(l.client?.name || ""),
+    sanitizeCsvField(l.assignedOwner?.fullName || ""),
+    sanitizeCsvField(l.createdAt.toISOString()),
   ]);
 
   const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");

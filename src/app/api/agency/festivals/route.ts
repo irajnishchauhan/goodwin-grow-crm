@@ -81,8 +81,8 @@ export async function GET(req: Request) {
       tenantId
     );
 
-    // 3. Only seed if explicitly requested via query param ?seed=true
-    if (rows.length === 0 && shouldSeed) {
+    // 3. Seed default festivals if 0 rows exist for this tenant so real UUIDs are always returned
+    if (rows.length === 0) {
       for (const item of initialDefaultFestivals) {
         const id = crypto.randomUUID();
         await prisma.$executeRawUnsafe(
@@ -116,6 +116,12 @@ export async function POST(req: Request) {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden: Client users cannot modify marketing festivals" },
+      { status: 403 }
+    );
   }
 
   const tenantId = tenantCtx.tenant.id;

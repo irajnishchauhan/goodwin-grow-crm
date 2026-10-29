@@ -25,19 +25,32 @@ export function verifyClientConfidentialAccess(
     email?: string | null;
   }
 ): ClientAccessCheck {
+  if (tenantCtx?.isClientUser) {
+    return {
+      isSuperAdmin: false,
+      isAssignedAdmin: false,
+      canAccessConfidentialNotes: false,
+      roleDescription: "Client User",
+    };
+  }
+
+  const adminRoles = ["super admin", "agency admin", "admin", "company admin", "company owner"];
+  const normalizedPrimary = (tenantCtx?.primaryRole || "").toLowerCase().trim();
+  const hasAdminRole = (tenantCtx?.roles || []).some((r) =>
+    adminRoles.includes(r.toLowerCase().trim())
+  );
+
   // 1. Super Admin Check:
-  // Restricted strictly to Platform Super Admins, Workspace Owner, or explicit Super Admin role.
   const isSuperAdmin = Boolean(
     tenantCtx?.isPlatformAdmin === true ||
     tenantCtx?.membership?.isOwner === true ||
-    tenantCtx?.primaryRole === "Super Admin" ||
-    tenantCtx?.roles?.includes("Super Admin")
+    adminRoles.includes(normalizedPrimary) ||
+    hasAdminRole
   );
 
   // 2. Assigned Account Manager Check:
   const currentUserId = tenantCtx.user.id;
   const currentUserName = (tenantCtx.user.fullName || "").toLowerCase().trim();
-  const currentUserEmail = (tenantCtx.user.email || "").toLowerCase().trim();
 
   const assignedManagerId = client.accountManagerId;
   const assignedManagerName = (client.accountManagerName || "").toLowerCase().trim();
@@ -54,11 +67,6 @@ export function verifyClientConfidentialAccess(
     (currentUserName === assignedManagerName ||
       currentUserName.replace(/\s+/g, " ") === assignedManagerName.replace(/\s+/g, " "))
   ) {
-    isAssignedAdmin = true;
-  }
-
-  // 3. Client User Check (if client user is accessing their own company portal)
-  if (!isAssignedAdmin && client.email && currentUserEmail && client.email.toLowerCase() === currentUserEmail) {
     isAssignedAdmin = true;
   }
 

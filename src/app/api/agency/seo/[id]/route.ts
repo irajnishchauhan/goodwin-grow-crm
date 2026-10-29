@@ -22,6 +22,13 @@ export async function GET(
       return NextResponse.json({ success: false, error: "SEO Tracker not found" }, { status: 404 });
     }
 
+    if (tenantCtx.isClientUser && item.clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cross-client SEO tracker access is prohibited" },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({ success: true, data: item });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -37,6 +44,12 @@ export async function PUT(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify SEO trackers" },
+        { status: 403 }
+      );
     }
 
     const existing = await prisma.seoTracker.findFirst({
@@ -82,6 +95,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -91,6 +106,12 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot delete SEO trackers" },
+        { status: 403 }
+      );
     }
 
     const existing = await prisma.seoTracker.findFirst({

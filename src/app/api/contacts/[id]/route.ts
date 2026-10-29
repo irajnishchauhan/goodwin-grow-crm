@@ -11,6 +11,9 @@ export async function GET(
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+  }
 
   const contact = await prisma.contact.findFirst({
     where: { id, tenantId: tenantCtx.tenant.id },
@@ -52,9 +55,16 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("contacts:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing contacts:write permission" }, { status: 403 });
+    }
 
+    const tenantId = tenantCtx.tenant.id;
     const contact = await prisma.contact.findFirst({
-      where: { id, tenantId: tenantCtx.tenant.id },
+      where: { id, tenantId },
     });
 
     if (!contact) {
@@ -63,6 +73,13 @@ export async function PUT(
 
     const body = await req.json();
     const { firstName, lastName, companyId, email, phone, jobTitle, source, tags, assignedOwnerId } = body;
+
+    if (companyId) {
+      const validCompany = await prisma.company.findFirst({ where: { id: companyId, tenantId } });
+      if (!validCompany) {
+        return NextResponse.json({ success: false, error: "Invalid company for this tenant" }, { status: 400 });
+      }
+    }
 
     const updated = await prisma.contact.update({
       where: { id: contact.id },
@@ -85,6 +102,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -94,6 +113,12 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("contacts:delete")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing contacts:delete permission" }, { status: 403 });
     }
 
     const contact = await prisma.contact.findFirst({

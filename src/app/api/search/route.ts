@@ -7,6 +7,16 @@ export async function GET(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Forbidden",
+        data: { leads: [], contacts: [], companies: [], deals: [] },
+      },
+      { status: 403 }
+    );
+  }
 
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim();

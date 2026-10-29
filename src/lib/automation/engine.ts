@@ -2,15 +2,42 @@ import prisma from "@/lib/prisma";
 
 export interface AutomationTriggerContext {
   tenantId: string;
-  triggerEvent: string; // e.g. 'lead.created', 'lead.qualified', 'deal.won'
-  entityType: "Lead" | "Deal" | "Task" | "Contact";
+  triggerEvent?: string; // e.g. 'lead.created', 'LEAD_CREATED', 'lead.qualified', 'deal.won'
+  event?: string;
+  entityType: "Lead" | "Deal" | "Task" | "Contact" | string;
   entityId: string;
   payload?: Record<string, any>;
+  data?: Record<string, any>;
   depth?: number;
 }
 
+const EVENT_EQUIVALENTS: Record<string, string[]> = {
+  "LEAD_CREATED": ["LEAD_CREATED", "lead.created"],
+  "lead.created": ["LEAD_CREATED", "lead.created"],
+  "LEAD_STATUS_CHANGED": ["LEAD_STATUS_CHANGED", "lead.status_changed", "lead.qualified"],
+  "lead.status_changed": ["LEAD_STATUS_CHANGED", "lead.status_changed"],
+  "lead.qualified": ["lead.qualified", "LEAD_STATUS_CHANGED"],
+  "DEAL_STAGE_CHANGED": ["DEAL_STAGE_CHANGED", "deal.stage_changed"],
+  "deal.stage_changed": ["DEAL_STAGE_CHANGED", "deal.stage_changed"],
+  "DEAL_WON": ["DEAL_WON", "deal.won"],
+  "deal.won": ["DEAL_WON", "deal.won"],
+  "DEAL_LOST": ["DEAL_LOST", "deal.lost"],
+  "deal.lost": ["DEAL_LOST", "deal.lost"],
+  "TASK_OVERDUE": ["TASK_OVERDUE", "task.overdue"],
+  "task.overdue": ["TASK_OVERDUE", "task.overdue"],
+};
+
 export async function processAutomationRules(ctx: AutomationTriggerContext) {
-  const { tenantId, triggerEvent, entityType, entityId, payload = {}, depth = 0 } = ctx;
+  const { tenantId, entityType, entityId, depth = 0 } = ctx;
+  const triggerEvent = ctx.triggerEvent || ctx.event || "";
+  const mergedData = { ...(ctx.payload || {}), ...(ctx.data || {}) };
+  const payload = {
+    tenantId,
+    entityType,
+    entityId,
+    ...mergedData,
+    data: ctx.data || mergedData,
+  };
 
   // Infinite Loop Protection: max depth 3
   if (depth > 3) {
@@ -18,10 +45,12 @@ export async function processAutomationRules(ctx: AutomationTriggerContext) {
     return;
   }
 
+  const eventCandidates = EVENT_EQUIVALENTS[triggerEvent] || [triggerEvent];
+
   const rules = await prisma.automationRule.findMany({
     where: {
       tenantId,
-      triggerEvent,
+      triggerEvent: { in: eventCandidates },
       isActive: true,
     },
   });
@@ -33,9 +62,26 @@ export async function processAutomationRules(ctx: AutomationTriggerContext) {
 
       // Evaluate conditions
       let matches = true;
+      if (rule.triggerEvent === "lead.qualified" && triggerEvent === "LEAD_STATUS_CHANGED" && mergedData.status && mergedData.status !== "QUALIFIED") {
+        matches = false;
+      }
       for (const cond of conditions) {
-        const val = payload[cond.field];
-        if (cond.op === "eq" && val !== cond.value) {
+        if (!matches) break;
+        const val = mergedData[cond.field];
+        const op = cond.op || cond.operator || "eq";
+        if ((op === "eq" || op === "EQUALS") && val !== cond.value) {
+          matches = false;
+          break;
+        } else if ((op === "neq" || op === "NOT_EQUALS") && val === cond.value) {
+          matches = false;
+          break;
+        } else if ((op === "gt" || op === "GREATER_THAN") && !(Number(val) > Number(cond.value))) {
+          matches = false;
+          break;
+        } else if ((op === "lt" || op === "LESS_THAN") && !(Number(val) < Number(cond.value))) {
+          matches = false;
+          break;
+        } else if ((op === "contains" || op === "CONTAINS") && !String(val ?? "").toLowerCase().includes(String(cond.value ?? "").toLowerCase())) {
           matches = false;
           break;
         }
@@ -49,7 +95,7 @@ export async function processAutomationRules(ctx: AutomationTriggerContext) {
             entityType,
             entityId,
             status: "SKIPPED",
-            details: { reason: "Conditions not met", payload },
+            details: { reason: "Conditions not met", payload: mergedData },
           },
         });
         continue;
@@ -60,6 +106,15 @@ export async function processAutomationRules(ctx: AutomationTriggerContext) {
 
       for (const action of actions) {
         if (action.type === "CREATE_TASK") {
+          const resolvedAssignedToId =
+            action.assignedToId ||
+            payload.data?.assignedOwnerId ||
+            payload.data?.assignedToId ||
+            mergedData.assignedOwnerId ||
+            mergedData.assignedToId ||
+            mergedData.ownerId ||
+            null;
+
           const task = await prisma.task.create({
             data: {
               tenantId,
@@ -68,26 +123,45 @@ export async function processAutomationRules(ctx: AutomationTriggerContext) {
               dueDate: new Date(Date.now() + (action.dueInDays || 1) * 86400000),
               priority: action.priority || "HIGH",
               status: "PENDING",
+              assignedToId: resolvedAssignedToId,
               leadId: entityType === "Lead" ? entityId : null,
               dealId: entityType === "Deal" ? entityId : null,
               contactId: entityType === "Contact" ? entityId : null,
             },
           });
           executionResults.push({ action: "CREATE_TASK", taskId: task.id });
+        } else if (action.type === "UPDATE_FIELD") {
+          if (action.field) {
+            if (entityType === "Deal") {
+              await prisma.deal.updateMany({
+                where: { id: payload.entityId, tenantId: payload.tenantId },
+                data: { [action.field]: action.value },
+              });
+            } else {
+              await prisma.lead.updateMany({
+                where: { id: payload.entityId, tenantId: payload.tenantId },
+                data: { [action.field]: action.value },
+              });
+            }
+            executionResults.push({ action: "UPDATE_FIELD", field: action.field, value: action.value });
+          }
         } else if (action.type === "LOG_ACTIVITY") {
-          const act = await prisma.activity.create({
-            data: {
-              tenantId,
-              type: "NOTE",
-              title: action.title || "Automated Notification",
-              description: action.description || `Rule triggered: ${rule.name}`,
-              performedById: payload.userId || (await getSystemUserId(tenantId)),
-              leadId: entityType === "Lead" ? entityId : null,
-              dealId: entityType === "Deal" ? entityId : null,
-              contactId: entityType === "Contact" ? entityId : null,
-            },
-          });
-          executionResults.push({ action: "LOG_ACTIVITY", activityId: act.id });
+          const performedById = mergedData.userId || (await getSystemUserId(tenantId));
+          if (performedById) {
+            const act = await prisma.activity.create({
+              data: {
+                tenantId,
+                type: "NOTE",
+                title: action.title || "Automated Notification",
+                description: action.description || `Rule triggered: ${rule.name}`,
+                performedById,
+                leadId: entityType === "Lead" ? entityId : null,
+                dealId: entityType === "Deal" ? entityId : null,
+                contactId: entityType === "Contact" ? entityId : null,
+              },
+            });
+            executionResults.push({ action: "LOG_ACTIVITY", activityId: act.id });
+          }
         }
       }
 
@@ -118,9 +192,13 @@ export async function processAutomationRules(ctx: AutomationTriggerContext) {
   }
 }
 
-async function getSystemUserId(tenantId: string): Promise<string> {
+export const evaluateAutomations = processAutomationRules;
+
+async function getSystemUserId(tenantId: string): Promise<string | null> {
   const member = await prisma.tenantMembership.findFirst({
     where: { tenantId, status: "ACTIVE" },
   });
-  return member?.userId || "system";
+  if (member?.userId) return member.userId;
+  const fallbackUser = await prisma.user.findFirst({ select: { id: true } });
+  return fallbackUser?.id || null;
 }

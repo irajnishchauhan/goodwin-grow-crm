@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
+import { evaluateAutomations } from "@/lib/automation/engine";
 
 export async function GET(
   req: Request,
@@ -10,6 +11,9 @@ export async function GET(
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
 
   const lead = await prisma.lead.findFirst({
@@ -36,14 +40,6 @@ export async function GET(
     return NextResponse.json({ success: false, error: "Lead not found" }, { status: 404 });
   }
 
-  // Client Isolation: Check ownership
-  if (tenantCtx.isClientUser && lead.clientId !== tenantCtx.agencyClientId) {
-    return NextResponse.json(
-      { success: false, error: "Forbidden: Cross-client lead access is strictly prohibited" },
-      { status: 403 }
-    );
-  }
-
   return NextResponse.json({ success: true, data: lead });
 }
 
@@ -57,25 +53,21 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
 
     if (!tenantCtx.hasPermission("leads:write")) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
-    const lead = await prisma.lead.findFirst({
-      where: { id, tenantId: tenantCtx.tenant.id },
+    const tenantId = tenantCtx.tenant.id;
+    const existing = await prisma.lead.findFirst({
+      where: { id, tenantId },
     });
 
-    if (!lead) {
+    if (!existing) {
       return NextResponse.json({ success: false, error: "Lead not found" }, { status: 404 });
-    }
-
-    // Client Isolation: Check ownership
-    if (tenantCtx.isClientUser && lead.clientId !== tenantCtx.agencyClientId) {
-      return NextResponse.json(
-        { success: false, error: "Forbidden: You cannot modify another client's lead" },
-        { status: 403 }
-      );
     }
 
     const body = await req.json();
@@ -96,63 +88,165 @@ export async function PUT(
       score,
       tags,
       assignedOwnerId,
+      convertToDeal,
+      dealTitle,
     } = body;
 
-    const previousStatus = lead.status;
+    if (assignedOwnerId) {
+      const validMember = await prisma.tenantMembership.findFirst({
+        where: { tenantId, userId: assignedOwnerId },
+      });
+      if (!validMember) {
+        return NextResponse.json({ success: false, error: "Invalid assigned owner for this tenant" }, { status: 400 });
+      }
+    }
+
+    if (clientId) {
+      const validClient = await prisma.agencyClient.findFirst({
+        where: { id: clientId, tenantId },
+      });
+      if (!validClient) {
+        return NextResponse.json({ success: false, error: "Invalid client for this tenant" }, { status: 400 });
+      }
+    }
+
+    const previousStatus = existing.status;
+    const targetStatus = convertToDeal ? "CONVERTED" : (status ?? existing.status);
+    const shouldConvert = (targetStatus === "CONVERTED" && existing.status !== "CONVERTED") || Boolean(convertToDeal);
 
     const updateData: any = {
-      firstName: firstName !== undefined ? firstName.trim() : lead.firstName,
-      lastName: lastName !== undefined ? lastName.trim() : lead.lastName,
-      companyName: companyName !== undefined ? companyName : lead.companyName,
-      email: email !== undefined ? (email ? email.trim() : null) : lead.email,
-      phone: phone !== undefined ? (phone ? phone.trim() : null) : lead.phone,
-      status: status ?? lead.status,
-      source: source ?? lead.source,
-      serviceRequired: serviceRequired !== undefined ? serviceRequired : lead.serviceRequired,
-      dealValue: dealValue !== undefined ? (dealValue ? Number(dealValue) : null) : lead.dealValue,
-      nextFollowUp: nextFollowUp !== undefined ? (nextFollowUp ? new Date(nextFollowUp) : null) : lead.nextFollowUp,
-      lostReason: status === "LOST" ? (lostReason || lead.lostReason) : (status && status !== "LOST" ? null : (lostReason ?? lead.lostReason)),
-      priority: priority ?? lead.priority,
-      score: score !== undefined ? Number(score) : lead.score,
-      tags: Array.isArray(tags) ? tags : lead.tags,
-      assignedOwnerId: assignedOwnerId !== undefined ? assignedOwnerId : lead.assignedOwnerId,
+      firstName: firstName !== undefined ? firstName.trim() : existing.firstName,
+      lastName: lastName !== undefined ? lastName.trim() : existing.lastName,
+      companyName: companyName !== undefined ? companyName : existing.companyName,
+      email: email !== undefined ? (email ? email.trim() : null) : existing.email,
+      phone: phone !== undefined ? (phone ? phone.trim() : null) : existing.phone,
+      status: targetStatus,
+      source: source ?? existing.source,
+      serviceRequired: serviceRequired !== undefined ? serviceRequired : existing.serviceRequired,
+      dealValue: dealValue !== undefined ? (dealValue ? Number(dealValue) : null) : existing.dealValue,
+      nextFollowUp: nextFollowUp !== undefined ? (nextFollowUp ? new Date(nextFollowUp) : null) : existing.nextFollowUp,
+      lostReason: targetStatus === "LOST" ? (lostReason || existing.lostReason) : (targetStatus && targetStatus !== "LOST" ? null : (lostReason ?? existing.lostReason)),
+      priority: priority ?? existing.priority,
+      score: score !== undefined ? Number(score) : existing.score,
+      tags: Array.isArray(tags) ? tags : existing.tags,
+      assignedOwnerId: assignedOwnerId !== undefined ? assignedOwnerId : existing.assignedOwnerId,
     };
 
-    if (!tenantCtx.isClientUser && clientId !== undefined) {
+    if (clientId !== undefined) {
       updateData.clientId = clientId || null;
     }
 
-    const updated = await prisma.lead.update({
-      where: { id: lead.id },
-      data: updateData,
-      include: {
-        assignedOwner: { select: { id: true, fullName: true, email: true } },
-        client: { select: { id: true, name: true, brandName: true } },
-      },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      if (shouldConvert && !existing.convertedContactId) {
+        let companyId: string | null = null;
+        const resolvedCompanyName = updateData.companyName;
+        if (resolvedCompanyName) {
+          let company = await tx.company.findFirst({
+            where: { tenantId, name: resolvedCompanyName },
+          });
+          if (!company) {
+            company = await tx.company.create({
+              data: {
+                tenantId,
+                name: resolvedCompanyName,
+                assignedOwnerId: updateData.assignedOwnerId || tenantCtx.user.id,
+              },
+            });
+          }
+          companyId = company.id;
+        }
 
-    if (status && status !== previousStatus) {
-      await prisma.activity.create({
-        data: {
-          tenantId: tenantCtx.tenant.id,
-          type: "TASK",
-          title: "Lead Status Changed",
-          description: `Status changed from ${previousStatus} to ${status}${status === "LOST" && lostReason ? ` (Reason: ${lostReason})` : ""}`,
-          performedById: tenantCtx.user.id,
-          leadId: lead.id,
+        const contact = await tx.contact.create({
+          data: {
+            tenantId,
+            companyId,
+            firstName: updateData.firstName,
+            lastName: updateData.lastName,
+            email: updateData.email,
+            phone: updateData.phone,
+            source: updateData.source,
+            tags: updateData.tags,
+            assignedOwnerId: updateData.assignedOwnerId || tenantCtx.user.id,
+          },
+        });
+
+        let createdDealId: string | null = null;
+        const pipeline = await tx.pipeline.findFirst({
+          where: { tenantId, isDefault: true },
+          include: { stages: { orderBy: { orderIndex: "asc" } } },
+        });
+
+        if (pipeline && pipeline.stages.length > 0) {
+          const initialStage = pipeline.stages[0];
+          const resolvedTitle =
+            dealTitle ||
+            `${resolvedCompanyName || `${updateData.firstName} ${updateData.lastName}`} - ${updateData.serviceRequired || "New Deal"}`;
+          const resolvedVal = Number(dealValue ?? existing.dealValue) || 0;
+
+          const deal = await tx.deal.create({
+            data: {
+              tenantId,
+              pipelineId: pipeline.id,
+              stageId: initialStage.id,
+              companyId,
+              contactId: contact.id,
+              title: resolvedTitle,
+              value: resolvedVal,
+              currency: "INR",
+              probability: initialStage.winProbability,
+              status: "OPEN",
+              assignedOwnerId: updateData.assignedOwnerId || tenantCtx.user.id,
+            },
+          });
+          createdDealId = deal.id;
+        }
+
+        updateData.convertedAt = new Date();
+        updateData.convertedContactId = contact.id;
+        updateData.convertedDealId = createdDealId;
+      }
+
+      return tx.lead.update({
+        where: { id: existing.id },
+        data: updateData,
+        include: {
+          assignedOwner: { select: { id: true, fullName: true, email: true } },
+          client: { select: { id: true, name: true, brandName: true } },
         },
       });
-    }
+    });
 
-    if (nextFollowUp && nextFollowUp !== lead.nextFollowUp?.toISOString()) {
+    if (targetStatus && targetStatus !== previousStatus) {
       await prisma.activity.create({
         data: {
-          tenantId: tenantCtx.tenant.id,
+          tenantId,
+          type: "TASK",
+          title: "Lead Status Changed",
+          description: `Status changed from ${previousStatus} to ${targetStatus}${targetStatus === "LOST" && lostReason ? ` (Reason: ${lostReason})` : ""}`,
+          performedById: tenantCtx.user.id,
+          leadId: existing.id,
+        },
+      });
+
+      evaluateAutomations({
+        tenantId,
+        triggerEvent: "LEAD_STATUS_CHANGED",
+        entityType: "Lead",
+        entityId: existing.id,
+        data: updated,
+        payload: { ...updated, previousStatus },
+      }).catch(() => {});
+    }
+
+    if (nextFollowUp && nextFollowUp !== existing.nextFollowUp?.toISOString()) {
+      await prisma.activity.create({
+        data: {
+          tenantId,
           type: "CALL",
           title: "Next Follow-Up Scheduled",
           description: `Follow-up scheduled for ${new Date(nextFollowUp).toLocaleString("en-IN")}`,
           performedById: tenantCtx.user.id,
-          leadId: lead.id,
+          leadId: existing.id,
         },
       });
     }
@@ -162,6 +256,8 @@ export async function PUT(
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export const PATCH = PUT;
 
 export async function DELETE(
   req: Request,

@@ -38,6 +38,7 @@ export default async function PartnerPortalPage() {
       partners={partners}
       products={products}
       tenantName={tenantCtx.tenant.name}
+      tenantLogoUrl={tenantCtx.tenant.logoUrl || null}
       currentUser={tenantCtx.user}
     />
   );

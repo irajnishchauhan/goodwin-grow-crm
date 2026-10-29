@@ -97,11 +97,15 @@ export async function POST(req: Request) {
     // Determine initial active tenant
     let resolvedTenantId: string | null = targetTenantId ?? null;
 
+    if (resolvedTenantId && !user.isPlatformAdmin) {
+      const hasMembership = user.memberships.some((m: any) => m.tenantId === resolvedTenantId);
+      if (!hasMembership) {
+        resolvedTenantId = user.memberships[0]?.tenantId ?? null;
+      }
+    }
+
     if (!resolvedTenantId) {
-      if (user.memberships.length === 1) {
-        resolvedTenantId = user.memberships[0].tenantId;
-      } else if (user.memberships.length > 1) {
-        // Return multi-membership prompt for the client to choose, or auto-pick first if preferred
+      if (user.memberships.length >= 1) {
         resolvedTenantId = user.memberships[0].tenantId;
       }
     }

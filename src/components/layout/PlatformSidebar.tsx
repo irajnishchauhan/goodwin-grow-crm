@@ -9,13 +9,17 @@ import {
   ArrowLeft,
   LogOut,
   Layers,
+  Sparkles,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const platformLinks = [
   { name: "Platform Overview", href: "/platform", icon: ShieldAlert },
+  { name: "Super Admin Console", href: "/super-admin", icon: Sparkles },
   { name: "Client Companies", href: "/platform/clients", icon: Building2 },
   { name: "Subscription Plans", href: "/platform/plans", icon: CreditCard },
+  { name: "Workspace Settings", href: "/app/settings", icon: Settings },
 ];
 
 export function PlatformSidebar() {

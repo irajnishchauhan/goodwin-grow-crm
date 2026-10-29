@@ -84,12 +84,15 @@ export async function POST(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot create orders" }, { status: 403 });
+  }
 
   const tenantId = tenantCtx.tenant.id;
 
   try {
     const body = await req.json();
-    const { partnerId, items, deliveryAddress, notes, expectedDate } = body;
+    const { partnerId, items, deliveryAddress, notes, expectedDate, status, totalAmount } = body;
 
     if (!partnerId || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -111,10 +114,22 @@ export async function POST(req: Request) {
     for (const item of items) {
       calculatedTotal += Number(item.unitPrice || 0) * Number(item.quantity || 1);
     }
+    if (totalAmount !== undefined && Number(totalAmount) > 0) {
+      calculatedTotal = Number(totalAmount);
+    }
 
-    // Auto-generate order number
-    const count = await prisma.batteryOrder.count({ where: { tenantId } });
-    const orderNumber = `GB-ORD-2026-${(count + 1).toString().padStart(3, "0")}`;
+    // Auto-generate collision-safe order number
+    const existingOrders = await prisma.batteryOrder.findMany({
+      where: { tenantId, orderNumber: { startsWith: "GB-ORD-2026-" } },
+      select: { orderNumber: true },
+    });
+    let maxSeq = existingOrders.length;
+    for (const o of existingOrders) {
+      const num = parseInt(o.orderNumber.replace("GB-ORD-2026-", ""), 10);
+      if (!isNaN(num) && num > maxSeq) maxSeq = num;
+    }
+    const orderNumber = `GB-ORD-2026-${(maxSeq + 1).toString().padStart(3, "0")}`;
+    const orderStatus = (status as BatteryOrderStatus) || BatteryOrderStatus.PENDING_APPROVAL;
 
     const order = await prisma.batteryOrder.create({
       data: {
@@ -123,7 +138,7 @@ export async function POST(req: Request) {
         partnerId,
         salesUserId: tenantCtx.user.id,
         totalAmount: calculatedTotal,
-        status: BatteryOrderStatus.PENDING_APPROVAL,
+        status: orderStatus,
         erpSyncStatus: "QUEUED_FOR_ERP_VALIDATION",
         items,
         deliveryAddress: deliveryAddress || partner.address,
@@ -134,6 +149,15 @@ export async function POST(req: Request) {
         partner: true,
       },
     });
+
+    if (orderStatus !== BatteryOrderStatus.CANCELLED && orderStatus !== BatteryOrderStatus.DRAFT && calculatedTotal > 0) {
+      await prisma.batteryPartner.update({
+        where: { id: partner.id },
+        data: {
+          outstandingBalance: Number(partner.outstandingBalance || 0) + calculatedTotal,
+        },
+      }).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, data: order }, { status: 201 });
   } catch (error: any) {
@@ -146,6 +170,9 @@ export async function PATCH(req: Request) {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot update orders" }, { status: 403 });
   }
 
   const tenantId = tenantCtx.tenant.id;

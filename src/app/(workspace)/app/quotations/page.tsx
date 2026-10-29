@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileSpreadsheet, Plus, Search, Building2, Download, Trash2, X, Filter, User } from "lucide-react";
+import { FileSpreadsheet, Plus, Search, Building2, Download, Trash2, X, Filter, User, Edit2, Save } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function QuotationsPage() {
   const [quotations, setQuotations] = useState<any[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [deals, setDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -15,12 +18,27 @@ export default function QuotationsPage() {
   const [items, setItems] = useState([
     { description: "Industrial Tubular Battery (150Ah)", quantity: 5, unitPrice: 12500, discount: 0, taxRate: 18 },
   ]);
+  const [companyId, setCompanyId] = useState("");
+  const [contactId, setContactId] = useState("");
+  const [dealId, setDealId] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [terms, setTerms] = useState("Net 30 days. Includes standard 36-month replacement warranty.");
   const [creating, setCreating] = useState(false);
 
+  // Edit Quotation Modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingQuotation, setEditingQuotation] = useState<any | null>(null);
+  const [editItems, setEditItems] = useState<any[]>([]);
+  const [editCompanyId, setEditCompanyId] = useState("");
+  const [editContactId, setEditContactId] = useState("");
+  const [editDealId, setEditDealId] = useState("");
+  const [editValidUntil, setEditValidUntil] = useState("");
+  const [editTerms, setEditTerms] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   useEffect(() => {
     fetchTeam();
+    fetchEntities();
     fetchQuotations();
   }, []);
 
@@ -31,6 +49,26 @@ export default function QuotationsPage() {
       if (data.success) {
         setTeamMembers(data.data || []);
       }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function fetchEntities() {
+    try {
+      const [compRes, contRes, dealRes] = await Promise.all([
+        fetch("/api/companies"),
+        fetch("/api/contacts"),
+        fetch("/api/deals"),
+      ]);
+      const [compData, contData, dealData] = await Promise.all([
+        compRes.json(),
+        contRes.json(),
+        dealRes.json(),
+      ]);
+      if (compData.success) setCompanies(compData.data || []);
+      if (contData.success) setContacts(contData.data || []);
+      if (dealData.success) setDeals(dealData.data || []);
     } catch (err) {
       console.error(err);
     }
@@ -68,6 +106,23 @@ export default function QuotationsPage() {
     );
   }
 
+  function addEditItem() {
+    setEditItems((prev) => [
+      ...prev,
+      { description: "Product or Service Item", quantity: 1, unitPrice: 5000, discount: 0, taxRate: 18 },
+    ]);
+  }
+
+  function removeEditItem(index: number) {
+    setEditItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateEditItem(index: number, field: string, val: any) {
+    setEditItems((prev) =>
+      prev.map((it, i) => (i === index ? { ...it, [field]: val } : it))
+    );
+  }
+
   // Calculate live preview
   let subtotal = 0;
   let totalDiscount = 0;
@@ -87,6 +142,24 @@ export default function QuotationsPage() {
 
   const grandTotal = subtotal - totalDiscount + totalTax;
 
+  let editSubtotal = 0;
+  let editTotalDiscount = 0;
+  let editTotalTax = 0;
+
+  editItems.forEach((it) => {
+    const q = Number(it.quantity) || 0;
+    const p = Number(it.unitPrice) || 0;
+    const d = Number(it.discount) || 0;
+    const t = Number(it.taxRate) || 0;
+    const lineSub = q * p;
+    const lineTax = (lineSub - d) * (t / 100);
+    editSubtotal += lineSub;
+    editTotalDiscount += d;
+    editTotalTax += lineTax;
+  });
+
+  const editGrandTotal = editSubtotal - editTotalDiscount + editTotalTax;
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setCreating(true);
@@ -95,7 +168,14 @@ export default function QuotationsPage() {
       const res = await fetch("/api/quotations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, validUntil, terms }),
+        body: JSON.stringify({
+          items,
+          companyId: companyId || null,
+          contactId: contactId || null,
+          dealId: dealId || null,
+          validUntil: validUntil || null,
+          terms,
+        }),
       });
 
       const data = await res.json();
@@ -109,6 +189,61 @@ export default function QuotationsPage() {
       alert("Error creating quotation");
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEditModal(q: any) {
+    setEditingQuotation(q);
+    setEditCompanyId(q.companyId || "");
+    setEditContactId(q.contactId || "");
+    setEditDealId(q.dealId || "");
+    setEditValidUntil(q.validUntil ? new Date(q.validUntil).toISOString().slice(0, 10) : "");
+    setEditTerms(q.terms || "");
+    setEditItems(
+      Array.isArray(q.items) && q.items.length > 0
+        ? q.items.map((it: any) => ({
+            description: it.description,
+            quantity: Number(it.quantity),
+            unitPrice: Number(it.unitPrice),
+            discount: Number(it.discount) || 0,
+            taxRate: Number(it.taxRate) || 18,
+          }))
+        : [{ description: "Service Item", quantity: 1, unitPrice: Number(q.subtotal) || 0, discount: 0, taxRate: 18 }]
+    );
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdateQuotation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingQuotation) return;
+    setSavingEdit(true);
+
+    try {
+      const res = await fetch(`/api/quotations/${editingQuotation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: editItems,
+          companyId: editCompanyId || null,
+          contactId: editContactId || null,
+          dealId: editDealId || null,
+          validUntil: editValidUntil || null,
+          terms: editTerms,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingQuotation(null);
+        fetchQuotations();
+      } else {
+        alert(data.error || "Failed to update quotation");
+      }
+    } catch {
+      alert("Error updating quotation");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -267,13 +402,22 @@ export default function QuotationsPage() {
                     </td>
                     <td className="py-3.5 px-4 text-slate-400">{formatDate(q.createdAt)}</td>
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => handleDelete(q.id, q.quotationNumber)}
-                        title="Delete Quotation"
-                        className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer transition"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEditModal(q)}
+                          title="Edit Quotation"
+                          className="p-1 hover:bg-emerald-50 rounded text-slate-400 hover:text-emerald-600 cursor-pointer transition"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(q.id, q.quotationNumber)}
+                          title="Delete Quotation"
+                          className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -294,6 +438,57 @@ export default function QuotationsPage() {
             </div>
 
             <form onSubmit={handleCreate} className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Company</label>
+                  <select
+                    value={companyId}
+                    onChange={(e) => setCompanyId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Contact</label>
+                  <select
+                    value={contactId}
+                    onChange={(e) => setContactId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Deal</label>
+                  <select
+                    value={dealId}
+                    onChange={(e) => setDealId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {deals.map((d) => (
+                      <option key={d.id} value={d.id}>{d.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Valid Until</label>
+                  <input
+                    type="date"
+                    value={validUntil}
+                    onChange={(e) => setValidUntil(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                   <span>Line Items</span>
@@ -310,14 +505,14 @@ export default function QuotationsPage() {
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {items.map((item, idx) => (
                     <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-12 gap-2 items-center text-xs">
-                      <div className="col-span-5">
+                      <div className="col-span-4">
                         <input
                           type="text"
                           required
                           value={item.description}
                           onChange={(e) => updateItem(idx, "description", e.target.value)}
                           placeholder="Item Description"
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
                         />
                       </div>
                       <div className="col-span-2">
@@ -328,10 +523,10 @@ export default function QuotationsPage() {
                           value={item.quantity}
                           onChange={(e) => updateItem(idx, "quantity", e.target.value)}
                           placeholder="Qty"
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
                         />
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-2">
                         <input
                           type="number"
                           required
@@ -339,10 +534,31 @@ export default function QuotationsPage() {
                           value={item.unitPrice}
                           onChange={(e) => updateItem(idx, "unitPrice", e.target.value)}
                           placeholder="Rate"
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
                         />
                       </div>
-                      <div className="col-span-2 flex items-center justify-end">
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.discount}
+                          onChange={(e) => updateItem(idx, "discount", e.target.value)}
+                          placeholder="Disc ₹"
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={item.taxRate}
+                          onChange={(e) => updateItem(idx, "taxRate", e.target.value)}
+                          placeholder="GST%"
+                          className="w-full px-1.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div className="col-span-1 flex items-center justify-end">
                         {items.length > 1 && (
                           <button
                             type="button"
@@ -365,7 +581,7 @@ export default function QuotationsPage() {
                   <span className="font-semibold">{formatCurrency(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
-                  <span>GST Taxes (18%):</span>
+                  <span>GST Taxes:</span>
                   <span className="font-semibold">{formatCurrency(totalTax)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-slate-900 pt-1 border-t border-slate-200">
@@ -398,6 +614,201 @@ export default function QuotationsPage() {
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
                 >
                   {creating ? "Generating..." : "Generate Quotation"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Quotation Modal */}
+      {editModalOpen && editingQuotation && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h2 className="text-base font-bold text-slate-900">Edit Quotation #{editingQuotation.quotationNumber}</h2>
+              <button onClick={() => setEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateQuotation} className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Company</label>
+                  <select
+                    value={editCompanyId}
+                    onChange={(e) => setEditCompanyId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Contact</label>
+                  <select
+                    value={editContactId}
+                    onChange={(e) => setEditContactId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Deal</label>
+                  <select
+                    value={editDealId}
+                    onChange={(e) => setEditDealId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {deals.map((d) => (
+                      <option key={d.id} value={d.id}>{d.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Valid Until</label>
+                  <input
+                    type="date"
+                    value={editValidUntil}
+                    onChange={(e) => setEditValidUntil(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <span>Line Items</span>
+                  <button
+                    type="button"
+                    onClick={addEditItem}
+                    className="text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Item</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {editItems.map((item, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-12 gap-2 items-center text-xs">
+                      <div className="col-span-4">
+                        <input
+                          type="text"
+                          required
+                          value={item.description}
+                          onChange={(e) => updateEditItem(idx, "description", e.target.value)}
+                          placeholder="Item Description"
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => updateEditItem(idx, "quantity", e.target.value)}
+                          placeholder="Qty"
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          required
+                          min={0}
+                          value={item.unitPrice}
+                          onChange={(e) => updateEditItem(idx, "unitPrice", e.target.value)}
+                          placeholder="Rate"
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.discount}
+                          onChange={(e) => updateEditItem(idx, "discount", e.target.value)}
+                          placeholder="Disc ₹"
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={item.taxRate}
+                          onChange={(e) => updateEditItem(idx, "taxRate", e.target.value)}
+                          placeholder="GST%"
+                          className="w-full px-1.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                        />
+                      </div>
+                      <div className="col-span-1 flex items-center justify-end">
+                        {editItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeEditItem(idx)}
+                            className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Subtotal:</span>
+                  <span className="font-semibold">{formatCurrency(editSubtotal)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>GST Taxes:</span>
+                  <span className="font-semibold">{formatCurrency(editTotalTax)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold text-slate-900 pt-1 border-t border-slate-200">
+                  <span>Grand Total:</span>
+                  <span className="text-emerald-700">{formatCurrency(editGrandTotal)}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Terms & Conditions</label>
+                <textarea
+                  rows={2}
+                  value={editTerms}
+                  onChange={(e) => setEditTerms(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingEdit ? "Saving..." : "Save Changes"}</span>
                 </button>
               </div>
             </form>

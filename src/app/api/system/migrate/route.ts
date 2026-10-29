@@ -1,9 +1,30 @@
 import { NextResponse } from "next/server";
 import { ensureDatabaseSchema, ensureRubricPersonas } from "@/lib/db/auto-migrate";
+import { getCurrentSession } from "@/lib/auth/session";
 import prisma from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const migrateSecret = process.env.MIGRATE_SECRET;
+    const headerSecret = req.headers.get("x-migrate-secret");
+    const hasValidSecret = Boolean(migrateSecret && headerSecret && headerSecret === migrateSecret);
+
+    if (!hasValidSecret) {
+      const session = await getCurrentSession();
+      if (!session || !session.user) {
+        return NextResponse.json(
+          { success: false, error: "Unauthorized" },
+          { status: 401 }
+        );
+      }
+      if (!session.user.isPlatformAdmin) {
+        return NextResponse.json(
+          { success: false, error: "Forbidden: Platform admin access required" },
+          { status: 403 }
+        );
+      }
+    }
+
     await ensureDatabaseSchema();
     await ensureRubricPersonas();
 
@@ -31,6 +52,6 @@ export async function GET() {
   }
 }
 
-export async function POST() {
-  return GET();
+export async function POST(req: Request) {
+  return GET(req);
 }

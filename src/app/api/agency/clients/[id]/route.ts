@@ -95,6 +95,19 @@ export async function PUT(
     }
 
     const body = await req.json();
+    let parsedAddOnServices = existing.addOnServices;
+    if (body.addOnServices !== undefined) {
+      if (typeof body.addOnServices === "string") {
+        try {
+          parsedAddOnServices = JSON.parse(body.addOnServices);
+        } catch {
+          parsedAddOnServices = [body.addOnServices];
+        }
+      } else {
+        parsedAddOnServices = body.addOnServices;
+      }
+    }
+
     const updated = await prisma.agencyClient.update({
       where: { id },
       data: {
@@ -123,7 +136,7 @@ export async function PUT(
         contractEndDate: body.contractEndDate ? new Date(body.contractEndDate) : existing.contractEndDate,
         billingCycle: body.billingCycle ?? existing.billingCycle,
         packageStatus: body.packageStatus ?? existing.packageStatus,
-        addOnServices: body.addOnServices !== undefined ? (typeof body.addOnServices === "string" ? JSON.parse(body.addOnServices) : body.addOnServices) : existing.addOnServices,
+        addOnServices: parsedAddOnServices as any,
         customPricing: body.customPricing !== undefined ? Boolean(body.customPricing) : existing.customPricing,
         estimatedDeliveryCost: body.estimatedDeliveryCost !== undefined ? Number(body.estimatedDeliveryCost) : existing.estimatedDeliveryCost,
       },
@@ -137,6 +150,8 @@ export async function PUT(
     );
   }
 }
+
+export const PATCH = PUT;
 
 export async function DELETE(
   req: Request,
@@ -155,6 +170,20 @@ export async function DELETE(
       );
     }
 
+    const canDelete =
+      tenantCtx.isPlatformAdmin ||
+      tenantCtx.membership.isOwner ||
+      tenantCtx.roles.includes("Agency Admin") ||
+      tenantCtx.roles.includes("Super Admin") ||
+      tenantCtx.hasPermission("clients:write");
+
+    if (!canDelete) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Admin/Owner or clients:write permission required to delete clients" },
+        { status: 403 }
+      );
+    }
+
     const existing = await prisma.agencyClient.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
     });
@@ -165,11 +194,19 @@ export async function DELETE(
 
     // Cascaded safe cleanup of related records before deleting client
     try {
-      await prisma.$executeRawUnsafe(`DELETE FROM "client_deliverables" WHERE "client_id" = $1;`, id).catch(() => {});
-      await prisma.$executeRawUnsafe(`DELETE FROM "client_reports" WHERE "client_id" = $1;`, id).catch(() => {});
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "client_deliverables" WHERE "client_id" = $1 AND "tenant_id" = $2;`,
+        id,
+        tenantCtx.tenant.id
+      ).catch(() => {});
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM "client_reports" WHERE "client_id" = $1 AND "tenant_id" = $2;`,
+        id,
+        tenantCtx.tenant.id
+      ).catch(() => {});
       
       // Clean up creative assets versions & comments first
-      const assets = await prisma.creativeAsset.findMany({ where: { clientId: id }, select: { id: true } });
+      const assets = await prisma.creativeAsset.findMany({ where: { clientId: id, tenantId: tenantCtx.tenant.id }, select: { id: true } });
       const assetIds = assets.map((a) => a.id);
       if (assetIds.length > 0) {
         await prisma.creativeComment.deleteMany({ where: { assetId: { in: assetIds } } }).catch(() => {});
@@ -177,7 +214,8 @@ export async function DELETE(
         await prisma.creativeAsset.deleteMany({ where: { id: { in: assetIds } } }).catch(() => {});
       }
 
-      await prisma.agencyClientNote.deleteMany({ where: { clientId: id } }).catch(() => {});
+      await prisma.agencyClientNote.deleteMany({ where: { clientId: id, tenantId: tenantCtx.tenant.id } }).catch(() => {});
+      await prisma.agencyClientCredential.deleteMany({ where: { clientId: id, tenantId: tenantCtx.tenant.id } }).catch(() => {});
       await prisma.contentPost.deleteMany({ where: { clientId: id } }).catch(() => {});
       await prisma.adCampaign.deleteMany({ where: { clientId: id } }).catch(() => {});
       await prisma.seoTracker.deleteMany({ where: { clientId: id } }).catch(() => {});

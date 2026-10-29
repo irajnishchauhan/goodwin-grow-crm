@@ -29,6 +29,7 @@ import {
   Receipt,
   MapPin,
   ArrowRight,
+  Bell,
 } from "lucide-react";
 
 interface HeaderProps {
@@ -41,11 +42,13 @@ interface HeaderProps {
     id: string;
     name: string;
     code: string;
+    logoUrl?: string | null;
   } | null;
   memberships: Array<{
     tenantId: string;
     tenantName: string;
     tenantCode: string;
+    tenantLogoUrl?: string | null;
     isOwner: boolean;
   }>;
   roles?: string[];
@@ -53,9 +56,32 @@ interface HeaderProps {
 
 export function Header({ user, activeTenant, memberships, roles = [] }: HeaderProps) {
   const router = useRouter();
+  const [currentLogo, setCurrentLogo] = useState<string | null>(activeTenant?.logoUrl || null);
+
+  useEffect(() => {
+    setCurrentLogo(activeTenant?.logoUrl || null);
+  }, [activeTenant?.logoUrl]);
+
+  useEffect(() => {
+    function handleLogoUpdated(e: any) {
+      if (e.detail?.logoUrl !== undefined) {
+        setCurrentLogo(e.detail.logoUrl);
+      }
+    }
+    window.addEventListener("workspace-logo-updated", handleLogoUpdated);
+    return () => window.removeEventListener("workspace-logo-updated", handleLogoUpdated);
+  }, []);
+
   const [companyMenuOpen, setCompanyMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
+
+  const companyMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
 
   // Command Palette State
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -71,7 +97,7 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
 
   const isBattery = activeTenant?.code?.includes("batteries");
 
-  // Global Cmd+K / Ctrl+K Shortcut Listener
+  // Global Cmd+K / Ctrl+K Shortcut Listener & Outside Click Handler
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -82,11 +108,63 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
         setPaletteOpen(false);
         setCompanyMenuOpen(false);
         setUserMenuOpen(false);
+        setNotificationsOpen(false);
+      }
+    }
+    function handleMouseDown(e: MouseEvent) {
+      const target = e.target as Node;
+      if (companyMenuRef.current && !companyMenuRef.current.contains(target)) {
+        setCompanyMenuOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setUserMenuOpen(false);
+      }
+      if (notificationsRef.current && !notificationsRef.current.contains(target)) {
+        setNotificationsOpen(false);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
   }, []);
+
+  useEffect(() => {
+    if (notificationsOpen && notifications.length === 0) {
+      setNotificationsLoading(true);
+      Promise.all([
+        fetch("/api/activities").then((r) => r.json()).catch(() => ({ data: [] })),
+        fetch("/api/tasks").then((r) => r.json()).catch(() => ({ data: [] })),
+      ])
+        .then(([actRes, taskRes]) => {
+          const items: any[] = [];
+          const acts = Array.isArray(actRes?.data) ? actRes.data.slice(0, 4) : [];
+          const tasks = Array.isArray(taskRes?.data) ? taskRes.data.slice(0, 4) : [];
+          for (const a of acts) {
+            items.push({
+              id: `act-${a.id}`,
+              title: a.subject || a.type || "Activity logged",
+              subtitle: a.notes || a.performedBy?.fullName || "Workspace activity",
+              href: "/app/activities",
+              badge: a.type || "ACTIVITY",
+            });
+          }
+          for (const t of tasks) {
+            items.push({
+              id: `task-${t.id}`,
+              title: t.title || "Assigned task",
+              subtitle: t.status ? `Status: ${t.status}` : "Task item",
+              href: "/app/tasks",
+              badge: t.priority || "TASK",
+            });
+          }
+          setNotifications(items.slice(0, 6));
+        })
+        .finally(() => setNotificationsLoading(false));
+    }
+  }, [notificationsOpen, notifications.length]);
 
   // Auto-focus search input when palette opens
   useEffect(() => {
@@ -207,14 +285,20 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
     <header className="h-16 border-b border-slate-200 bg-white px-6 flex items-center justify-between z-20 relative">
       {/* Left: Company Switcher */}
       <div className="flex items-center gap-4">
-        <div className="relative">
+        <div className="relative" ref={companyMenuRef}>
           <button
             onClick={() => setCompanyMenuOpen(!companyMenuOpen)}
             className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition text-left cursor-pointer"
           >
-            <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
-              {activeTenant ? activeTenant.name.charAt(0) : "G"}
-            </div>
+            {currentLogo ? (
+              <div className="w-6 h-6 rounded-md overflow-hidden bg-white border border-slate-200 flex items-center justify-center p-0.5 shrink-0">
+                <img src={currentLogo} alt={activeTenant?.name || "Logo"} className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                {activeTenant ? activeTenant.name.charAt(0) : "G"}
+              </div>
+            )}
             <div>
               <div className="text-xs font-bold text-slate-800 leading-tight">
                 {activeTenant ? activeTenant.name : "Select Workspace"}
@@ -243,6 +327,7 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
               <div className="mt-1 space-y-1 max-h-64 overflow-y-auto pr-1">
                 {memberships.map((m) => {
                   const isCurrent = m.tenantId === activeTenant?.id;
+                  const itemLogo = isCurrent && currentLogo ? currentLogo : m.tenantLogoUrl;
                   return (
                     <button
                       key={m.tenantId}
@@ -255,9 +340,15 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
-                          {m.tenantName.charAt(0)}
-                        </div>
+                        {itemLogo ? (
+                          <div className="w-7 h-7 rounded-lg overflow-hidden bg-white border border-slate-200 flex items-center justify-center p-0.5 shrink-0 shadow-2xs">
+                            <img src={itemLogo} alt={m.tenantName} className="w-full h-full object-contain" />
+                          </div>
+                        ) : (
+                          <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                            {m.tenantName.charAt(0)}
+                          </div>
+                        )}
                         <div className="truncate">
                           <div className="font-semibold text-slate-900 truncate">{m.tenantName}</div>
                           <div className="text-[10px] text-slate-400 font-mono">{m.tenantCode}</div>
@@ -313,7 +404,7 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
         </button>
       </div>
 
-      {/* Right: User Menu */}
+      {/* Right: Notifications & User Menu */}
       <div className="flex items-center gap-3">
         {/* Mobile Search Button */}
         <button
@@ -323,7 +414,68 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
           <Search className="w-5 h-5" />
         </button>
 
-        <div className="relative">
+        {/* Notifications Bell Dropdown */}
+        <div className="relative" ref={notificationsRef}>
+          <button
+            type="button"
+            onClick={() => setNotificationsOpen((prev) => !prev)}
+            title="Workspace Notifications"
+            className="relative p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
+          >
+            <Bell className="w-4 h-4" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+          </button>
+
+          {notificationsOpen && (
+            <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 z-50 space-y-2">
+              <div className="flex items-center justify-between px-2 pt-1 pb-2 border-b border-slate-100">
+                <span className="text-xs font-bold text-slate-900">Notifications & Activity</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotificationsOpen(false);
+                    router.push("/app/activities");
+                  }}
+                  className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+                >
+                  View All
+                </button>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-1">
+                {notificationsLoading ? (
+                  <div className="py-6 text-center text-xs text-slate-400">Loading recent updates...</div>
+                ) : notifications.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    No new notifications in {activeTenant?.name || "workspace"}.
+                  </div>
+                ) : (
+                  notifications.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setNotificationsOpen(false);
+                        router.push(item.href);
+                      }}
+                      className="w-full flex items-start justify-between gap-2 p-2 rounded-xl hover:bg-slate-50 text-left transition cursor-pointer"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold text-slate-800 truncate">{item.title}</div>
+                        <div className="text-[11px] text-slate-400 truncate">{item.subtitle}</div>
+                      </div>
+                      <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                        {item.badge}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="relative" ref={userMenuRef}>
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className="flex items-center gap-2.5 p-1 rounded-full hover:bg-slate-50 transition cursor-pointer"
@@ -598,6 +750,7 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {memberships.map((m) => {
                         const isCurrent = m.tenantId === activeTenant?.id;
+                        const itemLogo = isCurrent && currentLogo ? currentLogo : m.tenantLogoUrl;
                         return (
                           <button
                             key={m.tenantId}
@@ -610,9 +763,15 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
                             }`}
                           >
                             <div className="flex items-center gap-2.5 truncate">
-                              <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold shrink-0">
-                                {m.tenantName.charAt(0)}
-                              </div>
+                              {itemLogo ? (
+                                <div className="w-6 h-6 rounded-md overflow-hidden bg-white border border-slate-200 flex items-center justify-center p-0.5 shrink-0 shadow-2xs">
+                                  <img src={itemLogo} alt={m.tenantName} className="w-full h-full object-contain" />
+                                </div>
+                              ) : (
+                                <div className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold shrink-0">
+                                  {m.tenantName.charAt(0)}
+                                </div>
+                              )}
                               <div className="truncate">
                                 <div className="text-xs truncate">{m.tenantName}</div>
                                 <div className="text-[10px] text-slate-400 font-mono">{m.tenantCode}</div>

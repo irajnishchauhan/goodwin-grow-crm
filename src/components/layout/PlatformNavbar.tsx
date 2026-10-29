@@ -42,8 +42,8 @@ export function PlatformNavbar({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
-  const [adminEmail, setAdminEmail] = useState("superadmin@goodwingrowai.com");
-  const [adminPassword, setAdminPassword] = useState("GoodwinAdmin@2026!");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -53,6 +53,9 @@ export function PlatformNavbar({
     async function loadData() {
       try {
         const res = await fetch("/api/platform/workspaces");
+        if (res.status === 401) {
+          return;
+        }
         const data = await res.json();
         if (data.success && data.workspaces) {
           setWorkspaces(data.workspaces);
@@ -91,8 +94,7 @@ export function PlatformNavbar({
         setDropdownOpen(false);
         window.location.href = "/app/dashboard";
       } else if (res.status === 401) {
-        // If not logged in, auto-login as super admin and switch
-        await autoLoginAndSwitch(workspace.id);
+        window.location.href = "/login";
       } else {
         alert(data.error || "Failed to switch workspace");
       }
@@ -101,38 +103,6 @@ export function PlatformNavbar({
       alert("Error switching workspace");
     } finally {
       setSwitching(false);
-    }
-  }
-
-  async function autoLoginAndSwitch(targetTenantId?: string) {
-    try {
-      setLoginLoading(true);
-      const loginRes = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "superadmin@goodwingrowai.com",
-          password: "GoodwinAdmin@2026!",
-        }),
-      });
-      const loginData = await loginRes.json();
-      if (!loginRes.ok || !loginData.success) {
-        throw new Error(loginData.error || "Failed to authenticate");
-      }
-
-      if (targetTenantId) {
-        await fetch("/api/platform/workspaces", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tenantId: targetTenantId }),
-        });
-      }
-
-      window.location.href = targetTenantId ? "/app/dashboard" : "/platform";
-    } catch (err: any) {
-      alert(err.message || "Login failed");
-    } finally {
-      setLoginLoading(false);
     }
   }
 
@@ -253,9 +223,15 @@ export function PlatformNavbar({
                           }`}
                         >
                           <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
-                              {w.name?.charAt(0) || "W"}
-                            </div>
+                            {w.settings?.logoUrl ? (
+                              <div className="w-7 h-7 rounded-lg overflow-hidden bg-white border border-slate-200 flex items-center justify-center p-0.5 shrink-0 shadow-2xs">
+                                <img src={w.settings.logoUrl} alt={w.name} className="w-full h-full object-contain" />
+                              </div>
+                            ) : (
+                              <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                                {w.name?.charAt(0) || "W"}
+                              </div>
+                            )}
                             <div className="truncate">
                               <div className="font-semibold text-slate-900 truncate">{w.name}</div>
                               <div className="text-[10px] text-slate-400 font-mono">
@@ -405,15 +381,7 @@ export function PlatformNavbar({
                 />
               </div>
 
-              <div className="pt-2 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => autoLoginAndSwitch()}
-                  disabled={loginLoading}
-                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 underline cursor-pointer"
-                >
-                  ⚡ 1-Click Super Admin Fill
-                </button>
+              <div className="pt-2 flex items-center justify-end">
                 <div className="flex gap-2">
                   <button
                     type="button"

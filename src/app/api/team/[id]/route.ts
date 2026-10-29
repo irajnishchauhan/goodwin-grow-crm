@@ -2,6 +2,20 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 
+function canManageTeam(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
+  const isAdminOrOwner =
+    tenantCtx.isPlatformAdmin ||
+    tenantCtx.membership.isOwner ||
+    tenantCtx.primaryRole === "Super Admin" ||
+    tenantCtx.primaryRole === "Agency Admin" ||
+    tenantCtx.roles.some((r) => ["super admin", "agency admin", "admin", "company admin", "company owner"].includes(r.toLowerCase().trim()));
+  return (
+    isAdminOrOwner ||
+    tenantCtx.hasPermission("team:write") ||
+    tenantCtx.hasPermission("team:manage")
+  );
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -10,6 +24,9 @@ export async function GET(
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot access team member details" }, { status: 403 });
   }
 
   const tenantId = tenantCtx.tenant.id;
@@ -104,9 +121,12 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot modify team members" }, { status: 403 });
+    }
 
-    if (!tenantCtx.hasPermission("team:manage")) {
-      return NextResponse.json({ success: false, error: "Forbidden: Missing team:manage permission" }, { status: 403 });
+    if (!canManageTeam(tenantCtx)) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing team:write or team:manage permission" }, { status: 403 });
     }
 
     const tenantId = tenantCtx.tenant.id;
@@ -198,6 +218,13 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return PUT(req, context);
+}
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -208,9 +235,12 @@ export async function DELETE(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot remove team members" }, { status: 403 });
+    }
 
-    if (!tenantCtx.hasPermission("team:manage")) {
-      return NextResponse.json({ success: false, error: "Forbidden: Missing team:manage permission" }, { status: 403 });
+    if (!canManageTeam(tenantCtx)) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing team:write or team:manage permission" }, { status: 403 });
     }
 
     const tenantId = tenantCtx.tenant.id;

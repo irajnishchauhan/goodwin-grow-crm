@@ -83,6 +83,12 @@ export async function POST(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot create or modify tasks" },
+        { status: 403 }
+      );
+    }
 
     const tenantId = tenantCtx.tenant.id;
     const body = await req.json();
@@ -151,6 +157,12 @@ export async function PATCH(req: Request) {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot create or modify tasks" },
+        { status: 403 }
+      );
     }
 
     const { id, status } = await req.json();

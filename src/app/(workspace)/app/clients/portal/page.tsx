@@ -131,6 +131,7 @@ export default function ClientPortalPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          content: feedbackComment.trim(),
           comment: feedbackComment.trim(),
           isInternal: false,
         }),
@@ -541,7 +542,7 @@ export default function ClientPortalPage() {
             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
               <span className="text-xs text-slate-500 uppercase tracking-wider block">Total Social Reach</span>
               <div className="text-2xl font-black text-slate-900 mt-1">
-                {(stats?.totalReach || 48200).toLocaleString("en-IN")}
+                {Number(stats?.totalReach ?? 0).toLocaleString("en-IN")}
               </div>
               <span className="text-[11px] text-emerald-600 font-semibold mt-0.5 block">
                 Across Instagram, Facebook & LinkedIn
@@ -551,7 +552,7 @@ export default function ClientPortalPage() {
             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
               <span className="text-xs text-slate-500 uppercase tracking-wider block">Social Engagements</span>
               <div className="text-2xl font-black text-indigo-700 mt-1">
-                {(stats?.totalEngagement || 3120).toLocaleString("en-IN")}
+                {Number(stats?.totalEngagement ?? 0).toLocaleString("en-IN")}
               </div>
               <span className="text-[11px] text-indigo-600 font-semibold mt-0.5 block">
                 Likes, comments, and shares
@@ -561,7 +562,7 @@ export default function ClientPortalPage() {
             <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
               <span className="text-xs text-slate-500 uppercase tracking-wider block">Monthly Retainer</span>
               <div className="text-2xl font-black text-slate-900 mt-1">
-                ₹{Number(client?.monthlyRetainer || 65000).toLocaleString("en-IN")}
+                ₹{Number(client?.monthlyRetainer ?? 0).toLocaleString("en-IN")}
               </div>
               <span className="text-[11px] text-emerald-700 font-semibold mt-0.5 block">
                 Package: {client?.activePackage || "Growth Package"}
@@ -602,7 +603,7 @@ export default function ClientPortalPage() {
                         <td className="py-3.5 px-4 font-bold text-slate-900">{inv.invoiceNumber}</td>
                         <td className="py-3.5 px-3">{formatDate(inv.issueDate)}</td>
                         <td className="py-3.5 px-3 font-bold text-slate-900">
-                          ₹{Number(inv.total).toLocaleString("en-IN")}
+                          ₹{Number(inv.totalAmount ?? inv.total ?? 0).toLocaleString("en-IN")}
                         </td>
                         <td className="py-3.5 px-3">
                           <span
@@ -617,8 +618,67 @@ export default function ClientPortalPage() {
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <button
-                            onClick={() => alert(`Downloading official PDF for invoice ${inv.invoiceNumber}`)}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                            onClick={() => {
+                              const printWin = window.open("", "_blank", "width=800,height=700");
+                              if (printWin) {
+                                const totalAmt = Number(inv.totalAmount ?? inv.total ?? 0);
+                                const subAmt = Number(inv.subtotal ?? Math.round(totalAmt / 1.18));
+                                const taxAmt = Number(inv.taxAmount ?? totalAmt - subAmt);
+                                printWin.document.write(`
+                                  <html>
+                                    <head>
+                                      <title>Invoice ${inv.invoiceNumber}</title>
+                                      <style>
+                                        body { font-family: system-ui, sans-serif; padding: 40px; color: #0f172a; }
+                                        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
+                                        table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+                                        th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+                                        .totals { margin-top: 24px; text-align: right; }
+                                      </style>
+                                    </head>
+                                    <body>
+                                      <div class="header">
+                                        <div>
+                                          <h2 style="margin:0;">GOODWIN GROW AI</h2>
+                                          <p style="margin:4px 0;font-size:12px;color:#64748b;">18% GST Compliant Tax Invoice</p>
+                                        </div>
+                                        <div style="text-align:right;">
+                                          <h3 style="margin:0;">${inv.invoiceNumber}</h3>
+                                          <p style="margin:4px 0;font-size:12px;">Issued: ${new Date(inv.issueDate).toLocaleDateString()}</p>
+                                          <p style="margin:4px 0;font-size:12px;">Status: ${inv.status}</p>
+                                        </div>
+                                      </div>
+                                      <p style="margin-top:20px;"><strong>Billed To:</strong> ${client?.name || inv.clientName || "Client"}</p>
+                                      <table>
+                                        <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+                                        <tbody>
+                                          ${
+                                            Array.isArray(inv.items) && inv.items.length > 0
+                                              ? inv.items
+                                                  .map(
+                                                    (it: any) =>
+                                                      `<tr><td>${it.description || "Agency Retainer Services"}</td><td style="text-align:right;">₹${Number(it.amount || subAmt).toLocaleString("en-IN")}</td></tr>`
+                                                  )
+                                                  .join("")
+                                              : `<tr><td>${client?.activePackage || "Agency Retainer Services"}</td><td style="text-align:right;">₹${subAmt.toLocaleString("en-IN")}</td></tr>`
+                                          }
+                                        </tbody>
+                                      </table>
+                                      <div class="totals">
+                                        <p>Subtotal: ₹${subAmt.toLocaleString("en-IN")}</p>
+                                        <p>GST (18%): ₹${taxAmt.toLocaleString("en-IN")}</p>
+                                        <h3>Total: ₹${totalAmt.toLocaleString("en-IN")}</h3>
+                                      </div>
+                                      <script>window.onload = () => { window.print(); };</script>
+                                    </body>
+                                  </html>
+                                `);
+                                printWin.document.close();
+                              } else {
+                                window.print();
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 cursor-pointer"
                           >
                             <FileText className="w-3.5 h-3.5" />
                             <span>Download PDF</span>

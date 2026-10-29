@@ -14,12 +14,15 @@ export async function ensureDatabaseSchema() {
   if (isSchemaEnsured) return;
 
   const ddlStatements = [
+    // 0. Tenant Settings Logo Column
+    `ALTER TABLE "tenant_settings" ADD COLUMN IF NOT EXISTS "logo_url" TEXT;`,
+
     // 1. Tenant Memberships
     `ALTER TABLE "tenant_memberships" ADD COLUMN IF NOT EXISTS "agency_client_id" TEXT;`,
 
     // 2. Leads Rubric Columns
     `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "service_required" TEXT;`,
-    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "deal_value" DOUBLE PRECISION;`,
+    `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "deal_value" DECIMAL(14, 2);`,
     `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "next_follow_up" TIMESTAMP(3);`,
     `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "lost_reason" TEXT;`,
     `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "client_id" TEXT;`,
@@ -340,10 +343,7 @@ export async function ensureRubricPersonas() {
     await prisma.agencyClient.updateMany({
       where: {
         tenantId,
-        OR: [
-          { leadDesignerName: { contains: "Pooja", mode: "insensitive" } },
-          { leadDesignerName: { contains: "Verma", mode: "insensitive" } },
-        ],
+        leadDesignerName: { equals: "Pooja Verma", mode: "insensitive" },
       },
       data: {
         leadDesignerName: null,
@@ -353,10 +353,7 @@ export async function ensureRubricPersonas() {
     await prisma.agencyClient.updateMany({
       where: {
         tenantId,
-        OR: [
-          { contentWriterName: { contains: "Aman", mode: "insensitive" } },
-          { contentWriterName: { contains: "Gupta", mode: "insensitive" } },
-        ],
+        contentWriterName: { equals: "Aman Gupta", mode: "insensitive" },
       },
       data: {
         contentWriterName: null,
@@ -366,7 +363,7 @@ export async function ensureRubricPersonas() {
     await prisma.agencyClient.updateMany({
       where: {
         tenantId,
-        accountManagerName: { contains: "Kunal Sharma", mode: "insensitive" },
+        accountManagerName: { equals: "Kunal Sharma", mode: "insensitive" },
       },
       data: {
         accountManagerName: null,
@@ -386,7 +383,9 @@ export async function ensureRubricPersonas() {
     }).catch(() => {});
     await prisma.$executeRawUnsafe(
       `DELETE FROM "marketing_festivals" 
-       WHERE "date" LIKE '%Oct 28%' OR "date" LIKE '%Oct 30%' OR "date" LIKE '%Nov 02%'`
+       WHERE ("date" LIKE '%Oct 28%' OR "date" LIKE '%Oct 30%' OR "date" LIKE '%Nov 02%')
+         AND "tenant_id" = $1`,
+      tenantId
     ).catch(() => {});
 
     // 5. Ensure Persona Users (Agency Team Members)
@@ -401,7 +400,7 @@ export async function ensureRubricPersonas() {
       const passwordHash = await hashPassword(passwordPlain);
       const user = await prisma.user.upsert({
         where: { email },
-        update: { fullName, passwordHash, isPlatformAdmin, isActive: true },
+        update: { fullName, isPlatformAdmin, isActive: true },
         create: { email, fullName, passwordHash, isPlatformAdmin, isActive: true },
       });
 
@@ -490,9 +489,210 @@ export async function ensureRubricPersonas() {
       },
     }).catch(() => {});
 
+    // Ensure strict workspace member isolation between distinct businesses
+    await ensureWorkspaceMemberIsolation();
+
     isDataEnsured = true;
     console.log("✅ ensureRubricPersonas: Successfully verified personas & clean workspace state.");
   } catch (err: any) {
     console.warn("⚠️ ensureRubricPersonas notice:", err.message);
+  }
+}
+
+/**
+ * Enforces strict workspace member isolation between separate tenants
+ * (e.g. Goodwin Grow AI vs. Goodwin Batteries vs. client portals).
+ */
+export async function ensureWorkspaceMemberIsolation() {
+  try {
+    const growAiTenant = await prisma.tenant.findUnique({ where: { code: "goodwin-grow-ai" } });
+    let batteriesTenant = await prisma.tenant.findUnique({ where: { code: "goodwin-batteries" } });
+
+    if (!batteriesTenant) {
+      batteriesTenant = await prisma.tenant.create({
+        data: {
+          code: "goodwin-batteries",
+          name: "Goodwin Batteries",
+          status: "ACTIVE",
+        },
+      });
+    }
+
+    // Ensure roles in Goodwin Batteries
+    let gbOwnerRole = await prisma.role.findFirst({
+      where: { tenantId: batteriesTenant.id, name: "Company Owner" },
+    });
+    if (!gbOwnerRole) {
+      gbOwnerRole = await prisma.role.create({
+        data: {
+          tenantId: batteriesTenant.id,
+          name: "Company Owner",
+          description: "Full administrative ownership of Goodwin Batteries",
+          isSystem: true,
+        },
+      });
+    }
+
+    let gbSalesManagerRole = await prisma.role.findFirst({
+      where: { tenantId: batteriesTenant.id, name: "Sales Manager" },
+    });
+    if (!gbSalesManagerRole) {
+      gbSalesManagerRole = await prisma.role.create({
+        data: {
+          tenantId: batteriesTenant.id,
+          name: "Sales Manager",
+          description: "Sales & distribution operations for Goodwin Batteries",
+          isSystem: true,
+        },
+      });
+    }
+
+    // Ensure Sameer Meena in Goodwin Batteries
+    const sameerBatteryEmail = "sameergoodwinbatteries@gmail.com";
+    let sameerUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: sameerBatteryEmail },
+          { email: "sameer@goodwingrowai.com" },
+        ],
+      },
+    });
+
+    if (sameerUser && sameerUser.email === "sameer@goodwingrowai.com") {
+      const existingNew = await prisma.user.findUnique({ where: { email: sameerBatteryEmail } });
+      if (!existingNew) {
+        sameerUser = await prisma.user.update({
+          where: { id: sameerUser.id },
+          data: {
+            email: sameerBatteryEmail,
+            fullName: "Sameer Meena",
+            phone: "+91 9893744311",
+          },
+        });
+      }
+    }
+
+    if (!sameerUser) {
+      const defaultHash = await hashPassword("Sameer@2026!");
+      sameerUser = await prisma.user.create({
+        data: {
+          email: sameerBatteryEmail,
+          fullName: "Sameer Meena",
+          phone: "+91 9893744311",
+          passwordHash: defaultHash,
+          isActive: true,
+        },
+      });
+    }
+
+    const sameerMembership = await prisma.tenantMembership.upsert({
+      where: { tenantId_userId: { tenantId: batteriesTenant.id, userId: sameerUser.id } },
+      update: { status: "ACTIVE" },
+      create: {
+        tenantId: batteriesTenant.id,
+        userId: sameerUser.id,
+        status: "ACTIVE",
+        isOwner: false,
+      },
+    });
+
+    if (gbSalesManagerRole) {
+      await prisma.membershipRole.upsert({
+        where: { membershipId_roleId: { membershipId: sameerMembership.id, roleId: gbSalesManagerRole.id } },
+        update: {},
+        create: { membershipId: sameerMembership.id, roleId: gbSalesManagerRole.id },
+      });
+    }
+
+    // Disassociate Sameer from Goodwin Grow AI
+    if (growAiTenant) {
+      const wrongSameerMem = await prisma.tenantMembership.findFirst({
+        where: { tenantId: growAiTenant.id, userId: sameerUser.id },
+      });
+      if (wrongSameerMem) {
+        await prisma.membershipRole.deleteMany({ where: { membershipId: wrongSameerMem.id } });
+        await prisma.tenantMembership.delete({ where: { id: wrongSameerMem.id } });
+      }
+    }
+
+    // Ensure Goodwin Batteries Admin user
+    let gbAdminUser = await prisma.user.findUnique({ where: { email: "admin@goodwinbatteries.com" } });
+    if (!gbAdminUser) {
+      const defaultHash = await hashPassword("BatteriesAdmin@2026!");
+      gbAdminUser = await prisma.user.create({
+        data: {
+          email: "admin@goodwinbatteries.com",
+          fullName: "Goodwin Batteries Admin",
+          passwordHash: defaultHash,
+          isActive: true,
+        },
+      });
+    }
+    const gbAdminMem = await prisma.tenantMembership.upsert({
+      where: { tenantId_userId: { tenantId: batteriesTenant.id, userId: gbAdminUser.id } },
+      update: { status: "ACTIVE", isOwner: true },
+      create: {
+        tenantId: batteriesTenant.id,
+        userId: gbAdminUser.id,
+        status: "ACTIVE",
+        isOwner: true,
+      },
+    });
+    if (gbOwnerRole) {
+      await prisma.membershipRole.upsert({
+        where: { membershipId_roleId: { membershipId: gbAdminMem.id, roleId: gbOwnerRole.id } },
+        update: {},
+        create: { membershipId: gbAdminMem.id, roleId: gbOwnerRole.id },
+      });
+    }
+
+    // Clean out Agency members and Platform Admin from Goodwin Batteries
+    const agencyEmailsToExcludeFromBatteries = [
+      "admin@goodwingrowai.com",
+      "kunalgoodwingrow@gmail.com",
+      "goodwingrow.ansh@gmail.com",
+      "rohit@goodwingrowai.com",
+      "aayan@goodwingrowai.com",
+      "superadmin@goodwingrowai.com",
+    ];
+
+    const agencyUsersInBatteries = await prisma.user.findMany({
+      where: { email: { in: agencyEmailsToExcludeFromBatteries } },
+      select: { id: true, email: true },
+    });
+
+    for (const u of agencyUsersInBatteries) {
+      const mem = await prisma.tenantMembership.findFirst({
+        where: { tenantId: batteriesTenant.id, userId: u.id },
+      });
+      if (mem) {
+        await prisma.membershipRole.deleteMany({ where: { membershipId: mem.id } });
+        await prisma.tenantMembership.delete({ where: { id: mem.id } });
+      }
+    }
+
+    // Clean out Batteries members from Goodwin Grow AI
+    if (growAiTenant) {
+      const batteryEmailsToExcludeFromGrowAi = [
+        "admin@goodwinbatteries.com",
+        "sales@goodwinbatteries.com",
+        sameerBatteryEmail,
+      ];
+      const batteryUsersInGrowAi = await prisma.user.findMany({
+        where: { email: { in: batteryEmailsToExcludeFromGrowAi } },
+        select: { id: true },
+      });
+      for (const u of batteryUsersInGrowAi) {
+        const mem = await prisma.tenantMembership.findFirst({
+          where: { tenantId: growAiTenant.id, userId: u.id },
+        });
+        if (mem) {
+          await prisma.membershipRole.deleteMany({ where: { membershipId: mem.id } });
+          await prisma.tenantMembership.delete({ where: { id: mem.id } });
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn("⚠️ ensureWorkspaceMemberIsolation notice:", err.message);
   }
 }

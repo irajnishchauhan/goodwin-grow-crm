@@ -144,7 +144,6 @@ export async function PUT(req: Request, { params }: RouteParams) {
         where: { tenantId: id },
         data: {
           ...(seatLimit !== undefined ? { seatLimit: Number(seatLimit) } : {}),
-          ...(industry !== undefined ? { website: website || existing.settings.website } : {}),
           ...(businessEmail !== undefined ? { businessEmail } : {}),
           ...(phone !== undefined ? { phone } : {}),
           ...(website !== undefined ? { website } : {}),
@@ -263,6 +262,31 @@ export async function DELETE(req: Request, { params }: RouteParams) {
 
     // Safe deletion with cascading clean-up
     await prisma.$transaction(async (tx) => {
+      // Clean up raw SQL agency/portal tables if present
+      const rawTables = [
+        "creative_comments",
+        "creative_versions",
+        "client_deliverables",
+        "client_reports",
+        "marketing_festivals",
+        "agency_client_notes",
+        "agency_client_credentials",
+      ];
+      for (const table of rawTables) {
+        try {
+          await tx.$executeRawUnsafe(`DELETE FROM ${table} WHERE tenant_id = $1`, id);
+        } catch {
+          // Table may not exist in all environments
+        }
+      }
+
+      // Clean up battery distribution records if present
+      await tx.batteryFieldVisit.deleteMany({ where: { tenantId: id } });
+      await tx.batteryWarrantyClaim.deleteMany({ where: { tenantId: id } });
+      await tx.batteryCollection.deleteMany({ where: { tenantId: id } });
+      await tx.batteryOrder.deleteMany({ where: { tenantId: id } });
+      await tx.batteryPartner.deleteMany({ where: { tenantId: id } });
+
       // Clean up tenant-bound records
       await tx.activity.deleteMany({ where: { tenantId: id } });
       await tx.task.deleteMany({ where: { tenantId: id } });

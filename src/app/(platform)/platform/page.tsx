@@ -69,7 +69,7 @@ export default function PlatformOverviewPage() {
   const [planCode, setPlanCode] = useState("growth");
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("GoodwinAdmin@2026!");
+  const [adminPassword, setAdminPassword] = useState("");
 
   // Edit Modal State (Update - U)
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -107,6 +107,10 @@ export default function PlatformOverviewPage() {
     try {
       setLoading(true);
       const res = await fetch("/api/platform/workspaces");
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       const data = await res.json();
       if (data.success && data.workspaces) {
         setWorkspaces(data.workspaces);
@@ -140,8 +144,7 @@ export default function PlatformOverviewPage() {
       if (res.ok && data.success) {
         window.location.href = "/app/dashboard";
       } else if (res.status === 401) {
-        // If not logged in, auto-login as Super Admin and switch seamlessly
-        await autoLoginAndSwitch(workspace.id);
+        window.location.href = "/login";
       } else {
         alert(data.error || "Failed to switch workspace");
       }
@@ -150,32 +153,6 @@ export default function PlatformOverviewPage() {
       alert("Error switching workspace");
     } finally {
       setSwitchingId(null);
-    }
-  }
-
-  async function autoLoginAndSwitch(targetTenantId: string) {
-    try {
-      const loginRes = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "superadmin@goodwingrowai.com",
-          password: "GoodwinAdmin@2026!",
-        }),
-      });
-      const loginData = await loginRes.json();
-      if (loginRes.ok && loginData.success) {
-        await fetch("/api/platform/workspaces", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tenantId: targetTenantId }),
-        });
-        window.location.href = "/app/dashboard";
-      } else {
-        alert("Authentication failed. Please sign in as Super Admin.");
-      }
-    } catch (err) {
-      console.error(err);
     }
   }
 
@@ -330,7 +307,7 @@ export default function PlatformOverviewPage() {
     setPlanCode("growth");
     setAdminName("");
     setAdminEmail("");
-    setAdminPassword("GoodwinAdmin@2026!");
+    setAdminPassword("");
   }
 
   // Security Audit Sentinel Runner
@@ -469,51 +446,49 @@ export default function PlatformOverviewPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                    Supabase PostgreSQL Cloud Integration
+                    Neon Serverless PostgreSQL &amp; Prisma ORM Integration
                   </h3>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    API Endpoint Connected
+                    Connection Pool Active
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5 font-mono">
-                  https://eidgnglpmfqqsdcwuqib.supabase.co
+                  Multi-Tenant Row-Level Scoped PostgreSQL Cluster (DATABASE_URL)
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <a
-                href="https://supabase.com/dashboard/project/eidgnglpmfqqsdcwuqib/sql/new"
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                href="/super-admin"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-xs"
               >
-                <span>Supabase SQL Editor</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+                <span>Open Super Admin Console</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs pt-1">
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Client Helper</div>
+              <div className="text-[10px] text-slate-500 uppercase font-semibold">ORM Engine</div>
               <div className="text-slate-800 font-mono text-[11px] mt-0.5">src/lib/prisma.ts</div>
-              <div className="text-[10px] text-emerald-700 mt-1 font-medium">✓ Browser Client (@prisma/client)</div>
+              <div className="text-[10px] text-emerald-700 mt-1 font-medium">✓ Prisma Client (@prisma/client)</div>
             </div>
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Server Helper</div>
+              <div className="text-[10px] text-slate-500 uppercase font-semibold">Session Manager</div>
               <div className="text-slate-800 font-mono text-[11px] mt-0.5">src/lib/auth/session.ts</div>
-              <div className="text-[10px] text-emerald-700 mt-1 font-medium">✓ Server SSR Client (Cookies)</div>
+              <div className="text-[10px] text-emerald-700 mt-1 font-medium">✓ HttpOnly Cookie Sessions</div>
             </div>
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-[10px] text-slate-500 uppercase font-semibold">Session Refresh</div>
+              <div className="text-[10px] text-slate-500 uppercase font-semibold">Tenant Context</div>
               <div className="text-slate-800 font-mono text-[11px] mt-0.5">src/lib/tenant/context.ts</div>
-              <div className="text-[10px] text-emerald-700 mt-1 font-medium">✓ updateSession() Proxy</div>
+              <div className="text-[10px] text-emerald-700 mt-1 font-medium">✓ Isolated Tenant Resolution</div>
             </div>
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
               <div className="text-[10px] text-slate-500 uppercase font-semibold">Agent Skills</div>
-              <div className="text-slate-800 font-mono text-[11px] mt-0.5">.agents/skills/supabase</div>
-              <div className="text-[10px] text-emerald-700 mt-1 font-medium">✓ supabase/agent-skills</div>
+              <div className="text-slate-800 font-mono text-[11px] mt-0.5">.agents/skills/crm-skills</div>
+              <div className="text-[10px] text-emerald-700 mt-1 font-medium">✓ CRM &amp; Neon Postgres Skills</div>
             </div>
           </div>
         </div>
@@ -1190,12 +1165,6 @@ export default function PlatformOverviewPage() {
               <strong>{restrictedActionName}</strong> requires Platform Super Admin privileges. Cross-tenant fleet modifications are cryptographically restricted to Super Admins.
             </p>
 
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-              <div className="font-semibold text-slate-700">Platform Super Admin Credentials:</div>
-              <div className="font-mono text-[11px] text-slate-600">Email: superadmin@goodwingrowai.com</div>
-              <div className="font-mono text-[11px] text-slate-600">Password: GoodwinAdmin@2026!</div>
-            </div>
-
             <div className="pt-2 flex items-center justify-between">
               <button
                 onClick={() => setAdminAuthPromptOpen(false)}
@@ -1203,32 +1172,12 @@ export default function PlatformOverviewPage() {
               >
                 Close
               </button>
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await fetch("/api/auth/login", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        email: "superadmin@goodwingrowai.com",
-                        password: "GoodwinAdmin@2026!",
-                      }),
-                    });
-                    const d = await res.json();
-                    if (res.ok && d.success) {
-                      setAdminAuthPromptOpen(false);
-                      window.location.reload();
-                    } else {
-                      alert("Authentication failed");
-                    }
-                  } catch {
-                    alert("Authentication error");
-                  }
-                }}
+              <Link
+                href="/login"
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition cursor-pointer"
               >
-                ⚡ 1-Click Super Admin Login
-              </button>
+                Sign In as Super Admin
+              </Link>
             </div>
           </div>
         </div>

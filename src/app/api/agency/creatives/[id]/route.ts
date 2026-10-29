@@ -72,6 +72,7 @@ export async function PUT(
 
     const body = await req.json();
     const {
+      action,
       title,
       assetType,
       dimensions,
@@ -82,12 +83,25 @@ export async function PUT(
       clientId,
     } = body;
 
+    if (tenantCtx.isClientUser && action === "upload_version") {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot upload new creative versions" },
+        { status: 403 }
+      );
+    }
+
     // Build update payload with audit approver and timestamps
     const updateData: any = {};
 
     if (tenantCtx.isClientUser) {
       // Clients can only submit approval or request changes
-      if (reviewStatus && ["APPROVED", "CHANGES_REQUESTED"].includes(reviewStatus)) {
+      if (reviewStatus !== undefined) {
+        if (!["APPROVED", "CHANGES_REQUESTED"].includes(reviewStatus)) {
+          return NextResponse.json(
+            { success: false, error: "Forbidden: Clients can only set status to APPROVED or CHANGES_REQUESTED" },
+            { status: 403 }
+          );
+        }
         updateData.reviewStatus = reviewStatus;
       }
       if (clientFeedback !== undefined) {
@@ -105,12 +119,12 @@ export async function PUT(
     }
 
     // Record approver and timestamp when transitioning to APPROVED
-    if (reviewStatus === "APPROVED") {
+    if (updateData.reviewStatus === "APPROVED") {
       updateData.approverName = tenantCtx.user.fullName;
       updateData.approverEmail = tenantCtx.user.email;
       updateData.approvedAt = new Date();
       updateData.reviewedAt = new Date();
-    } else if (reviewStatus === "CHANGES_REQUESTED") {
+    } else if (updateData.reviewStatus === "CHANGES_REQUESTED") {
       updateData.reviewedAt = new Date();
     }
 
@@ -150,6 +164,8 @@ export async function PUT(
     );
   }
 }
+
+export const PATCH = PUT;
 
 export async function DELETE(
   req: Request,

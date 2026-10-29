@@ -230,10 +230,19 @@ export default function SeoPage() {
   const top3Rankings = trackers.filter((t) => t.currentRank <= 3).length;
   const avgGbpScore =
     trackers.length > 0
-      ? Math.round(trackers.reduce((acc, t) => acc + (t.gbpScore || 85), 0) / trackers.length)
-      : 91;
+      ? Math.round(trackers.reduce((acc, t) => acc + (t.gbpScore || 0), 0) / trackers.length)
+      : 0;
   const totalVolume = trackers.reduce((acc, t) => acc + (t.searchVolume || 0), 0);
   const totalBacklinks = trackers.reduce((acc, t) => acc + (t.backlinksCount || 0), 0);
+  const filteredTrackers = trackers.filter((t) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      t.keyword.toLowerCase().includes(q) ||
+      (t.client?.name && t.client.name.toLowerCase().includes(q)) ||
+      (t.targetUrl && t.targetUrl.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -315,13 +324,25 @@ export default function SeoPage() {
 
       {/* Keyword Tracking Table */}
       <div className="bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
             Client Search Keywords & Local Rankings
           </h3>
-          <span className="text-xs font-semibold text-emerald-600">
-            {trackers.length} Tracked Queries
-          </span>
+          <div className="flex items-center gap-3">
+            <div className="relative w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search keyword or client..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+            <span className="text-xs font-semibold text-emerald-600">
+              {filteredTrackers.length} Tracked Queries
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -345,8 +366,14 @@ export default function SeoPage() {
                     Loading SEO rankings...
                   </td>
                 </tr>
+              ) : filteredTrackers.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    No tracked keywords found.
+                  </td>
+                </tr>
               ) : (
-                trackers.map((t) => {
+                filteredTrackers.map((t) => {
                   const rankDiff = t.previousRank - t.currentRank;
 
                   return (

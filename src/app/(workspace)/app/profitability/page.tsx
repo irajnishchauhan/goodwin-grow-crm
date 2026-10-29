@@ -65,7 +65,7 @@ export default function ProfitabilityPage() {
   const totalRev = data.reduce((acc, d) => acc + d.totalRevenue, 0);
   const totalExp = data.reduce((acc, d) => acc + d.totalExpenses, 0);
   const totalNet = totalRev - totalExp;
-  const overallMargin = totalRev > 0 ? Math.round((totalNet / totalRev) * 100) : 71;
+  const overallMargin = totalRev > 0 ? Math.round((totalNet / totalRev) * 100) : 0;
 
   return (
     <div className="space-y-6">

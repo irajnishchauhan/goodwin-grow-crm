@@ -28,7 +28,7 @@ export async function GET(
   }
 }
 
-export async function PUT(
+async function updateFieldVisit(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -37,6 +37,9 @@ export async function PUT(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot update field visits" }, { status: 403 });
     }
 
     const visit = await prisma.batteryFieldVisit.findFirst({
@@ -56,9 +59,9 @@ export async function PUT(
         ...(purpose && { purpose }),
         ...(outcome !== undefined && { outcome }),
         ...(notes !== undefined && { notes }),
-        ...(orderBooked !== undefined && { orderBooked: Number(orderBooked) || 0 }),
-        ...(collectionMade !== undefined && { collectionMade: Number(collectionMade) || 0 }),
-        followUpDate: followUpDate ? new Date(followUpDate) : undefined,
+        ...(orderBooked !== undefined && { orderBooked: orderBooked !== "" && orderBooked !== null ? Number(orderBooked) : null }),
+        ...(collectionMade !== undefined && { collectionMade: collectionMade !== "" && collectionMade !== null ? Number(collectionMade) : null }),
+        ...(followUpDate !== undefined && { followUpDate: followUpDate ? new Date(followUpDate) : null }),
       },
       include: { partner: true },
     });
@@ -67,6 +70,20 @@ export async function PUT(
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
+}
+
+export async function PUT(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateFieldVisit(req, context);
+}
+
+export async function PATCH(
+  req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateFieldVisit(req, context);
 }
 
 export async function DELETE(
@@ -78,6 +95,9 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot delete field visits" }, { status: 403 });
     }
 
     const visit = await prisma.batteryFieldVisit.findFirst({

@@ -10,6 +10,12 @@ export async function GET() {
       { status: 401 }
     );
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden: Client users cannot access agency dashboard reports" },
+      { status: 403 }
+    );
+  }
 
   const tenantId = tenantCtx.tenant.id;
   const now = new Date();

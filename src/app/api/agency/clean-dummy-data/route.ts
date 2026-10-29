@@ -8,6 +8,25 @@ export async function POST() {
     if (!ctx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (ctx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot perform workspace cleanup" },
+        { status: 403 }
+      );
+    }
+
+    const isAdminOrOwner =
+      ctx.isPlatformAdmin ||
+      ctx.membership.isOwner ||
+      ctx.roles.includes("Agency Admin") ||
+      ctx.roles.includes("Super Admin");
+
+    if (!isAdminOrOwner) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Admin or Owner privileges required" },
+        { status: 403 }
+      );
+    }
 
     const tenantId = ctx.tenant.id;
 

@@ -64,6 +64,9 @@ export async function POST(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot create warranty claims" }, { status: 403 });
+  }
 
   const tenantId = tenantCtx.tenant.id;
 
@@ -87,8 +90,28 @@ export async function POST(req: Request) {
       );
     }
 
-    const count = await prisma.batteryWarrantyClaim.count({ where: { tenantId } });
-    const claimNumber = `GB-CLM-2026-${(count + 1).toString().padStart(3, "0")}`;
+    if (partnerId) {
+      const partner = await prisma.batteryPartner.findFirst({
+        where: { id: partnerId, tenantId },
+      });
+      if (!partner) {
+        return NextResponse.json(
+          { success: false, error: "Partner not found in this workspace" },
+          { status: 404 }
+        );
+      }
+    }
+
+    const existingClaims = await prisma.batteryWarrantyClaim.findMany({
+      where: { tenantId, claimNumber: { startsWith: "GB-CLM-2026-" } },
+      select: { claimNumber: true },
+    });
+    let maxSeq = existingClaims.length;
+    for (const c of existingClaims) {
+      const num = parseInt(c.claimNumber.replace("GB-CLM-2026-", ""), 10);
+      if (!isNaN(num) && num > maxSeq) maxSeq = num;
+    }
+    const claimNumber = `GB-CLM-2026-${(maxSeq + 1).toString().padStart(3, "0")}`;
 
     const claim = await prisma.batteryWarrantyClaim.create({
       data: {
@@ -119,6 +142,9 @@ export async function PATCH(req: Request) {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot update warranty claims" }, { status: 403 });
   }
 
   const tenantId = tenantCtx.tenant.id;

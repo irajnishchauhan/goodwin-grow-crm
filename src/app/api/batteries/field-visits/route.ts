@@ -49,6 +49,9 @@ export async function POST(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot log field visits" }, { status: 403 });
+  }
 
   const tenantId = tenantCtx.tenant.id;
 
@@ -58,6 +61,17 @@ export async function POST(req: Request) {
 
     if (!partnerId || !purpose) {
       return NextResponse.json({ success: false, error: "Partner and purpose are required" }, { status: 400 });
+    }
+
+    const partner = await prisma.batteryPartner.findFirst({
+      where: { id: partnerId, tenantId },
+    });
+
+    if (!partner) {
+      return NextResponse.json(
+        { success: false, error: "Partner not found in this workspace" },
+        { status: 404 }
+      );
     }
 
     const visit = await prisma.batteryFieldVisit.create({

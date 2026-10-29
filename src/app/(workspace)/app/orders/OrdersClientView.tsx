@@ -164,11 +164,10 @@ export function OrdersClientView({
   const handleApproveOrder = async (orderId: string) => {
     setSyncingOrderId(orderId);
     try {
-      const res = await fetch("/api/batteries/orders", {
+      const res = await fetch(`/api/batteries/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: orderId,
           status: "APPROVED",
           triggerErpSync: true,
         }),
@@ -427,28 +426,52 @@ export function OrdersClientView({
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {isPending ? (
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {isPending && (
                             <button
                               onClick={() => handleApproveOrder(order.id)}
                               disabled={isSyncing}
                               className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
                             >
-                              {isSyncing ? "Syncing..." : "Approve & Push"}
+                              {isSyncing ? "Syncing..." : "Approve"}
                             </button>
-                          ) : (
-                            <select
-                              value={order.status}
-                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                              className="text-[11px] font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-700 focus:outline-none cursor-pointer"
-                            >
-                              <option value="APPROVED">APPROVED</option>
-                              <option value="PROCESSING">PROCESSING</option>
-                              <option value="DISPATCHED">DISPATCHED</option>
-                              <option value="DELIVERED">DELIVERED</option>
-                              <option value="CANCELLED">CANCELLED</option>
-                            </select>
                           )}
+                          {(order.status === "APPROVED" || order.status === "PROCESSING") && (
+                            <button
+                              onClick={() => handleUpdateOrderStatus(order.id, "DISPATCHED")}
+                              className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
+                            >
+                              Dispatch
+                            </button>
+                          )}
+                          {order.status === "DISPATCHED" && (
+                            <button
+                              onClick={() => handleUpdateOrderStatus(order.id, "DELIVERED")}
+                              className="px-2.5 py-1 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition cursor-pointer"
+                            >
+                              Deliver
+                            </button>
+                          )}
+                          {order.status !== "CANCELLED" && order.status !== "DELIVERED" && (
+                            <button
+                              onClick={() => handleUpdateOrderStatus(order.id, "CANCELLED")}
+                              className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold text-[11px] transition cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                          <select
+                            value={order.status}
+                            onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                            className="text-[11px] font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-700 focus:outline-none cursor-pointer"
+                          >
+                            <option value="PENDING_APPROVAL">PENDING APPROVAL</option>
+                            <option value="APPROVED">APPROVED</option>
+                            <option value="PROCESSING">PROCESSING</option>
+                            <option value="DISPATCHED">DISPATCHED</option>
+                            <option value="DELIVERED">DELIVERED</option>
+                            <option value="CANCELLED">CANCELLED</option>
+                          </select>
                           <button
                             onClick={() => handleDeleteOrder(order.id, order.orderNumber)}
                             title="Delete Order"

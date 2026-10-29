@@ -214,6 +214,23 @@ export default function CampaignsPage() {
     }
   }
 
+  async function handleToggleStatus(c: AdCampaign) {
+    const nextStatus = c.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    try {
+      const res = await fetch(`/api/agency/ads/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchCampaigns();
+      }
+    } catch (err) {
+      console.error("Failed to toggle campaign status:", err);
+    }
+  }
+
   async function handleDeleteCampaign(id: string, name: string) {
     if (!confirm(`Are you sure you want to delete campaign "${name}"? This action cannot be undone.`)) {
       return;
@@ -393,17 +410,20 @@ export default function CampaignsPage() {
                     <span>{c.client?.name || c.client?.brandName || "General Agency Campaign"}</span>
                   </span>
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStatus(c)}
+                      title="Click to toggle ACTIVE / PAUSED"
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition ${
                         c.status === "ACTIVE"
-                          ? "bg-emerald-100 text-emerald-800"
+                          ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
                           : c.status === "PAUSED"
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-slate-100 text-slate-700"
+                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                       }`}
                     >
                       {c.status}
-                    </span>
+                    </button>
                     <button
                       onClick={() => handleOpenEdit(c)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"

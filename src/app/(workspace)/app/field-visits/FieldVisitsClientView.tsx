@@ -64,6 +64,7 @@ export function FieldVisitsClientView({
   const [editFormData, setEditFormData] = useState({
     purpose: "",
     outcome: "",
+    notes: "",
     orderBooked: "",
     collectionMade: "",
     followUpDate: "",
@@ -75,6 +76,7 @@ export function FieldVisitsClientView({
     partnerId: partners[0]?.id || "",
     purpose: "Monthly Dealer Review & Stock Audit",
     outcome: "",
+    notes: "",
     orderBooked: "",
     collectionMade: "",
     followUpDate: "",
@@ -85,6 +87,7 @@ export function FieldVisitsClientView({
     setEditFormData({
       purpose: v.purpose,
       outcome: v.outcome || "",
+      notes: v.notes || "",
       orderBooked: v.orderBooked ? String(v.orderBooked) : "",
       collectionMade: v.collectionMade ? String(v.collectionMade) : "",
       followUpDate: v.followUpDate ? new Date(v.followUpDate).toISOString().split("T")[0] : "",
@@ -98,7 +101,7 @@ export function FieldVisitsClientView({
     setIsSavingEdit(true);
     try {
       const res = await fetch(`/api/batteries/field-visits/${editingVisit.id}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editFormData),
       });
@@ -163,6 +166,7 @@ export function FieldVisitsClientView({
           partnerId: partners[0]?.id || "",
           purpose: "Monthly Dealer Review & Stock Audit",
           outcome: "",
+          notes: "",
           orderBooked: "",
           collectionMade: "",
           followUpDate: "",
@@ -491,6 +495,17 @@ export function FieldVisitsClientView({
                   rows={2}
                   value={editFormData.outcome}
                   onChange={(e) => setEditFormData({ ...editFormData, outcome: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Detailed Field Notes</label>
+                <textarea
+                  rows={2}
+                  value={editFormData.notes}
+                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                  placeholder="Additional stock inspection or competitor notes..."
                   className="w-full px-3 py-2 rounded-xl border border-slate-200"
                 />
               </div>

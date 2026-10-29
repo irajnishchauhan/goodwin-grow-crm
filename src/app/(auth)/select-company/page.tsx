@@ -9,6 +9,7 @@ export default function SelectCompanyPage() {
   const [memberships, setMemberships] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [switching, setSwitching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -17,31 +18,34 @@ export default function SelectCompanyPage() {
         if (data.success && data.data) {
           setMemberships(data.data.memberships || []);
         } else {
-          window.location.href = "/login";
+          router.replace("/login");
         }
       })
       .catch(() => {
-        window.location.href = "/login";
+        router.replace("/login");
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [router]);
 
   async function handleSelect(tenantId: string) {
     try {
       setSwitching(true);
+      setError(null);
       const res = await fetch("/api/auth/switch-tenant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tenantId }),
       });
 
-      if (res.ok) {
-        window.location.href = "/app/dashboard";
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success !== false) {
+        router.push("/app/dashboard");
+        router.refresh();
       } else {
-        alert("Failed to switch company workspace");
+        setError(data.error || "Failed to switch company workspace");
       }
     } catch {
-      alert("Error switching workspace");
+      setError("Error switching workspace");
     } finally {
       setSwitching(false);
     }
@@ -61,8 +65,17 @@ export default function SelectCompanyPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6 space-y-3">
+          {error && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700">
+              {error}
+            </div>
+          )}
           {loading ? (
             <div className="py-8 text-center text-xs text-slate-400">Loading workspaces...</div>
+          ) : memberships.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400">
+              No active company workspaces assigned to your account.
+            </div>
           ) : (
             memberships.map((m) => (
               <button
@@ -72,9 +85,15 @@ export default function SelectCompanyPage() {
                 className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/40 text-left transition cursor-pointer group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-emerald-100 text-slate-700 group-hover:text-emerald-800 flex items-center justify-center font-bold text-sm transition">
-                    <Building2 className="w-5 h-5" />
-                  </div>
+                  {m.tenantLogoUrl ? (
+                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-xs">
+                      <img src={m.tenantLogoUrl} alt={m.tenantName} className="w-full h-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-emerald-100 text-slate-700 group-hover:text-emerald-800 flex items-center justify-center font-bold text-sm transition shrink-0">
+                      <Building2 className="w-5 h-5" />
+                    </div>
+                  )}
                   <div>
                     <div className="text-sm font-bold text-slate-900 group-hover:text-emerald-950">
                       {m.tenantName}

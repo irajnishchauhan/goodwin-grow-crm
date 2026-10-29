@@ -12,7 +12,21 @@ export async function GET(req: Request) {
   const clientId = searchParams.get("clientId");
 
   const whereClause: any = { tenantId: tenantCtx.tenant.id };
-  if (clientId) {
+  if (tenantCtx.isClientUser) {
+    if (!tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: No client associated with account" },
+        { status: 403 }
+      );
+    }
+    if (clientId && clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cross-client project access is prohibited" },
+        { status: 403 }
+      );
+    }
+    whereClause.clientId = tenantCtx.agencyClientId;
+  } else if (clientId) {
     whereClause.clientId = clientId;
   }
 
@@ -33,6 +47,12 @@ export async function POST(req: Request) {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot create projects" },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();

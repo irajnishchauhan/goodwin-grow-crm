@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
     const result = await switchActiveTenant(session.user.id, targetTenantId, session.token);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: `Switched to workspace: ${result.tenantName}`,
       data: {
@@ -44,6 +44,15 @@ export async function POST(req: Request) {
         tenantCode: result.tenantCode,
       },
     });
+
+    response.cookies.set("gg_crm_active_tenant", targetTenantId, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+      sameSite: "lax",
+    });
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+
+    return response;
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || "Failed to switch workspace" },

@@ -1,7 +1,8 @@
 "use client";
 
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   Users2,
@@ -46,12 +47,26 @@ import { cn } from "@/lib/utils";
 
 interface SidebarProps {
   isPlatformAdmin?: boolean;
+  isClientUser?: boolean;
   activeTenant?: {
     id: string;
     name: string;
     code: string;
+    logoUrl?: string | null;
   } | null;
 }
+
+const clientPortalNavGroups = [
+  {
+    category: "CLIENT PORTAL",
+    links: [
+      { name: "Client Portal", href: "/app/portal", icon: ExternalLink },
+      { name: "Creative Approvals", href: "/app/creative-approvals", icon: CheckCircle2 },
+      { name: "Content Calendar", href: "/app/content-calendar", icon: Calendar },
+      { name: "Invoices", href: "/app/invoices", icon: Receipt },
+    ],
+  },
+];
 
 // 1. Marketing Agency Operating System (Goodwin Grow AI)
 const agencyNavGroups = [
@@ -61,8 +76,11 @@ const agencyNavGroups = [
       { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
       { name: "Leads", href: "/app/leads", icon: TrendingUp },
       { name: "Contacts", href: "/app/contacts", icon: Users2 },
+      { name: "Companies", href: "/app/companies", icon: Building2 },
       { name: "Deals", href: "/app/deals", icon: Kanban },
       { name: "Proposals", href: "/app/proposals", icon: FileSpreadsheet },
+      { name: "Quotations", href: "/app/quotations", icon: FileSpreadsheet },
+      { name: "Products", href: "/app/products", icon: Package },
     ],
   },
   {
@@ -80,6 +98,7 @@ const agencyNavGroups = [
     links: [
       { name: "Projects", href: "/app/projects", icon: FolderKanban },
       { name: "Tasks", href: "/app/tasks", icon: CheckSquare },
+      { name: "Activities", href: "/app/activities", icon: Clock },
       { name: "Content Calendar", href: "/app/content-calendar", icon: Calendar },
       { name: "Creative Approvals", href: "/app/creative-approvals", icon: CheckCircle2 },
       { name: "Team Workload", href: "/app/team-workload", icon: Gauge },
@@ -196,28 +215,128 @@ const standardNavGroups = [
   },
 ];
 
-export function Sidebar({ isPlatformAdmin, activeTenant }: SidebarProps) {
+const CLIENT_SUBROUTES = [
+  "/app/clients/onboarding",
+  "/app/clients/retainers",
+  "/app/clients/portal",
+  "/app/clients/renewals",
+];
+
+function SidebarNavList({
+  navGroups,
+  pathname,
+}: {
+  navGroups: typeof agencyNavGroups;
+  pathname: string;
+}) {
+  const searchParams = useSearchParams();
+  const currentTab = searchParams?.get("tab");
+
+  return (
+    <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-5 scrollbar-thin scrollbar-thumb-slate-200">
+      {navGroups.map((group) => (
+        <div key={group.category} className="space-y-1">
+          <div className="text-[10px] font-bold tracking-wider text-slate-400 px-3 uppercase mb-1.5 flex items-center justify-between">
+            <span>{group.category}</span>
+          </div>
+          {group.links.map((link) => {
+            const Icon = link.icon;
+            const [linkPath, linkQuery] = link.href.split("?");
+            const linkTab = linkQuery ? new URLSearchParams(linkQuery).get("tab") : null;
+
+            let isActive = false;
+            if (linkTab) {
+              isActive = pathname === linkPath && currentTab === linkTab;
+            } else if (linkPath === "/app/settings") {
+              isActive = pathname === "/app/settings" && currentTab !== "team";
+            } else if (linkPath === "/app/clients") {
+              isActive =
+                pathname === "/app/clients" ||
+                (pathname.startsWith("/app/clients/") &&
+                  !CLIENT_SUBROUTES.some((sub) => pathname === sub || pathname.startsWith(`${sub}/`)));
+            } else {
+              isActive =
+                pathname === linkPath ||
+                (linkPath !== "/app/dashboard" && pathname.startsWith(`${linkPath}/`));
+            }
+
+            return (
+              <Link
+                key={link.name}
+                href={link.href}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all group",
+                  isActive
+                    ? "bg-emerald-50 text-emerald-700 font-semibold shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <Icon
+                  className={cn(
+                    "w-4 h-4 shrink-0 transition-colors",
+                    isActive ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600"
+                  )}
+                />
+                <span className="truncate">{link.name}</span>
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function Sidebar({ isPlatformAdmin, isClientUser, activeTenant }: SidebarProps) {
   const pathname = usePathname();
+  const [logoUrl, setLogoUrl] = useState<string | null>(activeTenant?.logoUrl || null);
+
+  useEffect(() => {
+    setLogoUrl(activeTenant?.logoUrl || null);
+  }, [activeTenant?.logoUrl]);
+
+  useEffect(() => {
+    function handleLogoUpdated(e: any) {
+      if (e.detail?.logoUrl !== undefined) {
+        setLogoUrl(e.detail.logoUrl);
+      }
+    }
+    window.addEventListener("workspace-logo-updated", handleLogoUpdated);
+    return () => window.removeEventListener("workspace-logo-updated", handleLogoUpdated);
+  }, []);
+
   const isAgency = activeTenant?.code === "goodwin-grow-ai";
   const isBatteries = activeTenant?.code === "goodwin-batteries";
-  const navGroups = isAgency ? agencyNavGroups : isBatteries ? batteriesNavGroups : standardNavGroups;
+  const navGroups = isClientUser
+    ? clientPortalNavGroups
+    : isAgency
+    ? agencyNavGroups
+    : isBatteries
+    ? batteriesNavGroups
+    : standardNavGroups;
 
   return (
     <aside className="w-64 border-r border-slate-200 bg-white flex flex-col h-screen select-none shrink-0 shadow-xs">
       {/* Brand Header */}
       <div className="h-16 flex items-center px-5 border-b border-slate-100 gap-3">
-        <div
-          className={cn(
-            "w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md transition-all",
-            isAgency
-              ? "bg-gradient-to-tr from-indigo-600 via-emerald-600 to-teal-500 shadow-emerald-600/20"
-              : isBatteries
-              ? "bg-gradient-to-tr from-amber-600 via-orange-500 to-emerald-600 shadow-amber-600/20"
-              : "bg-gradient-to-tr from-emerald-700 via-emerald-600 to-teal-500 shadow-emerald-700/20"
-          )}
-        >
-          {isBatteries ? <BatteryCharging className="w-5 h-5 text-white" /> : <Layers className="w-5 h-5" />}
-        </div>
+        {logoUrl ? (
+          <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center p-1 shadow-xs shrink-0">
+            <img src={logoUrl} alt={activeTenant?.name || "Logo"} className="w-full h-full object-contain" />
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md transition-all shrink-0",
+              isAgency
+                ? "bg-gradient-to-tr from-indigo-600 via-emerald-600 to-teal-500 shadow-emerald-600/20"
+                : isBatteries
+                ? "bg-gradient-to-tr from-amber-600 via-orange-500 to-emerald-600 shadow-amber-600/20"
+                : "bg-gradient-to-tr from-emerald-700 via-emerald-600 to-teal-500 shadow-emerald-700/20"
+            )}
+          >
+            {isBatteries ? <BatteryCharging className="w-5 h-5 text-white" /> : <Layers className="w-5 h-5" />}
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold tracking-tight text-slate-900 truncate flex items-center gap-1.5">
             {activeTenant?.name || "Goodwin Grow"}{" "}
@@ -226,7 +345,12 @@ export function Sidebar({ isPlatformAdmin, activeTenant }: SidebarProps) {
             </span>
           </div>
           <div className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1 text-slate-400">
-            {isAgency ? (
+            {isClientUser ? (
+              <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Client Portal
+              </span>
+            ) : isAgency ? (
               <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 Agency OS
@@ -244,46 +368,12 @@ export function Sidebar({ isPlatformAdmin, activeTenant }: SidebarProps) {
       </div>
 
       {/* Nav Menu */}
-      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-5 scrollbar-thin scrollbar-thumb-slate-200">
-        {navGroups.map((group) => (
-          <div key={group.category} className="space-y-1">
-            <div className="text-[10px] font-bold tracking-wider text-slate-400 px-3 uppercase mb-1.5 flex items-center justify-between">
-              <span>{group.category}</span>
-            </div>
-            {group.links.map((link) => {
-              const Icon = link.icon;
-              const isActive =
-                pathname === link.href ||
-                (link.href !== "/app/dashboard" && pathname.startsWith(`${link.href}/`)) ||
-                (link.href.includes("?tab=") && pathname === link.href.split("?")[0]);
-
-              return (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className={cn(
-                    "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all group",
-                    isActive
-                      ? "bg-emerald-50 text-emerald-700 font-semibold shadow-xs"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      "w-4 h-4 shrink-0 transition-colors",
-                      isActive ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600"
-                    )}
-                  />
-                  <span className="truncate">{link.name}</span>
-                </Link>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+      <Suspense fallback={<div className="flex-1 px-3.5 py-4 text-xs text-slate-400">Loading menu...</div>}>
+        <SidebarNavList navGroups={navGroups} pathname={pathname} />
+      </Suspense>
 
       {/* Platform Super Admin Quick Links */}
-      {isPlatformAdmin && (
+      {isPlatformAdmin && !isClientUser && (
         <div className="p-3 border-t border-slate-100 bg-slate-50/70 space-y-1.5">
           <Link
             href="/super-admin"

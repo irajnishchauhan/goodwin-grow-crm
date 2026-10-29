@@ -14,6 +14,12 @@ export async function GET(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot access stored agency credentials" },
+        { status: 403 }
+      );
+    }
 
     const client = await prisma.agencyClient.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
@@ -69,9 +75,9 @@ export async function GET(
       },
     });
 
-    const decrypted = credentials.map((c) => ({
+    const decrypted = credentials.map(({ encryptedPassword, ...c }) => ({
       ...c,
-      password: c.encryptedPassword ? decryptCredential(c.encryptedPassword) : "",
+      password: encryptedPassword ? decryptCredential(encryptedPassword) : "",
     }));
 
     return NextResponse.json({
@@ -94,6 +100,12 @@ export async function POST(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot access stored agency credentials" },
+        { status: 403 }
+      );
     }
 
     const client = await prisma.agencyClient.findFirst({
@@ -168,10 +180,23 @@ export async function POST(
       },
     });
 
+    const { encryptedPassword: _omitted, ...safeNewCred } = newCred;
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId: tenantCtx.tenant.id,
+        userId: tenantCtx.user.id,
+        action: "CREATE_CLIENT_CREDENTIAL",
+        entityType: "AgencyClientCredential",
+        entityId: newCred.id,
+        metadata: { clientId: id, platform: newCred.platform, accountIdentifier: newCred.accountIdentifier },
+      },
+    }).catch(() => {});
+
     return NextResponse.json({
       success: true,
       data: {
-        ...newCred,
+        ...safeNewCred,
         password: password || "",
       },
     });

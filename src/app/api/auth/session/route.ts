@@ -19,6 +19,7 @@ export async function GET() {
     tenantId: m.tenantId,
     tenantName: m.tenant?.name || "",
     tenantCode: m.tenant?.code || "",
+    tenantLogoUrl: m.tenant?.settings?.logoUrl || null,
     isOwner: m.isOwner,
   }));
 
@@ -26,17 +27,25 @@ export async function GET() {
     const allTenants = await prisma.tenant.findMany({
       where: { status: "ACTIVE" },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, code: true },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        settings: {
+          select: { logoUrl: true },
+        },
+      },
     });
     memberships = allTenants.map((t) => ({
       tenantId: t.id,
       tenantName: t.name,
       tenantCode: t.code,
+      tenantLogoUrl: t.settings?.logoUrl || null,
       isOwner: true,
     }));
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     success: true,
     data: {
       user: {
@@ -51,4 +60,7 @@ export async function GET() {
       memberships,
     },
   });
+
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  return response;
 }

@@ -55,6 +55,13 @@ export async function PUT(
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify or delete tasks" },
+        { status: 403 }
+      );
+    }
+
     if (!tenantCtx.hasPermission("tasks:write")) {
       return NextResponse.json({ success: false, error: "Forbidden: Missing tasks:write permission" }, { status: 403 });
     }
@@ -120,6 +127,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -129,6 +138,13 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify or delete tasks" },
+        { status: 403 }
+      );
     }
 
     if (!tenantCtx.hasPermission("tasks:delete")) {

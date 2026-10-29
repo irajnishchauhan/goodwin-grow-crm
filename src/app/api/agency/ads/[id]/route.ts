@@ -22,6 +22,13 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Campaign not found" }, { status: 404 });
     }
 
+    if (tenantCtx.isClientUser && campaign.clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cross-client ad campaign access is prohibited" },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({ success: true, data: campaign });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -37,6 +44,12 @@ export async function PUT(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify ad campaigns" },
+        { status: 403 }
+      );
     }
 
     const existing = await prisma.adCampaign.findFirst({
@@ -70,11 +83,11 @@ export async function PUT(
         objective: objective !== undefined ? objective : existing.objective,
         status: status !== undefined ? status : existing.status,
         clientId: clientId !== undefined ? (clientId || null) : existing.clientId,
-        budget: budget !== undefined ? budget : existing.budget,
-        spent: spent !== undefined ? spent : existing.spent,
+        budget: budget !== undefined ? Number(budget) : existing.budget,
+        spent: spent !== undefined ? Number(spent) : existing.spent,
         leadsCount: leadsCount !== undefined ? Number(leadsCount) : existing.leadsCount,
-        cpl: cpl !== undefined ? cpl : existing.cpl,
-        roas: roas !== undefined ? roas : existing.roas,
+        cpl: cpl !== undefined ? Number(cpl) : existing.cpl,
+        roas: roas !== undefined ? Number(roas) : existing.roas,
         impressions: impressions !== undefined ? Number(impressions) : existing.impressions,
         clicks: clicks !== undefined ? Number(clicks) : existing.clicks,
       },
@@ -87,6 +100,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -96,6 +111,12 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot delete ad campaigns" },
+        { status: 403 }
+      );
     }
 
     const existing = await prisma.adCampaign.findFirst({

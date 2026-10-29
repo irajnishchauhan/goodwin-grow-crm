@@ -3,10 +3,28 @@ import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { SYSTEM_PERMISSIONS } from "@/lib/rbac/permissions";
 
+function canManageRoles(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
+  const isAdminOrOwner =
+    tenantCtx.isPlatformAdmin ||
+    tenantCtx.membership.isOwner ||
+    tenantCtx.primaryRole === "Super Admin" ||
+    tenantCtx.primaryRole === "Agency Admin" ||
+    tenantCtx.roles.some((r) => ["super admin", "agency admin", "admin", "company admin", "company owner"].includes(r.toLowerCase().trim()));
+  return (
+    isAdminOrOwner ||
+    tenantCtx.hasPermission("roles:manage") ||
+    tenantCtx.hasPermission("team:manage") ||
+    tenantCtx.hasPermission("settings:manage")
+  );
+}
+
 export async function GET() {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot access roles" }, { status: 403 });
   }
 
   const tenantId = tenantCtx.tenant.id;
@@ -62,13 +80,16 @@ export async function GET() {
     permissionCodes: r.permissions.map((p) => p.permission.code),
   }));
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      roles: formattedRoles,
-      availablePermissions: allPermissions.length > 0 ? allPermissions : SYSTEM_PERMISSIONS,
+  return NextResponse.json(
+    {
+      success: true,
+      data: {
+        roles: formattedRoles,
+        availablePermissions: allPermissions.length > 0 ? allPermissions : SYSTEM_PERMISSIONS,
+      },
     },
-  });
+    { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+  );
 }
 
 export async function POST(req: Request) {
@@ -77,10 +98,13 @@ export async function POST(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot create roles" }, { status: 403 });
+    }
 
-    if (!tenantCtx.hasPermission("team:manage") && !tenantCtx.hasPermission("settings:manage")) {
+    if (!canManageRoles(tenantCtx)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: Missing team:manage or settings:manage permission" },
+        { success: false, error: "Forbidden: Missing roles:manage permission" },
         { status: 403 }
       );
     }

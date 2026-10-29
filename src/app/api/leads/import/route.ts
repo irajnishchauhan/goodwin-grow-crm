@@ -8,6 +8,9 @@ export async function POST(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
 
     if (!tenantCtx.hasPermission("leads:write")) {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
@@ -26,14 +29,18 @@ export async function POST(req: Request) {
       .map((r) => r.email?.toLowerCase().trim())
       .filter(Boolean);
 
-    // Find existing leads in this tenant with these emails
-    const existingLeads = await prisma.lead.findMany({
-      where: {
-        tenantId,
-        email: { in: incomingEmails },
-      },
-      select: { email: true },
-    });
+    // Find existing leads in this tenant with these emails (case-insensitive)
+    const existingLeads = incomingEmails.length > 0
+      ? await prisma.lead.findMany({
+          where: {
+            tenantId,
+            OR: incomingEmails.map((em) => ({
+              email: { equals: em, mode: "insensitive" },
+            })),
+          },
+          select: { email: true },
+        })
+      : [];
 
     const existingEmailSet = new Set(existingLeads.map((l) => l.email?.toLowerCase()));
 

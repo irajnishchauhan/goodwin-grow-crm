@@ -27,6 +27,13 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Project not found" }, { status: 404 });
     }
 
+    if (tenantCtx.isClientUser && project.clientId !== tenantCtx.agencyClientId) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Cross-client project access is prohibited" },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({ success: true, data: project });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -43,6 +50,12 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot modify projects" },
+        { status: 403 }
+      );
+    }
 
     const existing = await prisma.agencyProject.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
@@ -52,16 +65,17 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { name, description, status, clientId, budget, progressPercent, assigneeName, dueDate } = body;
+    const { name, description, deliverableType, status, clientId, budget, progressPercent, assigneeName, dueDate } = body;
 
     const updated = await prisma.agencyProject.update({
       where: { id },
       data: {
         name: name !== undefined ? name : existing.name,
         description: description !== undefined ? description : existing.description,
+        deliverableType: deliverableType !== undefined ? deliverableType : existing.deliverableType,
         status: status !== undefined ? status : existing.status,
         clientId: clientId !== undefined ? (clientId || null) : existing.clientId,
-        budget: budget !== undefined ? budget : existing.budget,
+        budget: budget !== undefined ? Number(budget) : existing.budget,
         progressPercent: progressPercent !== undefined ? Number(progressPercent) : existing.progressPercent,
         assigneeName: assigneeName !== undefined ? assigneeName : existing.assigneeName,
         dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : existing.dueDate,
@@ -75,6 +89,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -84,6 +100,12 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden: Client users cannot delete projects" },
+        { status: 403 }
+      );
     }
 
     const existing = await prisma.agencyProject.findFirst({

@@ -85,16 +85,42 @@ export default function InvoicesPage() {
   // Edit Modal
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<AgencyInvoice | null>(null);
-  const [editSubtotal, setEditSubtotal] = useState("50000");
+  const [editItems, setEditItems] = useState<Array<{ description: string; amount: number }>>([]);
+  const [editClientId, setEditClientId] = useState<string>("");
+  const [editClientName, setEditClientName] = useState<string>("");
+  const [editClientBrand, setEditClientBrand] = useState<string>("");
+  const [editClientEmail, setEditClientEmail] = useState<string>("");
+  const [editClientPhone, setEditClientPhone] = useState<string>("");
+  const [editClientGstin, setEditClientGstin] = useState<string>("");
   const [editDueDate, setEditDueDate] = useState("");
   const [editStatus, setEditStatus] = useState("SENT");
   const [editPaymentMethod, setEditPaymentMethod] = useState("Razorpay UPI");
-  const [editDescription, setEditDescription] = useState("");
+  const [workspaceSettings, setWorkspaceSettings] = useState<{
+    name: string;
+    code: string;
+    logoUrl?: string | null;
+    businessEmail?: string;
+    phone?: string;
+    address?: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchInvoices();
     fetchClients();
+    fetchWorkspaceSettings();
   }, [statusFilter]);
+
+  async function fetchWorkspaceSettings() {
+    try {
+      const res = await fetch("/api/settings", { cache: "no-store" });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setWorkspaceSettings(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   async function fetchClients() {
     try {
@@ -227,25 +253,69 @@ export default function InvoicesPage() {
 
   function openEditModal(inv: AgencyInvoice) {
     setEditingInvoice(inv);
-    setEditSubtotal(String(inv.subtotal));
+    setEditClientId(inv.client?.id || "");
+    setEditClientName(inv.client?.name || inv.clientName || "");
+    setEditClientBrand(inv.client?.brandName || inv.clientBillingDetails?.brandName || "");
+    setEditClientEmail(inv.client?.email || inv.clientBillingDetails?.email || "");
+    setEditClientPhone(inv.client?.phone || inv.clientBillingDetails?.phone || "");
+    setEditClientGstin(inv.clientBillingDetails?.gstin || "");
     setEditDueDate(inv.dueDate ? inv.dueDate.slice(0, 10) : "");
     setEditStatus(inv.status);
     setEditPaymentMethod(inv.paymentMethod || "Razorpay UPI");
-    const desc = Array.isArray(inv.items) && inv.items[0]?.description
-      ? inv.items[0].description
-      : "Agency Digital Marketing Services";
-    setEditDescription(desc);
+
+    const parsedItems =
+      Array.isArray(inv.items) && inv.items.length > 0
+        ? inv.items.map((it: any) => ({
+            description: it.description || "Agency Digital Marketing Services",
+            amount: Number(it.amount) || 0,
+          }))
+        : [
+            {
+              description: "Agency Digital Marketing Services",
+              amount: Number(inv.subtotal) || 0,
+            },
+          ];
+    setEditItems(parsedItems);
     setEditModalOpen(true);
   }
+
+  function handleAddEditLineItem() {
+    setEditItems((prev) => [
+      ...prev,
+      { description: "Additional Strategic Deliverable / Add-on Service", amount: 12000 },
+    ]);
+  }
+
+  function handleRemoveEditLineItem(idx: number) {
+    if (editItems.length <= 1) return;
+    setEditItems((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function handleEditLineItemChange(idx: number, field: "description" | "amount", val: any) {
+    setEditItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, [field]: field === "amount" ? Number(val) || 0 : val } : it))
+    );
+  }
+
+  const editComputedSubtotal = editItems.reduce((acc, it) => acc + (Number(it.amount) || 0), 0);
+  const editComputedTax = Math.round(editComputedSubtotal * 0.18);
+  const editComputedTotal = editComputedSubtotal + editComputedTax;
 
   async function handleUpdateInvoice(e: React.FormEvent) {
     e.preventDefault();
     if (!editingInvoice) return;
     setSaving(true);
 
-    const subVal = Number(editSubtotal);
-    const taxVal = subVal * 0.18;
-    const totalVal = subVal + taxVal;
+    const subVal = editComputedSubtotal;
+    const taxVal = editComputedTax;
+    const totalVal = editComputedTotal;
+    const updatedBillingDetails = {
+      ...(editingInvoice.clientBillingDetails || {}),
+      brandName: editClientBrand || null,
+      email: editClientEmail || null,
+      phone: editClientPhone || null,
+      gstin: editClientGstin || null,
+    };
 
     // Optimistic UI update
     setInvoices((prev) =>
@@ -253,13 +323,15 @@ export default function InvoicesPage() {
         inv.id === editingInvoice.id
           ? {
               ...inv,
+              clientName: editClientName || inv.clientName,
+              clientBillingDetails: updatedBillingDetails,
               subtotal: subVal,
               taxAmount: taxVal,
               totalAmount: totalVal,
               status: editStatus,
               dueDate: editDueDate || inv.dueDate,
               paymentMethod: editPaymentMethod,
-              items: [{ description: editDescription, amount: subVal }],
+              items: editItems,
             }
           : inv
       )
@@ -270,13 +342,16 @@ export default function InvoicesPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          clientId: editClientId || editingInvoice.client?.id || null,
+          clientName: editClientName || editingInvoice.clientName,
+          clientBillingDetails: updatedBillingDetails,
           subtotal: subVal,
           taxAmount: taxVal,
           totalAmount: totalVal,
           status: editStatus,
           dueDate: editDueDate,
           paymentMethod: editPaymentMethod,
-          items: [{ description: editDescription, amount: subVal }],
+          items: editItems,
         }),
       });
 
@@ -482,9 +557,9 @@ export default function InvoicesPage() {
                       {inv.invoiceNumber}
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-slate-800">{inv.client?.name || "Client"}</div>
-                      {inv.client?.brandName && (
-                        <div className="text-[10px] text-slate-400">{inv.client.brandName}</div>
+                      <div className="font-semibold text-slate-800">{inv.client?.name || inv.clientName || "Client"}</div>
+                      {(inv.client?.brandName || inv.clientBillingDetails?.brandName) && (
+                        <div className="text-[10px] text-slate-400">{inv.client?.brandName || inv.clientBillingDetails?.brandName}</div>
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-slate-600">
@@ -594,33 +669,38 @@ export default function InvoicesPage() {
               {/* Brand and Invoice Info */}
               <div className="flex justify-between items-start border-b border-slate-100 pb-6">
                 <div className="flex items-center gap-3.5">
-                  {/* Official Goodwin Grow AI Vector Logo */}
-                  <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/25 p-2">
-                    <svg viewBox="0 0 40 40" className="w-9 h-9" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <rect width="40" height="40" rx="10" fill="url(#gg-gradient)" />
-                      <path d="M12 28V12L20 8L28 12V28L20 32L12 28Z" stroke="white" strokeWidth="2" strokeLinejoin="round" />
-                      <path d="M20 14V26M14 23L20 26L26 23M14 17L20 20L26 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      <defs>
-                        <linearGradient id="gg-gradient" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-                          <stop stopColor="#059669" />
-                          <stop offset="0.5" stopColor="#0d9488" />
-                          <stop offset="1" stopColor="#4f46e5" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                  </div>
+                  {workspaceSettings?.logoUrl ? (
+                    <div className="w-13 h-13 rounded-2xl bg-white border border-slate-200 flex items-center justify-center p-1 shadow-sm shrink-0 overflow-hidden">
+                      <img src={workspaceSettings.logoUrl} alt={workspaceSettings.name} className="w-full h-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/25 p-2">
+                      <svg viewBox="0 0 40 40" className="w-9 h-9" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="10" fill="url(#gg-gradient)" />
+                        <path d="M12 28V12L20 8L28 12V28L20 32L12 28Z" stroke="white" strokeWidth="2" strokeLinejoin="round" />
+                        <path d="M20 14V26M14 23L20 26L26 23M14 17L20 20L26 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <defs>
+                          <linearGradient id="gg-gradient" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#059669" />
+                            <stop offset="0.5" stopColor="#0d9488" />
+                            <stop offset="1" stopColor="#4f46e5" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                    </div>
+                  )}
                   <div>
-                    <div className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-                      GOODWIN GROW <span className="text-emerald-600 font-black">AI</span>
+                    <div className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-1.5 uppercase">
+                      {workspaceSettings?.name || "GOODWIN GROW AI"}
                     </div>
                     <div className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider flex items-center gap-1">
-                      <span>Agency Operating System</span>
+                      <span>{workspaceSettings?.code?.includes("batteries") ? "Battery Sales & Distribution" : "Enterprise Operating System"}</span>
                       <span>•</span>
                       <span>18% GST Compliant</span>
                     </div>
                     <div className="text-slate-500 text-[11px] mt-1 leading-relaxed">
-                      Level 9, Cyber City Tower B, DLF Cyber City, Gurugram, Haryana - 122002<br />
-                      GSTIN: 06AABCU9603R1ZM • support@goodwingrowai.com
+                      {workspaceSettings?.address || "Level 9, Cyber City Tower B, DLF Cyber City, Gurugram, Haryana - 122002"}<br />
+                      GSTIN: 06AABCU9603R1ZM • {workspaceSettings?.businessEmail || "support@goodwingrowai.com"}
                     </div>
                   </div>
                 </div>
@@ -720,9 +800,9 @@ export default function InvoicesPage() {
               {/* Bank Details & Terms */}
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500 space-y-1">
                 <div className="font-bold text-slate-700">Bank Settlement Details:</div>
-                <div>Account Name: Goodwin Grow AI Solutions Private Limited</div>
+                <div>Account Name: {workspaceSettings?.name || "Goodwin Grow AI Solutions Private Limited"}</div>
                 <div>HDFC Bank • A/C No: 50200084920194 • IFSC: HDFC0000240</div>
-                <div>UPI ID: goodwingrowai@hdfcbank</div>
+                <div>UPI ID: {workspaceSettings?.businessEmail?.split("@")[0] || "goodwingrowai"}@hdfcbank</div>
               </div>
             </div>
           </div>
@@ -1017,55 +1097,166 @@ export default function InvoicesPage() {
       {/* Edit Modal */}
       {editModalOpen && editingInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Edit Invoice {editingInvoice.invoiceNumber}</h3>
-                <p className="text-xs text-slate-500">Update amounts, payment status, or due date.</p>
+                <p className="text-xs text-slate-500">Update client details, line items, payment status, or due date.</p>
               </div>
-              <button onClick={() => setEditModalOpen(false)} className="p-1.5 rounded-lg text-slate-400">
+              <button onClick={() => setEditModalOpen(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdateInvoice} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-emerald-800"
-                >
-                  <option value="SENT">SENT (Awaiting Payment)</option>
-                  <option value="PAID">PAID (Settled)</option>
-                  <option value="OVERDUE">OVERDUE</option>
-                  <option value="DRAFT">DRAFT</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Service Description</label>
-                <input
-                  type="text"
-                  required
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
-                />
-              </div>
-
+            <form onSubmit={handleUpdateInvoice} className="p-6 overflow-y-auto space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Subtotal (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    value={editSubtotal}
-                    onChange={(e) => setEditSubtotal(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
-                  />
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Enrolled Client (Optional)</label>
+                  <select
+                    value={editClientId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditClientId(val);
+                      const found = clients.find((c) => c.id === val);
+                      if (found) {
+                        setEditClientName(found.name || "");
+                        setEditClientBrand(found.brandName || "");
+                        setEditClientEmail(found.email || "");
+                        setEditClientPhone(found.phone || "");
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                  >
+                    <option value="">Custom / Direct Client</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.brandName ? `(${c.brandName})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-bold text-emerald-800"
+                  >
+                    <option value="SENT">SENT (Awaiting Payment)</option>
+                    <option value="PAID">PAID (Settled)</option>
+                    <option value="OVERDUE">OVERDUE</option>
+                    <option value="DRAFT">DRAFT</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <div className="text-[11px] font-bold uppercase text-slate-500">Client Billing Details</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Client Contact / Entity Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editClientName}
+                      onChange={(e) => setEditClientName(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Brand Name</label>
+                    <input
+                      type="text"
+                      value={editClientBrand}
+                      onChange={(e) => setEditClientBrand(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={editClientEmail}
+                      onChange={(e) => setEditClientEmail(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={editClientPhone}
+                      onChange={(e) => setEditClientPhone(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">GSTIN</label>
+                    <input
+                      type="text"
+                      value={editClientGstin}
+                      onChange={(e) => setEditClientGstin(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl font-mono uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Line Items ({editItems.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddEditLineItem}
+                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Line Item</span>
+                  </button>
                 </div>
 
+                <div className="space-y-2.5">
+                  {editItems.map((item, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Line Item #{idx + 1}</span>
+                        {editItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEditLineItem(idx)}
+                            className="text-rose-500 hover:text-rose-700 text-[11px] font-semibold cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        rows={2}
+                        required
+                        value={item.description}
+                        onChange={(e) => handleEditLineItemChange(idx, "description", e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg"
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500 text-[11px] font-medium">Taxable Amount (₹):</span>
+                        <input
+                          type="number"
+                          required
+                          value={item.amount}
+                          onChange={(e) => handleEditLineItemChange(idx, "amount", e.target.value)}
+                          className="w-36 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-right font-bold text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Due Date</label>
                   <input
@@ -1076,41 +1267,52 @@ export default function InvoicesPage() {
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Settlement Method</label>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={(e) => setEditPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="Bank Transfer / UPI">Bank Transfer / UPI</option>
+                    <option value="Razorpay UPI">Razorpay UPI</option>
+                    <option value="HDFC Bank Transfer (NEFT/RTGS)">HDFC Bank Transfer (NEFT/RTGS)</option>
+                    <option value="Corporate Credit Card">Corporate Credit Card</option>
+                    <option value="Cheque / Draft">Cheque / Demand Draft</option>
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Settlement Method</label>
-                <select
-                  value={editPaymentMethod}
-                  onChange={(e) => setEditPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
-                >
-                  <option value="Razorpay UPI">Razorpay UPI</option>
-                  <option value="HDFC Bank Transfer (NEFT/RTGS)">HDFC Bank Transfer (NEFT/RTGS)</option>
-                  <option value="Corporate Credit Card">Corporate Credit Card</option>
-                  <option value="Cheque / Draft">Cheque / Demand Draft</option>
-                </select>
-              </div>
-
-              <div className="p-3 rounded-xl bg-emerald-50 text-emerald-900 text-xs font-medium border border-emerald-100 flex justify-between">
-                <span>Total with 18% GST:</span>
-                <span className="font-bold">
-                  ₹{(Number(editSubtotal) * 1.18).toLocaleString("en-IN")}
-                </span>
+              <div className="p-3.5 rounded-xl bg-emerald-50 text-emerald-900 text-xs font-medium border border-emerald-100 space-y-1">
+                <div className="flex justify-between text-slate-600">
+                  <span>Taxable Subtotal:</span>
+                  <span className="font-bold text-slate-900">₹{editComputedSubtotal.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>GST (18%):</span>
+                  <span className="font-bold text-slate-900">₹{editComputedTax.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between pt-1.5 border-t border-emerald-200/80 text-sm font-black text-emerald-950">
+                  <span>Total with 18% GST:</span>
+                  <span className="font-bold text-emerald-700">
+                    ₹{editComputedTotal.toLocaleString("en-IN")}
+                  </span>
+                </div>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setEditModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 cursor-pointer"
                 >
                   {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                   <span>Save Changes</span>

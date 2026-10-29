@@ -7,6 +7,9 @@ export async function GET() {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+  }
 
   const tenantId = tenantCtx.tenant.id;
 
@@ -33,6 +36,9 @@ export async function POST(req: Request) {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
     if (!tenantCtx.hasPermission("automations:manage")) {
@@ -70,9 +76,16 @@ export async function PATCH(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!tenantCtx.hasPermission("automations:manage")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing automations:manage permission" }, { status: 403 });
+    }
 
     const tenantId = tenantCtx.tenant.id;
-    const { id, isActive } = await req.json();
+    const { id, name, triggerEvent, conditions, actions, isActive } = await req.json();
 
     const rule = await prisma.automationRule.findFirst({
       where: { id, tenantId },
@@ -84,7 +97,13 @@ export async function PATCH(req: Request) {
 
     const updated = await prisma.automationRule.update({
       where: { id },
-      data: { isActive },
+      data: {
+        name: name !== undefined ? name : rule.name,
+        triggerEvent: triggerEvent !== undefined ? triggerEvent : rule.triggerEvent,
+        conditions: conditions !== undefined ? conditions : (rule.conditions as any),
+        actions: actions !== undefined ? actions : (rule.actions as any),
+        isActive: isActive !== undefined ? Boolean(isActive) : rule.isActive,
+      },
     });
 
     return NextResponse.json({ success: true, data: updated });
@@ -98,6 +117,9 @@ export async function DELETE(req: Request) {
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
     if (!tenantCtx.hasPermission("automations:manage")) {

@@ -69,7 +69,8 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { content, versionNumber, isInternal } = body;
+    const content = body.content || body.comment;
+    const { versionNumber, isInternal } = body;
 
     if (!content || !content.trim()) {
       return NextResponse.json({ success: false, error: "Comment content cannot be empty" }, { status: 400 });

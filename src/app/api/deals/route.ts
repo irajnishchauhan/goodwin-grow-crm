@@ -7,6 +7,9 @@ export async function GET(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const pipelineId = searchParams.get("pipelineId");
@@ -44,6 +47,13 @@ export async function POST(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!tenantCtx.hasPermission("deals:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing deals:write permission" }, { status: 403 });
+    }
 
     const tenantId = tenantCtx.tenant.id;
     const body = await req.json();
@@ -76,12 +86,19 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, error: "No pipeline stages found" }, { status: 400 });
       }
 
-      finalPipelineId = defaultPipeline.id;
-      finalStageId = defaultPipeline.stages[0].id;
+      finalPipelineId = finalPipelineId || defaultPipeline.id;
+      finalStageId = finalStageId || defaultPipeline.stages[0].id;
+    }
+
+    const validPipeline = await prisma.pipeline.findFirst({
+      where: { id: finalPipelineId, tenantId },
+    });
+    if (!validPipeline) {
+      return NextResponse.json({ success: false, error: "Invalid pipeline for this tenant" }, { status: 400 });
     }
 
     const targetStage = await prisma.pipelineStage.findFirst({
-      where: { id: finalStageId, tenantId },
+      where: { id: finalStageId, tenantId, pipelineId: finalPipelineId },
     });
 
     if (!targetStage) {

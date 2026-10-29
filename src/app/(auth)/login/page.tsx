@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Layers, Lock, Mail, ArrowRight, ShieldCheck, Building2, Sparkles } from "lucide-react";
+import { Layers, Lock, Mail, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,12 +39,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function fillDemoAccount(demoEmail: string, demoPass: string) {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError(null);
   }
 
   return (
@@ -128,142 +122,6 @@ export default function LoginPage() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
-
-          {/* Quick Demo Accounts */}
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>One-Click Demo Credentials</span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-1">
-              <button
-                type="button"
-                onClick={() => fillDemoAccount("superadmin@goodwingrowai.com", "GoodwinAdmin@2026!")}
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-900">
-                      Platform Super Admin
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      superadmin@goodwingrowai.com
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">
-                  Super Admin
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillDemoAccount("admin@goodwingrowai.com", "AgencyAdmin@2026!")}
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-indigo-600" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-800 group-hover:text-indigo-900">
-                      Aarav Singhania (Agency Admin)
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      admin@goodwingrowai.com
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md">
-                  Agency Admin
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillDemoAccount("sameer@goodwingrowai.com", "Admin@2026!")}
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-emerald-600" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-900">
-                      Sameer Meena (Workspace Admin)
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      sameer@goodwingrowai.com
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md">
-                  Admin
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillDemoAccount("goodwingrow.ansh@gmail.com", "Admin@2026!")}
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-600" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-800 group-hover:text-purple-900">
-                      Ansh Chourasiya (Workspace Admin)
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      goodwingrow.ansh@gmail.com
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-md">
-                  Admin
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillDemoAccount("kunalgoodwingrow@gmail.com", "Admin@2026!")}
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-amber-600" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-800 group-hover:text-amber-900">
-                      Kunal Sen (Automation Executive)
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      kunalgoodwingrow@gmail.com
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-md">
-                  Team Member
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillDemoAccount("admin@goodwinbatteries.com", "CompanyAdmin@2026!")}
-                className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-200 text-left transition cursor-pointer group"
-              >
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-slate-600" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-800 group-hover:text-slate-900">
-                      Goodwin Batteries (Tenant 2 Admin)
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      admin@goodwinbatteries.com
-                    </div>
-                  </div>
-                </div>
-                <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-md">
-                  Tenant 2
-                </span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer info */}

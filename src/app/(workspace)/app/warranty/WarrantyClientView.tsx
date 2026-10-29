@@ -89,18 +89,32 @@ export function WarrantyClientView({
     }
 
     const matchedClaim = claims.find(
-      (c) => c.batterySerialNumber.toLowerCase() === serial.toLowerCase()
+      (c) =>
+        c.batterySerialNumber.toLowerCase() === serial.trim().toLowerCase() ||
+        (c.replacementSerial && c.replacementSerial.toLowerCase() === serial.trim().toLowerCase())
     );
 
-    setVerificationResult({
-      serial: serial.toUpperCase(),
-      isValid: true,
-      warrantyDuration: "48 Months (24 Free Replacement + 24 Pro-rata)",
-      manufactureDate: "August 2025",
-      warrantyStatus: "ACTIVE & COVERED",
-      associatedDealer: matchedClaim?.partner?.businessName || "Zenith Auto Spares (DLR-001)",
-      previousClaim: matchedClaim ? matchedClaim.claimNumber : null,
-    });
+    if (matchedClaim) {
+      setVerificationResult({
+        serial: serial.trim().toUpperCase(),
+        isValid: true,
+        warrantyDuration: "48 Months (24 Free Replacement + 24 Pro-rata)",
+        manufactureDate: formatDate(matchedClaim.purchaseDate),
+        warrantyStatus: `REGISTERED (${matchedClaim.status.replace("_", " ")})`,
+        associatedDealer: matchedClaim.partner?.businessName || "Direct Factory Counter",
+        previousClaim: matchedClaim.claimNumber,
+      });
+    } else {
+      setVerificationResult({
+        serial: serial.trim().toUpperCase(),
+        isValid: true,
+        warrantyDuration: "48 Months (24 Free Replacement + 24 Pro-rata)",
+        manufactureDate: "August 2025",
+        warrantyStatus: "ACTIVE & COVERED (NO PRIOR CLAIM)",
+        associatedDealer: partners[0]?.businessName || "Authorized Goodwin Channel Partner",
+        previousClaim: null,
+      });
+    }
   };
 
   const handleCreateClaim = async (e: React.FormEvent) => {
@@ -136,13 +150,15 @@ export function WarrantyClientView({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/batteries/warranty", {
+      const res = await fetch(`/api/batteries/warranty/${selectedClaim.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: selectedClaim.id,
           status: resolutionAction,
-          replacementSerial: resolutionAction === "APPROVED_REPLACEMENT" ? replacementSerial || `GB-2026-REP-${Math.floor(Math.random() * 90000 + 10000)}` : null,
+          replacementSerial:
+            resolutionAction === "APPROVED_REPLACEMENT"
+              ? replacementSerial || `GB-2026-REP-${Math.floor(Math.random() * 90000 + 10000)}`
+              : replacementSerial || null,
           technicianNotes: techNotes,
         }),
       });
@@ -418,19 +434,21 @@ export function WarrantyClientView({
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {!claim.status.includes("APPROVED") && claim.status !== "REJECTED" ? (
-                          <button
-                            onClick={() => {
-                              setSelectedClaim(claim);
-                              setTechNotes(claim.technicianNotes || "");
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] cursor-pointer"
-                          >
-                            Diagnose / Resolve
-                          </button>
-                        ) : (
-                          <span className="text-slate-400 text-[11px] font-semibold">Resolved</span>
-                        )}
+                        <button
+                          onClick={() => {
+                            setSelectedClaim(claim);
+                            setResolutionAction(
+                              (claim.status === "SUBMITTED" ? "INSPECTION" : claim.status) as any
+                            );
+                            setReplacementSerial(claim.replacementSerial || "");
+                            setTechNotes(claim.technicianNotes || "");
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] cursor-pointer"
+                        >
+                          {!claim.status.includes("APPROVED") && claim.status !== "REJECTED" && claim.status !== "CLOSED"
+                            ? "Diagnose / Resolve"
+                            : "Update Claim"}
+                        </button>
                         <button
                           onClick={() => handleDeleteClaim(claim.id, claim.claimNumber)}
                           title="Delete Claim"
@@ -454,7 +472,7 @@ export function WarrantyClientView({
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div>
-                <h3 className="text-lg font-black text-slate-900">Diagnose & Authorize Warranty</h3>
+                <h3 className="text-lg font-black text-slate-900">Update Claim / Resolution</h3>
                 <p className="text-xs text-slate-500">{selectedClaim.claimNumber} • {selectedClaim.batterySerialNumber}</p>
               </div>
               <button onClick={() => setSelectedClaim(null)} className="text-slate-400 hover:text-slate-600">
@@ -464,26 +482,29 @@ export function WarrantyClientView({
 
             <form onSubmit={handleResolveClaim} className="space-y-4 mt-4 text-xs">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Resolution Decision</label>
+                <label className="font-bold text-slate-700 block mb-1">Claim Status / Resolution Decision</label>
                 <select
                   value={resolutionAction}
                   onChange={(e) => setResolutionAction(e.target.value as any)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 font-bold"
                 >
+                  <option value="SUBMITTED">Submitted (Awaiting Lab Intake)</option>
+                  <option value="INSPECTION">Under Hydrometer & Load Inspection</option>
                   <option value="APPROVED_REPLACEMENT">Approve Full Replacement (Free)</option>
                   <option value="APPROVED_PRORATA">Approve Pro-rata Warranty Discount</option>
                   <option value="REJECTED">Reject (Customer Abuse / Alternator Overcharge)</option>
+                  <option value="CLOSED">Closed</option>
                 </select>
               </div>
 
-              {resolutionAction === "APPROVED_REPLACEMENT" && (
+              {(resolutionAction === "APPROVED_REPLACEMENT" || replacementSerial) && (
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
                     New Replacement Battery Serial Number *
                   </label>
                   <input
                     type="text"
-                    required
+                    required={resolutionAction === "APPROVED_REPLACEMENT"}
                     placeholder="e.g. GB-2026-VRLA-99410"
                     value={replacementSerial}
                     onChange={(e) => setReplacementSerial(e.target.value)}
@@ -519,7 +540,7 @@ export function WarrantyClientView({
                   disabled={isSubmitting}
                   className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold disabled:opacity-50"
                 >
-                  {isSubmitting ? "Saving..." : "Authorize Resolution"}
+                  {isSubmitting ? "Saving..." : "Save Resolution"}
                 </button>
               </div>
             </form>
@@ -530,7 +551,7 @@ export function WarrantyClientView({
       {/* New Warranty Claim Modal */}
       {showNewModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div>
                 <h3 className="text-lg font-black text-slate-900">Register Warranty Service Case</h3>
@@ -542,6 +563,22 @@ export function WarrantyClientView({
             </div>
 
             <form onSubmit={handleCreateClaim} className="space-y-4 mt-4 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Authorized Dealer / Service Partner</label>
+                <select
+                  value={newClaim.partnerId}
+                  onChange={(e) => setNewClaim({ ...newClaim, partnerId: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 font-semibold"
+                >
+                  <option value="">Direct Factory Counter</option>
+                  {partners.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.businessName} ({p.code}) • {p.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Customer Name *</label>
@@ -608,6 +645,17 @@ export function WarrantyClientView({
                   <option value="Bulging / Overcharging by Alternator">Bulging / Overcharging by Alternator</option>
                   <option value="Terminal Sulphation / Leaking Acid">Terminal Sulphation / Leaking Acid</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Initial Technician Notes</label>
+                <textarea
+                  rows={2}
+                  placeholder="Initial voltage reading, hydrometer gravity, or physical observation..."
+                  value={newClaim.technicianNotes}
+                  onChange={(e) => setNewClaim({ ...newClaim, technicianNotes: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200"
+                />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">

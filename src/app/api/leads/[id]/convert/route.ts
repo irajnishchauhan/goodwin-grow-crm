@@ -12,6 +12,12 @@ export async function POST(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("leads:convert") && !tenantCtx.hasPermission("leads:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing leads:convert permission" }, { status: 403 });
+    }
 
     const tenantId = tenantCtx.tenant.id;
 
@@ -87,7 +93,7 @@ export async function POST(
             companyId,
             contactId: contact.id,
             title,
-            value: Number(dealValue) || 0,
+            value: Number(dealValue ?? lead.dealValue) || 0,
             currency: "INR",
             probability: initialStage.winProbability,
             status: "OPEN",

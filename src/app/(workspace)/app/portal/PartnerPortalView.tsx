@@ -21,6 +21,7 @@ interface PartnerPortalViewProps {
   partners: any[];
   products: any[];
   tenantName: string;
+  tenantLogoUrl?: string | null;
   currentUser: {
     fullName: string;
     email: string;
@@ -31,6 +32,7 @@ export function PartnerPortalView({
   partners,
   products,
   tenantName,
+  tenantLogoUrl,
   currentUser,
 }: PartnerPortalViewProps) {
   const [selectedPartnerId, setSelectedPartnerId] = useState(partners[0]?.id || "");
@@ -85,7 +87,7 @@ export function PartnerPortalView({
               onChange={(e) => setSelectedPartnerId(e.target.value)}
               className="bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
             >
-              {partners.slice(0, 15).map((p) => (
+              {partners.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.businessName} ({p.code}) • {p.type}
                 </option>
@@ -99,9 +101,15 @@ export function PartnerPortalView({
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white font-black text-xl flex items-center justify-center shadow-md shadow-amber-500/20">
-              {currentPartner.businessName.charAt(0)}
-            </div>
+            {tenantLogoUrl ? (
+              <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center p-1.5 shadow-sm shrink-0 overflow-hidden">
+                <img src={tenantLogoUrl} alt={tenantName} className="w-full h-full object-contain" />
+              </div>
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white font-black text-xl flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                {currentPartner.businessName.charAt(0)}
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-black text-slate-900">{currentPartner.businessName}</h1>
@@ -113,7 +121,7 @@ export function PartnerPortalView({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Authorized Dealer • {currentPartner.city}, {currentPartner.state} • GSTIN: {currentPartner.gstin || "Unregistered"}
+                Authorized Dealer • {currentPartner.city}, {currentPartner.state} • Distribution Hub: <strong className="text-slate-700">{tenantName}</strong>
               </p>
             </div>
           </div>
@@ -352,7 +360,11 @@ export function PartnerPortalView({
             <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">
               Goodwin Batteries Authorized Dealer Price Book & Warranty Master
             </h2>
-            <button className="text-xs font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="text-xs font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer"
+            >
               <Download className="w-3.5 h-3.5" /> Download Official PDF
             </button>
           </div>

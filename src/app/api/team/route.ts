@@ -3,14 +3,40 @@ import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { hashPassword } from "@/lib/auth/password";
+import { ensureWorkspaceMemberIsolation } from "@/lib/db/auto-migrate";
+
+let isIsolationChecked = false;
+
+function canManageTeam(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
+  const isAdminOrOwner =
+    tenantCtx.isPlatformAdmin ||
+    tenantCtx.membership.isOwner ||
+    tenantCtx.primaryRole === "Super Admin" ||
+    tenantCtx.primaryRole === "Agency Admin" ||
+    tenantCtx.roles.some((r) => ["super admin", "agency admin", "admin", "company admin", "company owner"].includes(r.toLowerCase().trim()));
+  return (
+    isAdminOrOwner ||
+    tenantCtx.hasPermission("team:write") ||
+    tenantCtx.hasPermission("team:manage")
+  );
+}
 
 export async function GET(req: Request) {
+  if (!isIsolationChecked) {
+    isIsolationChecked = true;
+    await ensureWorkspaceMemberIsolation().catch(() => {});
+  }
+
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot access team directory" }, { status: 403 });
+  }
 
   const tenantId = tenantCtx.tenant.id;
+  const tenantCode = tenantCtx.tenant.code?.toLowerCase();
   const url = new URL(req.url);
   const statusParam = url.searchParams.get("status");
   const activeOnly = url.searchParams.get("activeOnly");
@@ -65,32 +91,67 @@ export async function GET(req: Request) {
       const name = m.user.fullName.toLowerCase();
       if (fakePersonaEmails.includes(email)) return false;
       if (name.includes("pooja verma") || name.includes("aman gupta") || name.includes("kunal sharma")) return false;
+
+      // Strict workspace isolation:
+      // In Goodwin Batteries, do not display agency-only emails or platform superadmin
+      if (tenantCode === "goodwin-batteries") {
+        if (
+          email === "superadmin@goodwingrowai.com" ||
+          email === "admin@goodwingrowai.com" ||
+          email === "kunalgoodwingrow@gmail.com" ||
+          email === "goodwingrow.ansh@gmail.com" ||
+          email === "rohit@goodwingrowai.com" ||
+          email === "aayan@goodwingrowai.com"
+        ) {
+          return false;
+        }
+      }
+
+      // In Goodwin Grow AI, do not display battery distribution employees
+      if (tenantCode === "goodwin-grow-ai") {
+        if (
+          email === "admin@goodwinbatteries.com" ||
+          email === "sales@goodwinbatteries.com" ||
+          email === "sameergoodwinbatteries@gmail.com"
+        ) {
+          return false;
+        }
+      }
+
+      // For other client tenants, do not display superadmin as an employee
+      if (tenantCode !== "goodwin-grow-ai" && email === "superadmin@goodwingrowai.com") {
+        return false;
+      }
+
       return true;
     })
     .map((m) => ({
       id: m.user.id,
-    userId: m.user.id,
-    membershipId: m.id,
-    fullName: m.user.fullName,
-    email: m.user.email,
-    phone: m.user.phone || null,
-    avatarUrl: m.user.avatarUrl,
-    isOwner: m.isOwner,
-    status: m.status,
-    createdAt: m.createdAt,
-    updatedAt: m.updatedAt,
-    roles: m.roles.map((r) => r.role.name),
-    roleObjects: m.roles.map((r) => ({ id: r.role.id, name: r.role.name, description: r.role.description })),
-    roleIds: m.roles.map((r) => r.role.id),
-    primaryRole: m.roles[0]?.role.name || (m.isOwner ? "Company Owner" : "Member"),
-    workload: {
-      leads: m.user._count.assignedLeads,
-      deals: m.user._count.assignedDeals,
-      tasks: m.user._count.assignedTasks,
-    },
-  }));
+      userId: m.user.id,
+      membershipId: m.id,
+      fullName: m.user.fullName,
+      email: m.user.email,
+      phone: m.user.phone || null,
+      avatarUrl: m.user.avatarUrl,
+      isOwner: m.isOwner,
+      status: m.status,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt,
+      roles: m.roles.map((r) => r.role.name),
+      roleObjects: m.roles.map((r) => ({ id: r.role.id, name: r.role.name, description: r.role.description })),
+      roleIds: m.roles.map((r) => r.role.id),
+      primaryRole: m.roles[0]?.role.name || (m.isOwner ? "Company Owner" : "Member"),
+      workload: {
+        leads: m.user._count.assignedLeads,
+        deals: m.user._count.assignedDeals,
+        tasks: m.user._count.assignedTasks,
+      },
+    }));
 
-  return NextResponse.json({ success: true, data: teamMembers });
+  return NextResponse.json(
+    { success: true, data: teamMembers },
+    { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+  );
 }
 
 export async function POST(req: Request) {
@@ -99,14 +160,17 @@ export async function POST(req: Request) {
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot manage team members" }, { status: 403 });
+    }
 
-    if (!tenantCtx.hasPermission("team:manage")) {
-      return NextResponse.json({ success: false, error: "Forbidden: Missing team:manage permission" }, { status: 403 });
+    if (!canManageTeam(tenantCtx)) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing team:write or team:manage permission" }, { status: 403 });
     }
 
     const tenantId = tenantCtx.tenant.id;
     const body = await req.json();
-    const { email, fullName, phone, roleId, roleIds = [], initialPassword, status = "ACTIVE" } = body;
+    const { email, fullName, phone, roleId, roleIds = [], initialPassword, password, status = "ACTIVE" } = body;
 
     if (!email) {
       return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
@@ -138,8 +202,10 @@ export async function POST(req: Request) {
       where: { email: cleanEmail },
     });
 
+    const explicitPassword = password || initialPassword;
+
     if (!user) {
-      const passwordToHash = initialPassword || "Goodwin@2026!";
+      const passwordToHash = explicitPassword || "Goodwin@2026!";
       const passwordHash = await hashPassword(passwordToHash);
       user = await prisma.user.create({
         data: {
@@ -150,14 +216,17 @@ export async function POST(req: Request) {
           isActive: true,
         },
       });
-    } else if (phone || fullName) {
-      // Update phone/name if missing
+    } else if (phone || fullName || explicitPassword) {
+      const updateData: any = {
+        fullName: fullName || user.fullName,
+        phone: phone || user.phone,
+      };
+      if (explicitPassword) {
+        updateData.passwordHash = await hashPassword(explicitPassword);
+      }
       await prisma.user.update({
         where: { id: user.id },
-        data: {
-          fullName: fullName || user.fullName,
-          phone: phone || user.phone,
-        },
+        data: updateData,
       });
     }
 

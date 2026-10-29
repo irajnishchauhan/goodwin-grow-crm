@@ -1,6 +1,8 @@
 import prisma from "@/lib/prisma";
 import { Check, ShieldCheck, Sparkles } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { PlatformNavbar } from "@/components/layout/PlatformNavbar";
+import Link from "next/link";
 
 export default async function PlatformPlansPage() {
   const plans = await prisma.subscriptionPlan.findMany({
@@ -11,13 +13,24 @@ export default async function PlatformPlansPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Subscription Plans & Entitlements</h1>
-        <p className="text-xs text-slate-400 mt-1">
-          Configure commercial tiers, seat quotas, and module feature flags.
-        </p>
-      </div>
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+      <PlatformNavbar />
+      <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Subscription Plans & Entitlements</h1>
+            <p className="text-xs text-slate-400 mt-1">
+              Configure commercial tiers, seat quotas, and module feature flags.
+            </p>
+          </div>
+          <Link
+            href="/platform/clients"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Assign Plan to Client</span>
+          </Link>
+        </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {plans.map((p) => {
@@ -83,12 +96,21 @@ export default async function PlatformPlansPage() {
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-400">
-                Active Subscribers: <span className="text-white font-bold">{p._count.subscriptions} companies</span>
+              <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <span>
+                  Active Subscribers: <span className="text-white font-bold">{p._count.subscriptions} companies</span>
+                </span>
+                <Link
+                  href="/platform/clients"
+                  className="text-emerald-400 hover:text-emerald-300 font-semibold text-[11px]"
+                >
+                  Manage →
+                </Link>
               </div>
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

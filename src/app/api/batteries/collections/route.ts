@@ -99,15 +99,95 @@ export async function POST(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot modify collections" }, { status: 403 });
+  }
 
   const tenantId = tenantCtx.tenant.id;
 
   try {
     const body = await req.json();
-    const { id, followUpNotes, nextFollowUpDate, paymentReceived, paymentMode } = body;
+    const {
+      id,
+      partnerId,
+      invoiceNumber,
+      amountDue,
+      amountPaid = 0,
+      dueDate,
+      status,
+      followUpNotes,
+      nextFollowUpDate,
+      paymentReceived,
+      paymentMode,
+    } = body;
 
+    // If no `id` is provided, create a new collection invoice record
     if (!id) {
-      return NextResponse.json({ success: false, error: "Collection ID is required" }, { status: 400 });
+      if (!partnerId || !amountDue) {
+        return NextResponse.json(
+          { success: false, error: "Partner and amount due are required to create a collection invoice" },
+          { status: 400 }
+        );
+      }
+
+      const partner = await prisma.batteryPartner.findFirst({
+        where: { id: partnerId, tenantId },
+      });
+
+      if (!partner) {
+        return NextResponse.json({ success: false, error: "Partner not found in this workspace" }, { status: 404 });
+      }
+
+      const existingCount = await prisma.batteryCollection.count({ where: { tenantId } });
+      const resolvedInvoiceNumber =
+        invoiceNumber || `GB-INV-2026-${(existingCount + 1).toString().padStart(3, "0")}`;
+      const resolvedDueDate = dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 86400000);
+      const paidVal = Number(paymentReceived || amountPaid || 0);
+      const dueVal = Number(amountDue);
+      const diffMs = Date.now() - resolvedDueDate.getTime();
+      const ageingDays = diffMs > 0 ? Math.floor(diffMs / 86400000) : 0;
+
+      let resolvedStatus: CollectionStatus = status
+        ? (status as CollectionStatus)
+        : paidVal >= dueVal
+        ? CollectionStatus.PAID
+        : paidVal > 0
+        ? CollectionStatus.PARTIAL
+        : ageingDays > 0
+        ? CollectionStatus.OVERDUE
+        : CollectionStatus.PENDING;
+
+      const created = await prisma.batteryCollection.create({
+        data: {
+          tenantId,
+          partnerId,
+          invoiceNumber: resolvedInvoiceNumber,
+          amountDue: dueVal,
+          amountPaid: paidVal,
+          dueDate: resolvedDueDate,
+          paymentDate: paidVal > 0 ? new Date() : null,
+          paymentMode: paidVal > 0 ? paymentMode || "NEFT / RTGS" : null,
+          status: resolvedStatus,
+          ageingDays,
+          followUpNotes: followUpNotes || null,
+          nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate) : null,
+        },
+        include: { partner: true },
+      });
+
+      if (paidVal > 0) {
+        const newBalance = Math.max(0, Number(partner.outstandingBalance) - paidVal);
+        const newOverdue = Math.max(0, Number(partner.overdueAmount) - paidVal);
+        await prisma.batteryPartner.update({
+          where: { id: partner.id },
+          data: {
+            outstandingBalance: newBalance,
+            overdueAmount: newOverdue,
+          },
+        });
+      }
+
+      return NextResponse.json({ success: true, data: created }, { status: 201 });
     }
 
     const current = await prisma.batteryCollection.findUnique({
@@ -121,15 +201,19 @@ export async function POST(req: Request) {
 
     const updateData: any = {};
 
-    if (followUpNotes) {
+    if (followUpNotes !== undefined) {
       updateData.followUpNotes = followUpNotes;
     }
     if (nextFollowUpDate !== undefined) {
       updateData.nextFollowUpDate = nextFollowUpDate ? new Date(nextFollowUpDate) : null;
     }
+    if (status) {
+      updateData.status = status as CollectionStatus;
+    }
 
-    if (paymentReceived && Number(paymentReceived) > 0) {
-      const newPaid = Number(current.amountPaid) + Number(paymentReceived);
+    const addedPayment = Number(paymentReceived || amountPaid || 0);
+    if (addedPayment > 0) {
+      const newPaid = Number(current.amountPaid) + addedPayment;
       updateData.amountPaid = newPaid;
       updateData.paymentDate = new Date();
       updateData.paymentMode = paymentMode || "NEFT / RTGS";
@@ -142,8 +226,8 @@ export async function POST(req: Request) {
 
       // Also adjust partner outstanding in CRM
       if (current.partner) {
-        const newBalance = Math.max(0, Number(current.partner.outstandingBalance) - Number(paymentReceived));
-        const newOverdue = Math.max(0, Number(current.partner.overdueAmount) - Number(paymentReceived));
+        const newBalance = Math.max(0, Number(current.partner.outstandingBalance) - addedPayment);
+        const newOverdue = Math.max(0, Number(current.partner.overdueAmount) - addedPayment);
         await prisma.batteryPartner.update({
           where: { id: current.partnerId },
           data: {

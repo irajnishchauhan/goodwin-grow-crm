@@ -6,10 +6,17 @@ import { switchActiveTenant } from "@/lib/tenant/context";
 export async function GET() {
   try {
     const session = await getCurrentSession();
-    const isPlatformAdmin = Boolean(session?.user?.isPlatformAdmin);
-    const activeTenantId = session?.activeTenantId;
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized: Authentication required" },
+        { status: 401 }
+      );
+    }
 
-    if (session && !isPlatformAdmin) {
+    const isPlatformAdmin = Boolean(session.user.isPlatformAdmin);
+    const activeTenantId = session.activeTenantId;
+
+    if (!isPlatformAdmin) {
       // Regular user: return active memberships
       const memberships = await prisma.tenantMembership.findMany({
         where: {

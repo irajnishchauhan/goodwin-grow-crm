@@ -123,6 +123,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Client name is required" }, { status: 400 });
     }
 
+    let parsedAddOnServices: any = [];
+    if (addOnServices) {
+      if (typeof addOnServices === "string") {
+        try {
+          parsedAddOnServices = JSON.parse(addOnServices);
+        } catch {
+          parsedAddOnServices = [addOnServices];
+        }
+      } else {
+        parsedAddOnServices = addOnServices;
+      }
+    }
+
     const client = await prisma.agencyClient.create({
       data: {
         tenantId,
@@ -151,7 +164,7 @@ export async function POST(req: Request) {
         contractEndDate: contractEndDate ? new Date(contractEndDate) : null,
         billingCycle: billingCycle || "MONTHLY",
         packageStatus: packageStatus || "ACTIVE",
-        addOnServices: addOnServices ? (typeof addOnServices === "string" ? JSON.parse(addOnServices) : addOnServices) : [],
+        addOnServices: parsedAddOnServices,
         customPricing: Boolean(customPricing),
         estimatedDeliveryCost: estimatedDeliveryCost ? Number(estimatedDeliveryCost) : 0,
       },

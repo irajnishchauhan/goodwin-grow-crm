@@ -6,6 +6,9 @@ import { formatDateTime } from "@/lib/utils";
 
 export default function ActivitiesPage() {
   const [activities, setActivities] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [deals, setDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [performedByFilter, setPerformedByFilter] = useState("ALL");
@@ -15,6 +18,9 @@ export default function ActivitiesPage() {
   const [type, setType] = useState("CALL");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [leadId, setLeadId] = useState("");
+  const [contactId, setContactId] = useState("");
+  const [dealId, setDealId] = useState("");
   const [creating, setCreating] = useState(false);
 
   // Edit Activity State
@@ -23,10 +29,14 @@ export default function ActivitiesPage() {
   const [editType, setEditType] = useState("CALL");
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editLeadId, setEditLeadId] = useState("");
+  const [editContactId, setEditContactId] = useState("");
+  const [editDealId, setEditDealId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     fetchTeam();
+    fetchEntities();
   }, []);
 
   useEffect(() => {
@@ -42,6 +52,26 @@ export default function ActivitiesPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function fetchEntities() {
+    try {
+      const [leadsRes, contactsRes, dealsRes] = await Promise.all([
+        fetch("/api/leads"),
+        fetch("/api/contacts"),
+        fetch("/api/deals"),
+      ]);
+      const [leadsData, contactsData, dealsData] = await Promise.all([
+        leadsRes.json(),
+        contactsRes.json(),
+        dealsRes.json(),
+      ]);
+      if (leadsData.success) setLeads(leadsData.data || []);
+      if (contactsData.success) setContacts(contactsData.data || []);
+      if (dealsData.success) setDeals(dealsData.data || []);
+    } catch (err) {
+      console.error("Failed to fetch related entities", err);
     }
   }
 
@@ -72,7 +102,14 @@ export default function ActivitiesPage() {
       const res = await fetch("/api/activities", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, title, description }),
+        body: JSON.stringify({
+          type,
+          title,
+          description,
+          leadId: leadId || null,
+          contactId: contactId || null,
+          dealId: dealId || null,
+        }),
       });
 
       const data = await res.json();
@@ -80,6 +117,9 @@ export default function ActivitiesPage() {
         setModalOpen(false);
         setTitle("");
         setDescription("");
+        setLeadId("");
+        setContactId("");
+        setDealId("");
         fetchActivities();
       } else {
         alert(data.error || "Failed to log activity");
@@ -96,6 +136,9 @@ export default function ActivitiesPage() {
     setEditType(act.type);
     setEditTitle(act.title);
     setEditDescription(act.description || "");
+    setEditLeadId(act.leadId || "");
+    setEditContactId(act.contactId || "");
+    setEditDealId(act.dealId || "");
     setEditModalOpen(true);
   }
 
@@ -112,6 +155,9 @@ export default function ActivitiesPage() {
           type: editType,
           title: editTitle,
           description: editDescription,
+          leadId: editLeadId || null,
+          contactId: editContactId || null,
+          dealId: editDealId || null,
         }),
       });
 
@@ -313,6 +359,54 @@ export default function ActivitiesPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Lead (Optional)</label>
+                  <select
+                    value={leadId}
+                    onChange={(e) => setLeadId(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {leads.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.firstName} {l.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Contact (Optional)</label>
+                  <select
+                    value={contactId}
+                    onChange={(e) => setContactId(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.firstName} {c.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Deal (Optional)</label>
+                  <select
+                    value={dealId}
+                    onChange={(e) => setDealId(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {deals.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
@@ -390,6 +484,54 @@ export default function ActivitiesPage() {
                   onChange={(e) => setEditDescription(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
                 />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Lead (Optional)</label>
+                  <select
+                    value={editLeadId}
+                    onChange={(e) => setEditLeadId(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {leads.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.firstName} {l.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Contact (Optional)</label>
+                  <select
+                    value={editContactId}
+                    onChange={(e) => setEditContactId(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.firstName} {c.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Deal (Optional)</label>
+                  <select
+                    value={editDealId}
+                    onChange={(e) => setEditDealId(e.target.value)}
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="">None</option>
+                    {deals.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">

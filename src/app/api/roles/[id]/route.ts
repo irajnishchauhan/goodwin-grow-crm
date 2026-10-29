@@ -2,6 +2,21 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 
+function canManageRoles(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
+  const isAdminOrOwner =
+    tenantCtx.isPlatformAdmin ||
+    tenantCtx.membership.isOwner ||
+    tenantCtx.primaryRole === "Super Admin" ||
+    tenantCtx.primaryRole === "Agency Admin" ||
+    tenantCtx.roles.some((r) => ["super admin", "agency admin", "admin", "company admin", "company owner"].includes(r.toLowerCase().trim()));
+  return (
+    isAdminOrOwner ||
+    tenantCtx.hasPermission("roles:manage") ||
+    tenantCtx.hasPermission("team:manage") ||
+    tenantCtx.hasPermission("settings:manage")
+  );
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -10,6 +25,9 @@ export async function GET(
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot access roles" }, { status: 403 });
   }
 
   const tenantId = tenantCtx.tenant.id;
@@ -70,10 +88,13 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot modify roles" }, { status: 403 });
+    }
 
-    if (!tenantCtx.hasPermission("team:manage") && !tenantCtx.hasPermission("settings:manage")) {
+    if (!canManageRoles(tenantCtx)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: Missing team:manage or settings:manage permission" },
+        { success: false, error: "Forbidden: Missing roles:manage permission" },
         { status: 403 }
       );
     }
@@ -91,13 +112,30 @@ export async function PUT(
       return NextResponse.json({ success: false, error: "Role not found" }, { status: 404 });
     }
 
+    if (role.tenantId === null) {
+      return NextResponse.json(
+        { success: false, error: "Cannot modify global system default roles. Create a custom workspace role instead." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { name, description, permissionCodes } = body;
 
-    // If it's a global system role, cannot rename it directly to protect platform defaults
-    if (role.isSystem && role.tenantId === null && name && name !== role.name) {
+    const isProtectedAdminRole =
+      role.isSystem &&
+      ["super admin", "agency admin"].includes(role.name.toLowerCase().trim());
+
+    if (role.isSystem && name && name.trim().toLowerCase() !== role.name.toLowerCase()) {
       return NextResponse.json(
-        { success: false, error: "Cannot rename system default roles. You can create a new custom role instead." },
+        { success: false, error: "Cannot rename built-in system roles." },
+        { status: 400 }
+      );
+    }
+
+    if (isProtectedAdminRole && Array.isArray(permissionCodes)) {
+      return NextResponse.json(
+        { success: false, error: `Cannot strip or modify permissions of built-in "${role.name}" role.` },
         { status: 400 }
       );
     }
@@ -161,10 +199,13 @@ export async function DELETE(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden: Client users cannot delete roles" }, { status: 403 });
+    }
 
-    if (!tenantCtx.hasPermission("team:manage") && !tenantCtx.hasPermission("settings:manage")) {
+    if (!canManageRoles(tenantCtx)) {
       return NextResponse.json(
-        { success: false, error: "Forbidden: Missing team:manage or settings:manage permission" },
+        { success: false, error: "Forbidden: Missing roles:manage permission" },
         { status: 403 }
       );
     }

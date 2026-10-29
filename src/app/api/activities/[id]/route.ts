@@ -12,9 +12,16 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("activities:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing activities:write permission" }, { status: 403 });
+    }
 
+    const tenantId = tenantCtx.tenant.id;
     const activity = await prisma.activity.findFirst({
-      where: { id, tenantId: tenantCtx.tenant.id },
+      where: { id, tenantId },
     });
 
     if (!activity) {
@@ -22,7 +29,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { type, title, description, occurredAt } = body;
+    const { type, title, description, occurredAt, leadId, contactId, dealId } = body;
 
     const updated = await prisma.activity.update({
       where: { id: activity.id },
@@ -31,6 +38,9 @@ export async function PUT(
         ...(title && { title }),
         ...(description !== undefined && { description }),
         ...(occurredAt && { occurredAt: new Date(occurredAt) }),
+        ...(leadId !== undefined && { leadId: leadId || null }),
+        ...(contactId !== undefined && { contactId: contactId || null }),
+        ...(dealId !== undefined && { dealId: dealId || null }),
       },
     });
 
@@ -39,6 +49,8 @@ export async function PUT(
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export const PATCH = PUT;
 
 export async function DELETE(
   req: Request,
@@ -49,6 +61,12 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("activities:delete") && !tenantCtx.hasPermission("activities:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
     const activity = await prisma.activity.findFirst({

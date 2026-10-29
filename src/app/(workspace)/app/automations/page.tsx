@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Zap, Plus, CheckCircle2, AlertCircle, Clock, Play, X, ArrowRight, Trash2 } from "lucide-react";
+import { Zap, Plus, CheckCircle2, AlertCircle, Clock, Play, X, ArrowRight, Trash2, Edit2, Save } from "lucide-react";
 import { formatDateTime } from "@/lib/utils";
 
 export default function AutomationsPage() {
@@ -16,6 +16,15 @@ export default function AutomationsPage() {
   const [actionTitle, setActionTitle] = useState("Follow up with new inbound lead");
   const [actionDueInDays, setActionDueInDays] = useState(1);
   const [creating, setCreating] = useState(false);
+
+  // Edit Rule State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<any | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTriggerEvent, setEditTriggerEvent] = useState("lead.created");
+  const [editActionTitle, setEditActionTitle] = useState("");
+  const [editActionDueInDays, setEditActionDueInDays] = useState(1);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     fetchAutomations();
@@ -42,13 +51,63 @@ export default function AutomationsPage() {
     setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, isActive: updatedStatus } : r)));
 
     try {
-      await fetch("/api/automations", {
+      await fetch(`/api/automations/${rule.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: rule.id, isActive: updatedStatus }),
+        body: JSON.stringify({ isActive: updatedStatus }),
       });
     } catch {
       fetchAutomations();
+    }
+  }
+
+  function openEditModal(rule: any) {
+    setEditingRule(rule);
+    setEditName(rule.name || "");
+    setEditTriggerEvent(rule.triggerEvent || "lead.created");
+    const firstAction = Array.isArray(rule.actions) && rule.actions.length > 0 ? rule.actions[0] : null;
+    setEditActionTitle(firstAction?.title || "Follow up with prospect");
+    setEditActionDueInDays(Number(firstAction?.dueInDays) || 1);
+    setEditModalOpen(true);
+  }
+
+  async function handleUpdateRule(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingRule) return;
+    setSavingEdit(true);
+
+    try {
+      const actions = [
+        {
+          type: "CREATE_TASK",
+          title: editActionTitle,
+          dueInDays: Number(editActionDueInDays) || 1,
+          priority: "HIGH",
+        },
+      ];
+
+      const res = await fetch(`/api/automations/${editingRule.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName,
+          triggerEvent: editTriggerEvent,
+          actions,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setEditModalOpen(false);
+        setEditingRule(null);
+        fetchAutomations();
+      } else {
+        alert(data.error || "Failed to update automation rule");
+      }
+    } catch {
+      alert("Error updating automation rule");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -58,7 +117,7 @@ export default function AutomationsPage() {
     }
 
     try {
-      const res = await fetch(`/api/automations?id=${ruleId}`, {
+      const res = await fetch(`/api/automations/${ruleId}`, {
         method: "DELETE",
       });
 
@@ -188,6 +247,13 @@ export default function AutomationsPage() {
                       {rule.isActive ? "Active" : "Paused"}
                     </button>
                     <button
+                      onClick={() => openEditModal(rule)}
+                      title="Edit Automation Rule"
+                      className="p-1 hover:bg-emerald-50 rounded text-slate-400 hover:text-emerald-600 cursor-pointer transition"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handleDeleteRule(rule.id, rule.name)}
                       title="Delete Automation Rule"
                       className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer transition"
@@ -303,6 +369,7 @@ export default function AutomationsPage() {
                   <option value="lead.created">lead.created (When a new lead is captured)</option>
                   <option value="lead.qualified">lead.qualified (When lead moves to QUALIFIED)</option>
                   <option value="deal.won">deal.won (When opportunity is won)</option>
+                  <option value="deal.stage_changed">deal.stage_changed (When deal stage changes)</option>
                   <option value="task.overdue">task.overdue (When task passes deadline)</option>
                 </select>
               </div>
@@ -343,6 +410,88 @@ export default function AutomationsPage() {
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
                 >
                   {creating ? "Saving..." : "Save Automation"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Rule Modal */}
+      {editModalOpen && editingRule && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h2 className="text-base font-bold text-slate-900">Edit Automation Rule</h2>
+              <button onClick={() => setEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateRule} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Rule Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Trigger Event *</label>
+                <select
+                  value={editTriggerEvent}
+                  onChange={(e) => setEditTriggerEvent(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                >
+                  <option value="lead.created">lead.created (When a new lead is captured)</option>
+                  <option value="lead.qualified">lead.qualified (When lead moves to QUALIFIED)</option>
+                  <option value="deal.won">deal.won (When opportunity is won)</option>
+                  <option value="deal.stage_changed">deal.stage_changed (When deal stage changes)</option>
+                  <option value="task.overdue">task.overdue (When task passes deadline)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Action: Generated Task Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editActionTitle}
+                  onChange={(e) => setEditActionTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Due In (Days)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editActionDueInDays}
+                  onChange={(e) => setEditActionDueInDays(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{savingEdit ? "Saving..." : "Update Rule"}</span>
                 </button>
               </div>
             </form>

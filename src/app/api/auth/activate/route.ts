@@ -39,43 +39,69 @@ export async function POST(req: Request) {
 
     // 2. Hash new password
     const passwordHash = await hashPassword(password);
+    const cleanEmail = invitation.email.toLowerCase().trim();
+    const fallbackName = fullName || cleanEmail.split("@")[0];
 
-    // 3. Find user and update
-    const user = await prisma.user.findUnique({
-      where: { email: invitation.email },
-    });
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: "User account not found" }, { status: 404 });
-    }
-
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: user.id },
-        data: {
-          fullName: fullName || user.fullName,
+    // 3. Upsert user, membership, role assignment, and mark invitation accepted in a transaction
+    const user = await prisma.$transaction(async (tx) => {
+      const upsertedUser = await tx.user.upsert({
+        where: { email: cleanEmail },
+        update: {
+          ...(fullName ? { fullName } : {}),
           passwordHash,
           isActive: true,
         },
-      }),
-      prisma.tenantMembership.update({
+        create: {
+          email: cleanEmail,
+          fullName: fallbackName,
+          passwordHash,
+          isActive: true,
+        },
+      });
+
+      const membership = await tx.tenantMembership.upsert({
         where: {
           tenantId_userId: {
             tenantId: invitation.tenantId,
-            userId: user.id,
+            userId: upsertedUser.id,
           },
         },
-        data: {
+        update: {
           status: "ACTIVE",
         },
-      }),
-      prisma.invitation.update({
+        create: {
+          tenantId: invitation.tenantId,
+          userId: upsertedUser.id,
+          status: "ACTIVE",
+          isOwner: false,
+        },
+      });
+
+      if (invitation.roleId) {
+        await tx.membershipRole.upsert({
+          where: {
+            membershipId_roleId: {
+              membershipId: membership.id,
+              roleId: invitation.roleId,
+            },
+          },
+          update: {},
+          create: {
+            membershipId: membership.id,
+            roleId: invitation.roleId,
+          },
+        });
+      }
+
+      await tx.invitation.update({
         where: { id: invitation.id },
         data: {
           acceptedAt: new Date(),
         },
-      }),
-    ]);
+      });
+
+      return upsertedUser;
+    });
 
     // 4. Log in immediately
     const session = await createSession(user.id, invitation.tenantId);

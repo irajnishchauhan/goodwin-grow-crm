@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Puzzle,
   CheckCircle2,
@@ -28,94 +28,126 @@ interface IntegrationItem {
   lastSync: string;
 }
 
+const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
+  {
+    id: "meta",
+    name: "Meta Marketing & Instagram Graph API",
+    category: "Paid Ads & Social Publishing",
+    description: "Direct connection to Meta Business Manager, automated lead ads ingestion, and Instagram post scheduling.",
+    iconBg: "bg-blue-600",
+    status: "CONNECTED",
+    lastSync: "Synced 4 mins ago",
+  },
+  {
+    id: "google-ads",
+    name: "Google Ads & Analytics API",
+    category: "Search & Conversion Tracking",
+    description: "Syncs Google Search conversions, Performance Max ROAS, keyword CPCs, and GA4 website analytics.",
+    iconBg: "bg-emerald-600",
+    status: "CONNECTED",
+    lastSync: "Synced 12 mins ago",
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp Business Cloud API",
+    category: "Conversational MarTech",
+    description: "Real-time lead qualification chatbot, automated WhatsApp greeting on lead capture, and payment link delivery.",
+    iconBg: "bg-emerald-700",
+    status: "CONNECTED",
+    lastSync: "Real-time webhook active",
+  },
+  {
+    id: "google-drive",
+    name: "Google Drive Creative Assets Storage",
+    category: "Cloud Media Assets",
+    description: "Sync raw client video footage, high-res brand kits, vector logos, and 4K video exports.",
+    iconBg: "bg-amber-600",
+    status: "CONNECTED",
+    lastSync: "Synced 1 hr ago",
+  },
+  {
+    id: "razorpay",
+    name: "Razorpay / Stripe Payment Gateway",
+    category: "Billing & UPI Settlements",
+    description: "Automated recurring retainer subscriptions, instant UPI invoice links, and verified payment reconciliation.",
+    iconBg: "bg-indigo-600",
+    status: "CONNECTED",
+    lastSync: "Webhooks active",
+  },
+  {
+    id: "google-workspace",
+    name: "Gmail & Google Calendar",
+    category: "Communication & Meetings",
+    description: "Sync client strategy calls, onboarding meetings, and automated email follow-ups with read receipts.",
+    iconBg: "bg-rose-600",
+    status: "CONNECTED",
+    lastSync: "Synced 3 mins ago",
+  },
+  {
+    id: "goodwin-erp",
+    name: "Goodwin Batteries ERP & Manufacturing System",
+    category: "Enterprise Resource Planning (ERP Boundary)",
+    description: "Bidirectional sync: Pushes approved dealer orders from CRM to ERP; pulls GST e-Way bills, inventory availability, and ledger settlements from ERP.",
+    iconBg: "bg-amber-600",
+    status: "CONNECTED",
+    lastSync: "Active REST Webhook (Idempotent)",
+  },
+  {
+    id: "warranty-engine",
+    name: "Goodwin Authorized Digital Warranty Engine",
+    category: "Warranty & Serial Authentication",
+    description: "Direct validation against production serial database, hydrometer specific gravity thresholds, and automated replacement serial allocation.",
+    iconBg: "bg-emerald-600",
+    status: "CONNECTED",
+    lastSync: "Verified & Connected",
+  },
+];
+
+const STORAGE_KEY = "gga_crm_integrations_state_v1";
+
 export default function IntegrationsPage() {
-  const [integrations, setIntegrations] = useState<IntegrationItem[]>([
-    {
-      id: "meta",
-      name: "Meta Marketing & Instagram Graph API",
-      category: "Paid Ads & Social Publishing",
-      description: "Direct connection to Meta Business Manager, automated lead ads ingestion, and Instagram post scheduling.",
-      iconBg: "bg-blue-600",
-      status: "CONNECTED",
-      lastSync: "Synced 4 mins ago",
-    },
-    {
-      id: "google-ads",
-      name: "Google Ads & Analytics API",
-      category: "Search & Conversion Tracking",
-      description: "Syncs Google Search conversions, Performance Max ROAS, keyword CPCs, and GA4 website analytics.",
-      iconBg: "bg-emerald-600",
-      status: "CONNECTED",
-      lastSync: "Synced 12 mins ago",
-    },
-    {
-      id: "whatsapp",
-      name: "WhatsApp Business Cloud API",
-      category: "Conversational MarTech",
-      description: "Real-time lead qualification chatbot, automated WhatsApp greeting on lead capture, and payment link delivery.",
-      iconBg: "bg-emerald-700",
-      status: "CONNECTED",
-      lastSync: "Real-time webhook active",
-    },
-    {
-      id: "google-drive",
-      name: "Google Drive Creative Assets Storage",
-      category: "Cloud Media Assets",
-      description: "Sync raw client video footage, high-res brand kits, vector logos, and 4K video exports.",
-      iconBg: "bg-amber-600",
-      status: "CONNECTED",
-      lastSync: "Synced 1 hr ago",
-    },
-    {
-      id: "razorpay",
-      name: "Razorpay / Stripe Payment Gateway",
-      category: "Billing & UPI Settlements",
-      description: "Automated recurring retainer subscriptions, instant UPI invoice links, and verified payment reconciliation.",
-      iconBg: "bg-indigo-600",
-      status: "CONNECTED",
-      lastSync: "Webhooks active",
-    },
-    {
-      id: "google-workspace",
-      name: "Gmail & Google Calendar",
-      category: "Communication & Meetings",
-      description: "Sync client strategy calls, onboarding meetings, and automated email follow-ups with read receipts.",
-      iconBg: "bg-rose-600",
-      status: "CONNECTED",
-      lastSync: "Synced 3 mins ago",
-    },
-    {
-      id: "goodwin-erp",
-      name: "Goodwin Batteries ERP & Manufacturing System",
-      category: "Enterprise Resource Planning (ERP Boundary)",
-      description: "Bidirectional sync: Pushes approved dealer orders from CRM to ERP; pulls GST e-Way bills, inventory availability, and ledger settlements from ERP.",
-      iconBg: "bg-amber-600",
-      status: "CONNECTED",
-      lastSync: "Active REST Webhook (Idempotent)",
-    },
-    {
-      id: "warranty-engine",
-      name: "Goodwin Authorized Digital Warranty Engine",
-      category: "Warranty & Serial Authentication",
-      description: "Direct validation against production serial database, hydrometer specific gravity thresholds, and automated replacement serial allocation.",
-      iconBg: "bg-emerald-600",
-      status: "CONNECTED",
-      lastSync: "Verified & Connected",
-    },
-  ]);
+  const [integrations, setIntegrations] = useState<IntegrationItem[]>(DEFAULT_INTEGRATIONS);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Record<string, { status: IntegrationItem["status"]; lastSync: string }>;
+        setIntegrations((prev) =>
+          prev.map((item) =>
+            parsed[item.id]
+              ? { ...item, status: parsed[item.id].status, lastSync: parsed[item.id].lastSync }
+              : item
+          )
+        );
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   function toggleConnection(id: string) {
-    setIntegrations((prev) =>
-      prev.map((item) =>
+    setIntegrations((prev) => {
+      const next: IntegrationItem[] = prev.map((item) =>
         item.id === id
           ? {
               ...item,
               status: item.status === "CONNECTED" ? "AVAILABLE" : "CONNECTED",
-              lastSync: "Just now",
+              lastSync: item.status === "CONNECTED" ? "Disconnected" : "Connected just now",
             }
           : item
-      )
-    );
+      );
+      try {
+        const stateMap: Record<string, { status: IntegrationItem["status"]; lastSync: string }> = {};
+        for (const item of next) {
+          stateMap[item.id] = { status: item.status, lastSync: item.lastSync };
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(stateMap));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
   }
 
   return (

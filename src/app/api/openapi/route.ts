@@ -20,7 +20,7 @@ export async function GET() {
         SessionCookie: {
           type: "apiKey",
           in: "cookie",
-          name: "crm_session",
+          name: "gg_crm_session",
           description: "Encrypted session token cookie",
         },
         BearerAuth: {
@@ -42,7 +42,7 @@ export async function GET() {
             phone: { type: "string", nullable: true },
             status: {
               type: "string",
-              enum: ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL_SENT", "CONVERTED", "LOST"],
+              enum: ["NEW", "CONTACTED", "QUALIFIED", "PROPOSAL", "CONVERTED", "LOST"],
             },
             source: { type: "string", nullable: true },
             serviceRequired: { type: "string", nullable: true },
@@ -101,7 +101,7 @@ export async function GET() {
             id: { type: "string", format: "uuid" },
             title: { type: "string" },
             description: { type: "string", nullable: true },
-            status: { type: "string", enum: ["TODO", "IN_PROGRESS", "REVIEW", "DONE"] },
+            status: { type: "string", enum: ["PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
             priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "URGENT"] },
             dueDate: { type: "string", format: "date-time", nullable: true },
             assignedToId: { type: "string", format: "uuid", nullable: true },
@@ -112,7 +112,7 @@ export async function GET() {
           type: "object",
           properties: {
             id: { type: "string", format: "uuid" },
-            type: { type: "string", enum: ["CALL", "EMAIL", "MEETING", "NOTE", "WHATSAPP", "STATUS_CHANGE"] },
+            type: { type: "string", enum: ["CALL", "EMAIL", "MEETING", "NOTE", "WHATSAPP", "TASK"] },
             title: { type: "string" },
             description: { type: "string", nullable: true },
             performedById: { type: "string", format: "uuid" },

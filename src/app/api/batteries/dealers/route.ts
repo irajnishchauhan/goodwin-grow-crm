@@ -103,6 +103,9 @@ export async function POST(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot create partners" }, { status: 403 });
+  }
 
   const tenantId = tenantCtx.tenant.id;
 
@@ -134,10 +137,30 @@ export async function POST(req: Request) {
       );
     }
 
-    // Auto-generate unique partner code if not provided
+    if (parentDistributorId) {
+      const parentDist = await prisma.batteryPartner.findFirst({
+        where: { id: parentDistributorId, tenantId },
+      });
+      if (!parentDist) {
+        return NextResponse.json(
+          { success: false, error: "Parent distributor not found in this workspace" },
+          { status: 404 }
+        );
+      }
+    }
+
+    // Auto-generate collision-safe unique partner code if not provided
     const prefix = type === "DISTRIBUTOR" ? "DIST" : type === "RETAILER" ? "RET" : "DLR";
-    const count = await prisma.batteryPartner.count({ where: { tenantId, type: type as PartnerType } });
-    const code = `${prefix}-${(count + 1).toString().padStart(3, "0")}`;
+    const existingPartners = await prisma.batteryPartner.findMany({
+      where: { tenantId, code: { startsWith: `${prefix}-` } },
+      select: { code: true },
+    });
+    let maxSeq = existingPartners.length;
+    for (const p of existingPartners) {
+      const num = parseInt(p.code.replace(`${prefix}-`, ""), 10);
+      if (!isNaN(num) && num > maxSeq) maxSeq = num;
+    }
+    const code = `${prefix}-${(maxSeq + 1).toString().padStart(3, "0")}`;
 
     const partner = await prisma.batteryPartner.create({
       data: {
@@ -175,6 +198,9 @@ export async function PATCH(req: Request) {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot update partners" }, { status: 403 });
   }
 
   const tenantId = tenantCtx.tenant.id;

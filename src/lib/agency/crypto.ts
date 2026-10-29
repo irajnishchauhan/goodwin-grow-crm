@@ -17,7 +17,7 @@ export function encryptCredential(text: string): string {
     return `${iv.toString("hex")}:${encrypted}`;
   } catch (err) {
     console.error("Encryption error:", err);
-    return text;
+    throw new Error("Failed to encrypt credential");
   }
 }
 
@@ -26,8 +26,10 @@ export function encryptCredential(text: string): string {
  */
 export function decryptCredential(encryptedText: string): string {
   if (!encryptedText) return "";
-  // Check if text is in iv:encrypted format
-  if (!encryptedText.includes(":")) return encryptedText;
+  // Verify that encryptedText is a valid 16-byte hex IV + hex ciphertext so legacy plaintext with ":" is not corrupted
+  if (!/^[0-9a-fA-F]{32}:[0-9a-fA-F]+$/.test(encryptedText)) {
+    return encryptedText;
+  }
 
   try {
     const [ivHex, encrypted] = encryptedText.split(":");

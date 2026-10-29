@@ -63,11 +63,13 @@ export default function SuperAdminPage() {
   // Form states
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [businessEmail, setBusinessEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [seatLimit, setSeatLimit] = useState(10);
   const [planCode, setPlanCode] = useState("growth");
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("GoodwinAdmin@2026!");
+  const [adminPassword, setAdminPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -92,6 +94,10 @@ export default function SuperAdminPage() {
     try {
       setLoading(true);
       const res = await fetch("/api/platform/workspaces");
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       const data = await res.json();
       if (data.success && data.workspaces) {
         setWorkspaces(data.workspaces);
@@ -122,37 +128,38 @@ export default function SuperAdminPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         window.location.href = "/app/dashboard";
+      } else if (res.status === 401) {
+        window.location.href = "/login";
       } else {
-        // Auto authenticate if unauthenticated
-        await autoLoginAndSwitch(w.id);
+        alert(data.error || "Failed to switch workspace");
       }
     } catch (err) {
       console.error(err);
     }
   }
 
-  async function autoLoginAndSwitch(targetTenantId: string) {
-    try {
-      const loginRes = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "superadmin@goodwingrowai.com",
-          password: "GoodwinAdmin@2026!",
-        }),
-      });
-      const loginData = await loginRes.json();
-      if (loginRes.ok && loginData.success) {
-        await fetch("/api/platform/workspaces", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tenantId: targetTenantId }),
-        });
-        window.location.href = "/app/dashboard";
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  function handleExportReport() {
+    const rows = [
+      ["Company Name", "Code", "Plan", "Status", "Members", "Seat Limit", "Leads", "Deals", "Contacts"],
+      ...workspaces.map((w) => [
+        `"${(w.name || "").replace(/"/g, '""')}"`,
+        w.code,
+        w.planName || "Growth",
+        w.status,
+        w.stats?.members || 1,
+        w.settings?.seatLimit || 10,
+        w.stats?.leads || 0,
+        w.stats?.deals || 0,
+        w.stats?.contacts || 0,
+      ]),
+    ];
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map((r) => r.join(",")).join("\n");
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `SuperAdmin_Fleet_Report_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   // Edit Workspace Submit (U)
@@ -226,6 +233,8 @@ export default function SuperAdminPage() {
         body: JSON.stringify({
           name,
           code,
+          businessEmail,
+          phone,
           seatLimit,
           planCode,
           adminName,
@@ -240,8 +249,11 @@ export default function SuperAdminPage() {
       setProvisionModalOpen(false);
       setName("");
       setCode("");
+      setBusinessEmail("");
+      setPhone("");
       setAdminName("");
       setAdminEmail("");
+      setAdminPassword("");
       loadWorkspaces();
     } catch (err: any) {
       setFormError(err.message);
@@ -302,6 +314,14 @@ export default function SuperAdminPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleExportReport}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer"
+            >
+              <ArrowUpRight className="w-4 h-4 text-emerald-600" />
+              <span>Export Report</span>
+            </button>
             <button
               onClick={() => {
                 setFormError(null);
@@ -421,9 +441,15 @@ export default function SuperAdminPage() {
                     return (
                       <tr key={w.id} className="hover:bg-slate-50/80 transition">
                         <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
-                            {w.name.charAt(0)}
-                          </div>
+                          {w.settings?.logoUrl ? (
+                            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white border border-slate-200 flex items-center justify-center p-0.5 shrink-0 shadow-2xs">
+                              <img src={w.settings.logoUrl} alt={w.name} className="w-full h-full object-contain" />
+                            </div>
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+                              {w.name.charAt(0)}
+                            </div>
+                          )}
                           <div>
                             <div>{w.name}</div>
                             {isCurrent && (
@@ -682,6 +708,28 @@ export default function SuperAdminPage() {
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold block mb-1">Business Email</label>
+                  <input
+                    type="email"
+                    value={businessEmail}
+                    onChange={(e) => setBusinessEmail(e.target.value)}
+                    placeholder="info@company.com"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1">Business Phone</label>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+91 9876543210"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div>
                   <label className="font-semibold block mb-1">Admin Full Name *</label>
@@ -702,6 +750,16 @@ export default function SuperAdminPage() {
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="font-semibold block mb-1">Initial Admin Password</label>
+                <input
+                  type="password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="Leave blank to auto-generate secure password"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+                />
               </div>
               <div className="pt-3 flex justify-end gap-2">
                 <button
@@ -789,6 +847,28 @@ export default function SuperAdminPage() {
                     type="number"
                     value={editSeatLimit}
                     onChange={(e) => setEditSeatLimit(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold block mb-1">Business Email</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    placeholder="info@company.com"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1">Business Phone</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="+91 9876543210"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
                   />
                 </div>

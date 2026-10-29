@@ -11,6 +11,9 @@ export async function GET(
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+  }
 
   const company = await prisma.company.findFirst({
     where: { id, tenantId: tenantCtx.tenant.id },
@@ -46,6 +49,12 @@ export async function PUT(
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("companies:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing companies:write permission" }, { status: 403 });
+    }
 
     const company = await prisma.company.findFirst({
       where: { id, tenantId: tenantCtx.tenant.id },
@@ -80,6 +89,8 @@ export async function PUT(
   }
 }
 
+export const PATCH = PUT;
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -89,6 +100,12 @@ export async function DELETE(
     const tenantCtx = await getTenantContext();
     if (!tenantCtx) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("companies:delete")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing companies:delete permission" }, { status: 403 });
     }
 
     const company = await prisma.company.findFirst({
