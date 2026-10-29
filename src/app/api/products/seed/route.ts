@@ -16,7 +16,17 @@ export async function POST(req: Request) {
     const tenantId = tenantCtx.tenant.id;
     let seededCount = 0;
 
+    // Remove old preliminary demo SKUs that were superseded by official 2026 catalogue
+    const officialSkus = GOODWIN_GROW_AI_CATALOG.map((i) => i.sku);
+    await prisma.product.deleteMany({
+      where: {
+        tenantId,
+        sku: { notIn: officialSkus, startsWith: "GGA-" },
+      },
+    }).catch(() => {});
+
     for (const item of GOODWIN_GROW_AI_CATALOG) {
+      const fullDescription = `[${item.category}] [${item.status}] Scope: ${item.scope} | 2026 Market Range: ${item.marketRange}. ${item.description}`;
       const existing = await prisma.product.findFirst({
         where: { tenantId, sku: item.sku },
       });
@@ -26,9 +36,9 @@ export async function POST(req: Request) {
           where: { id: existing.id },
           data: {
             name: item.name,
-            description: item.description,
-            unitPrice: item.unitPrice,
-            currency: item.currency,
+            description: fullDescription,
+            unitPrice: item.goodwinPrice,
+            currency: "INR",
             isActive: true,
           },
         });
@@ -38,9 +48,9 @@ export async function POST(req: Request) {
             tenantId,
             name: item.name,
             sku: item.sku,
-            description: item.description,
-            unitPrice: item.unitPrice,
-            currency: item.currency,
+            description: fullDescription,
+            unitPrice: item.goodwinPrice,
+            currency: "INR",
             isActive: true,
           },
         });

@@ -511,7 +511,17 @@ export async function ensureMarketCatalogue() {
     const growAiTenant = await prisma.tenant.findUnique({ where: { code: "goodwin-grow-ai" } });
     if (!growAiTenant) return;
 
+    // Remove old preliminary demo SKUs that were superseded by official 2026 catalogue
+    const officialSkus = GOODWIN_GROW_AI_CATALOG.map((i) => i.sku);
+    await prisma.product.deleteMany({
+      where: {
+        tenantId: growAiTenant.id,
+        sku: { notIn: officialSkus, startsWith: "GGA-" },
+      },
+    }).catch(() => {});
+
     for (const item of GOODWIN_GROW_AI_CATALOG) {
+      const fullDescription = `[${item.category}] [${item.status}] Scope: ${item.scope} | 2026 Market Range: ${item.marketRange}. ${item.description}`;
       const existing = await prisma.product.findFirst({
         where: { tenantId: growAiTenant.id, sku: item.sku },
       });
@@ -521,9 +531,20 @@ export async function ensureMarketCatalogue() {
             tenantId: growAiTenant.id,
             name: item.name,
             sku: item.sku,
-            description: item.description,
-            unitPrice: item.unitPrice,
-            currency: item.currency,
+            description: fullDescription,
+            unitPrice: item.goodwinPrice,
+            currency: "INR",
+            isActive: true,
+          },
+        });
+      } else {
+        await prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            name: item.name,
+            description: fullDescription,
+            unitPrice: item.goodwinPrice,
+            currency: "INR",
             isActive: true,
           },
         });

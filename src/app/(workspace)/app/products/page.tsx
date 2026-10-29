@@ -20,15 +20,59 @@ import {
   Check,
   AlertCircle,
   RefreshCw,
+  BookOpen,
+  ShieldCheck,
+  FileText,
+  ChevronRight,
+  DollarSign,
+  Info,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
+
+function parseMeta(desc?: string) {
+  if (!desc) return { category: null, status: null, scope: null, marketRange: null, text: "" };
+  const match = desc.match(/^\[(.*?)\]\s*\[(.*?)\]\s*Scope:\s*(.*?)\s*\|\s*2026 Market Range:\s*(.*?)\.\s*(.*)$/);
+  if (match) {
+    return {
+      category: match[1],
+      status: match[2],
+      scope: match[3],
+      marketRange: match[4],
+      text: match[5],
+    };
+  }
+  return { category: null, status: null, scope: null, marketRange: null, text: desc };
+}
+
+const SERVICE_CATEGORIES = [
+  "Consultation & Onboarding",
+  "Account Setup",
+  "Social Media",
+  "Creative Design",
+  "Video & Reels",
+  "Meta Ads",
+  "Google Ads",
+  "SEO",
+  "Google Business",
+  "Website",
+  "E-commerce",
+  "Lead Generation",
+  "AI & Automation",
+  "Content",
+  "Analytics",
+  "Consulting",
+  "Packages",
+];
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [pricingFilter, setPricingFilter] = useState<"ALL" | "FREE" | "PAID" | "ACTIVE">("ALL");
+  const [pricingFilter, setPricingFilter] = useState<"ALL" | "FREE" | "PAID" | "PACKAGES" | "ACTIVE">("ALL");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [policyTab, setPolicyTab] = useState<"POLICY" | "THIRDPARTY" | "RULES" | "PACKAGES" | "COMMUNICATION">("POLICY");
 
   // Selection state for "Select All at Once"
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -220,16 +264,25 @@ export default function ProductsPage() {
 
   // Filtered Products
   const filteredProducts = products.filter((p) => {
+    const meta = parseMeta(p.description);
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())) ||
-      (p.description && p.description.toLowerCase().includes(search.toLowerCase()));
+      (p.description && p.description.toLowerCase().includes(search.toLowerCase())) ||
+      (meta.category && meta.category.toLowerCase().includes(search.toLowerCase())) ||
+      (meta.scope && meta.scope.toLowerCase().includes(search.toLowerCase()));
 
     if (!matchesSearch) return false;
 
+    if (categoryFilter !== "ALL") {
+      if (meta.category !== categoryFilter) return false;
+    }
+
     const price = Number(p.unitPrice) || 0;
+    const isPackage = meta.category === "Packages" || p.sku?.includes("PKG");
     if (pricingFilter === "FREE") return price === 0;
-    if (pricingFilter === "PAID") return price > 0;
+    if (pricingFilter === "PAID") return price > 0 && !isPackage;
+    if (pricingFilter === "PACKAGES") return isPackage;
     if (pricingFilter === "ACTIVE") return p.isActive !== false;
     return true;
   });
@@ -309,7 +362,14 @@ export default function ProductsPage() {
   }
 
   const freeCount = products.filter((p) => Number(p.unitPrice) === 0).length;
-  const paidCount = products.filter((p) => Number(p.unitPrice) > 0).length;
+  const packageCount = products.filter((p) => {
+    const meta = parseMeta(p.description);
+    return meta.category === "Packages" || p.sku?.includes("PKG");
+  }).length;
+  const paidCount = products.filter((p) => {
+    const meta = parseMeta(p.description);
+    return Number(p.unitPrice) > 0 && meta.category !== "Packages" && !p.sku?.includes("PKG");
+  }).length;
   const activeCount = products.filter((p) => p.isActive !== false).length;
 
   return (
@@ -318,33 +378,41 @@ export default function ProductsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Products & Services Catalog</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Goodwin Grow AI Service Catalogue</h1>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Goodwin Catalogue
+              India 2026 Reference
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Standard product definitions, SKU pricing, and market-standard free lead magnets vs. paid retainers.
+            Internal team & client scope reference: Free onboarding & setup vs. chargeable retainers, market benchmarks, and Goodwin pricing.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setPolicyModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-xs transition cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Commercial Policy & Scopes</span>
+          </button>
+
           <button
             onClick={handleLoadMarketCatalog}
             disabled={seedingLoading}
-            title="Auto-fill the catalog with Goodwin Grow AI market-standard free audits, retainers & services"
-            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/80 text-indigo-700 font-bold text-xs shadow-xs transition cursor-pointer"
+            title="Auto-fill with all 75 Goodwin Grow AI 2026 official services & packages"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/80 text-indigo-700 font-bold text-xs shadow-xs transition cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>{seedingLoading ? "Loading Catalog..." : "Load Market Standards"}</span>
+            <span>{seedingLoading ? "Syncing Catalogue..." : "Sync 2026 Official Catalogue"}</span>
           </button>
 
           <button
             onClick={() => setModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add New Item</span>
+            <span>Add Custom Service</span>
           </button>
         </div>
       </div>
@@ -379,7 +447,7 @@ export default function ProductsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search services, retainers, free audits by name, SKU..."
+              placeholder="Search services, retainers, free audits by name, SKU, scope..."
               className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 focus:bg-white transition"
             />
           </div>
@@ -403,7 +471,7 @@ export default function ProductsPage() {
                   : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
               }`}
             >
-              <span>Free Lead Magnets</span>
+              <span>Free & Included</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 text-current font-black">
                 {freeCount}
               </span>
@@ -416,9 +484,22 @@ export default function ProductsPage() {
                   : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200"
               }`}
             >
-              <span>Paid Retainers</span>
+              <span>Chargeable Services</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 text-current font-black">
                 {paidCount}
+              </span>
+            </button>
+            <button
+              onClick={() => setPricingFilter("PACKAGES")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                pricingFilter === "PACKAGES"
+                  ? "bg-amber-600 text-white"
+                  : "bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200"
+              }`}
+            >
+              <span>Growth Packages</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 text-current font-black">
+                {packageCount}
               </span>
             </button>
             <button
@@ -431,6 +512,33 @@ export default function ProductsPage() {
             >
               Active ({activeCount})
             </button>
+          </div>
+        </div>
+
+        {/* Category Dropdown and Sub-filter */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <div className="flex items-center gap-2 text-xs">
+            <Filter className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="font-bold text-slate-700">Filter by Category:</span>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+            >
+              <option value="ALL">All Categories ({products.length} services)</option>
+              {SERVICE_CATEGORIES.map((cat) => {
+                const count = products.filter((p) => parseMeta(p.description).category === cat).length;
+                return (
+                  <option key={cat} value={cat}>
+                    {cat} ({count})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium">
+            Showing <span className="font-bold text-slate-900">{filteredProducts.length}</span> services in active view
           </div>
         </div>
 
@@ -507,12 +615,12 @@ export default function ProductsPage() {
                     )}
                   </button>
                 </th>
-                <th className="py-3.5 px-4">Product / Service Name</th>
-                <th className="py-3.5 px-4">SKU / Code</th>
-                <th className="py-3.5 px-4">Pricing Model</th>
-                <th className="py-3.5 px-4">Unit Price</th>
+                <th className="py-3.5 px-4 min-w-[200px]">Service & Deliverable</th>
+                <th className="py-3.5 px-4">Category</th>
+                <th className="py-3.5 px-4 min-w-[180px]">Typical Scope / Unit</th>
                 <th className="py-3.5 px-4">Status</th>
-                <th className="py-3.5 px-4">Created Date</th>
+                <th className="py-3.5 px-4 min-w-[150px]">Indicative 2026 Market Range</th>
+                <th className="py-3.5 px-4 min-w-[150px]">Goodwin Grow AI Price</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -534,7 +642,7 @@ export default function ProductsPage() {
                           className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
                         >
                           <Sparkles className="w-4 h-4" />
-                          <span>Populate Market-Standard Goodwin Grow AI Catalog</span>
+                          <span>Populate Official Goodwin Grow AI 2026 Catalogue</span>
                         </button>
                       </div>
                     )}
@@ -545,6 +653,7 @@ export default function ProductsPage() {
                   const isSelected = selectedIds.includes(p.id);
                   const price = Number(p.unitPrice) || 0;
                   const isFree = price === 0;
+                  const meta = parseMeta(p.description);
 
                   return (
                     <tr
@@ -567,67 +676,79 @@ export default function ProductsPage() {
                         </button>
                       </td>
 
-                      {/* Name & Description */}
+                      {/* Name & SKU */}
                       <td className="py-3.5 px-4 font-bold text-slate-900">
-                        <div className="flex items-center gap-2">
-                          <Package className={`w-4 h-4 shrink-0 ${isFree ? "text-emerald-600" : "text-indigo-600"}`} />
-                          <span className="truncate max-w-sm">{p.name}</span>
+                        <div className="flex items-start gap-2">
+                          <Package className={`w-4 h-4 shrink-0 mt-0.5 ${isFree ? "text-emerald-600" : "text-indigo-600"}`} />
+                          <div>
+                            <span className="leading-snug">{p.name}</span>
+                            <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[10px] text-slate-400 font-normal">
+                              <span>SKU: {p.sku || "—"}</span>
+                            </div>
+                            {meta.text && (
+                              <p className="text-[11px] text-slate-500 font-normal mt-1 leading-relaxed">
+                                {meta.text}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        {p.description && (
-                          <p className="text-[11px] text-slate-500 font-normal truncate max-w-md mt-0.5">
-                            {p.description}
-                          </p>
-                        )}
                       </td>
 
-                      {/* SKU */}
-                      <td className="py-3.5 px-4 font-mono text-slate-500 text-[11px]">
-                        {p.sku || "—"}
-                      </td>
-
-                      {/* Free vs Paid Badge */}
-                      <td className="py-3.5 px-4">
-                        {isFree ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase">
-                            <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
-                            Free Lead Magnet
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase">
-                            Paid Service
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Unit Price */}
-                      <td className="py-3.5 px-4">
-                        {isFree ? (
-                          <span className="font-extrabold text-emerald-700 text-xs">₹0 Complimentary</span>
-                        ) : (
-                          <span className="font-extrabold text-slate-900 text-xs">
-                            {formatCurrency(price)}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            p.isActive !== false
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {p.isActive !== false ? "Active" : "Archived"}
+                      {/* Category */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                          {meta.category || "General"}
                         </span>
                       </td>
 
-                      {/* Created Date */}
-                      <td className="py-3.5 px-4 text-slate-400">{formatDate(p.createdAt)}</td>
+                      {/* Typical Scope / Unit */}
+                      <td className="py-3.5 px-4 text-slate-600 text-xs font-medium">
+                        {meta.scope || "As scoped"}
+                      </td>
+
+                      {/* Status / Chargeability */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {meta.status === "FREE" || isFree ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase">
+                            <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
+                            FREE
+                          </span>
+                        ) : meta.status === "INCLUDED" ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200 uppercase">
+                            INCLUDED
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase">
+                            CHARGEABLE
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Indicative 2026 Market Range */}
+                      <td className="py-3.5 px-4 text-slate-600 font-semibold text-xs whitespace-nowrap">
+                        {meta.marketRange || "Market Standard"}
+                      </td>
+
+                      {/* Goodwin Grow AI Price (yellow background / editable badge) */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {isFree ? (
+                          <span className="font-extrabold text-emerald-700 text-xs bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-block">
+                            ₹0 Complimentary
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => openEdit(p)}
+                            title="Click to edit Goodwin Grow AI price"
+                            className="inline-flex items-center gap-1.5 font-extrabold text-amber-950 bg-amber-100/90 hover:bg-amber-200 border border-amber-300 px-3 py-1 rounded-lg text-xs shadow-2xs transition cursor-pointer"
+                          >
+                            <span>{formatCurrency(price)}</span>
+                            <Edit2 className="w-3 h-3 text-amber-800" />
+                          </button>
+                        )}
+                      </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => handleDuplicate(p)}
@@ -882,6 +1003,383 @@ export default function ProductsPage() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Commercial Policy & Scopes Modal */}
+      {policyModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 bg-slate-50/75 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900">Goodwin Grow AI Service Catalogue & Pricing Policy</h2>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    India 2026 Reference
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Internal Team + Client Scope Reference: Define what is free, what is chargeable, indicative market benchmarks, and commercial rules.
+                </p>
+              </div>
+              <button
+                onClick={() => setPolicyModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Nav Tabs */}
+            <div className="flex items-center gap-1 px-5 pt-3 border-b border-slate-100 bg-white overflow-x-auto text-xs font-semibold">
+              <button
+                onClick={() => setPolicyTab("POLICY")}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer ${
+                  policyTab === "POLICY"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                1. How Team Uses This
+              </button>
+              <button
+                onClick={() => setPolicyTab("THIRDPARTY")}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer ${
+                  policyTab === "THIRDPARTY"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                4. Third-Party Costs
+              </button>
+              <button
+                onClick={() => setPolicyTab("RULES")}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer ${
+                  policyTab === "RULES"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                5. Commercial Rules
+              </button>
+              <button
+                onClick={() => setPolicyTab("PACKAGES")}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer ${
+                  policyTab === "PACKAGES"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                6. Packages Framework
+              </button>
+              <button
+                onClick={() => setPolicyTab("COMMUNICATION")}
+                className={`pb-2.5 px-3 border-b-2 transition cursor-pointer ${
+                  policyTab === "COMMUNICATION"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                7. Client Wording & Sources
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-700 flex-1">
+              {policyTab === "POLICY" && (
+                <div className="space-y-4">
+                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 space-y-2">
+                    <h3 className="font-bold text-emerald-950 text-sm">Purpose & Core Directive</h3>
+                    <p className="text-emerald-900 leading-relaxed">
+                      Define what Goodwin Grow AI provides, what is complimentary/free, what is chargeable, indicative market pricing, and a separate editable Goodwin Grow AI price field.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-2">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase">
+                        <Sparkles className="w-3 h-3 text-emerald-600" />
+                        What "FREE" Means
+                      </div>
+                      <p className="text-slate-600 leading-relaxed">
+                        Initial consultation, onboarding, basic setup or limited support specifically listed as free. <strong>Free does not mean unlimited recurring work.</strong>
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-2">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-black text-[10px] uppercase">
+                        What "CHARGEABLE" Means
+                      </div>
+                      <p className="text-slate-600 leading-relaxed">
+                        Recurring management, creative production, strategy, advertising, SEO, development, automation, optimization, e-commerce work, or work outside an approved package.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-2">
+                    <h4 className="font-bold text-amber-950 text-xs">Pricing Benchmark Snapshot (2026)</h4>
+                    <p className="text-amber-900 leading-relaxed text-[11px]">
+                      Published 2026 Indian pricing guides show basic social-media packages around ₹8,000–₹35,000/month, broader agency management much higher, local SEO around ₹10,000–₹30,000/month, and performance-ad management as a fixed monthly fee or 10–20% of ad spend. Website projects range widely based on complexity. Therefore, all figures are indicative bands rather than fixed market rates.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {policyTab === "THIRDPARTY" && (
+                <div className="space-y-4">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-600">
+                    <span className="font-bold text-slate-900">Third-Party Costs Policy:</span> All third-party platform, media, tooling, and infrastructure costs are client-paid unless a formal quotation explicitly says otherwise.
+                  </div>
+
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600 text-[11px]">
+                          <th className="py-2.5 px-4">Cost Item</th>
+                          <th className="py-2.5 px-4">Responsibility & Policy</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Meta / Facebook / Instagram ad spend</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays platform/media budget directly or as agreed</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Google Ads / YouTube Ads spend</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays media budget</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Domain registration / renewal</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays registrar directly</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Hosting / cloud / server fees</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays hosting provider (Vercel, AWS, Hostinger, etc.)</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Premium themes, plugins or software</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays license fees</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">AI / API usage charges</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays OpenAI/Anthropic/Google Cloud tokens unless included in written package</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">WhatsApp Business / API conversation charges</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays Meta Cloud API per-conversation tariffs directly</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">CRM / email / SMS platform subscriptions</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays subscription fees</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Influencer / creator fees</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays creators directly</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Stock assets / licensed music / paid fonts</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays where custom licensing is required</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Printing / signage / physical production</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays printing vendor</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Travel / on-location expenses</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays where shoots require travel outside base city</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Marketplace fees / commissions / logistics</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays Amazon/Flipkart commission & fulfillment</td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">Verification / subscription / platform fees</td>
+                          <td className="py-2.5 px-4 text-slate-600">Client pays verification badge or directory fees</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {policyTab === "RULES" && (
+                <div className="space-y-3">
+                  <h3 className="font-bold text-slate-900 text-sm">Recommended Internal Commercial Rules</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">1. Never promise unlimited work</span>
+                      <p className="text-slate-500 text-[11px]">Every paid package must explicitly state platforms, post/reel count, revisions, reporting frequency, and exclusions.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">2. Out-of-scope approval</span>
+                      <p className="text-slate-500 text-[11px]">Get approval before doing out-of-scope work. Quote it as an add-on or revised package before execution.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">3. Separate ad spend</span>
+                      <p className="text-slate-500 text-[11px]">Always keep media spend completely separate from agency management retainers.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">4. No deceptive guarantees</span>
+                      <p className="text-slate-500 text-[11px]">Do not guarantee sales, leads, ROAS, followers, SEO rankings, Google verification, or marketplace approvals.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">5. Platform compliance</span>
+                      <p className="text-slate-500 text-[11px]">Never buy or fabricate reviews, followers, or engagement. Reputation management must use legitimate feedback.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">6. Client responsibilities</span>
+                      <p className="text-slate-500 text-[11px]">Clients must provide timely approvals, accurate business information, required platform access, and brand assets.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">7. Statutory GST transparency</span>
+                      <p className="text-slate-500 text-[11px]">State whether GST is included or extra on every quotation and invoice.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">8. Management approved rates</span>
+                      <p className="text-slate-500 text-[11px]">Use the Goodwin Grow AI Price column as the internal approved rate. Team members cannot discount without Director approval.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">9. Defined revision limits</span>
+                      <p className="text-slate-500 text-[11px]">Define strict revision limits (typically 2 rounds) for designs, videos, websites, and branding projects.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1 shadow-2xs">
+                      <span className="font-bold text-slate-900">10. Written scope sign-off</span>
+                      <p className="text-slate-500 text-[11px]">Maintain written scope approval (WhatsApp/email/proposal) before recurring paid work begins.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {policyTab === "PACKAGES" && (
+                <div className="space-y-4">
+                  <h3 className="font-bold text-slate-900 text-sm">Suggested Goodwin Grow AI Package Framework</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">Starter Presence</span>
+                        <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">₹10,000 / mo</span>
+                      </div>
+                      <p className="text-slate-500 text-[11px]"><strong>Best For:</strong> Local / small business</p>
+                      <p className="text-slate-600 text-xs">Profile management + limited monthly creatives (8 static creatives/mo, basic GBP updates, monthly review).</p>
+                      <span className="text-[10px] text-slate-400">Market Range: ₹8,000–₹15,000/mo</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">Social Growth</span>
+                        <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">₹22,000 / mo</span>
+                      </div>
+                      <p className="text-slate-500 text-[11px]"><strong>Best For:</strong> Growing local business</p>
+                      <p className="text-slate-600 text-xs">2 platforms + 12 posts + 4 short-form reels + content calendar & community engagement.</p>
+                      <span className="text-[10px] text-slate-400">Market Range: ₹15,000–₹30,000/mo</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">Social Pro</span>
+                        <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">₹38,000 / mo</span>
+                      </div>
+                      <p className="text-slate-500 text-[11px]"><strong>Best For:</strong> Businesses needing stronger content</p>
+                      <p className="text-slate-600 text-xs">Multi-platform + higher reel/content volume (16 posts + 8 motion reels) + monthly strategic reporting.</p>
+                      <span className="text-[10px] text-slate-400">Market Range: ₹30,000–₹50,000+/mo</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">Local Growth</span>
+                        <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">₹28,000 / mo</span>
+                      </div>
+                      <p className="text-slate-500 text-[11px]"><strong>Best For:</strong> Local lead-focused business</p>
+                      <p className="text-slate-600 text-xs">Social media marketing combined with Google Map pack ranking, citation building, and reputation review curation.</p>
+                      <span className="text-[10px] text-slate-400">Market Range: ₹20,000–₹45,000+/mo</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">Performance Growth</span>
+                        <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">₹45,000 / mo</span>
+                      </div>
+                      <p className="text-slate-500 text-[11px]"><strong>Best For:</strong> Lead & sales campaigns</p>
+                      <p className="text-slate-600 text-xs">Organic content + Meta/Google paid ads management. Media budget paid directly by client.</p>
+                      <span className="text-[10px] text-slate-400">Market Range: ₹30,000–₹75,000+/mo</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">Custom Growth</span>
+                        <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">₹75,000+ / mo</span>
+                      </div>
+                      <p className="text-slate-500 text-[11px]"><strong>Best For:</strong> E-commerce / advanced clients</p>
+                      <p className="text-slate-600 text-xs">Custom mix of SEO, ads, content, web development, WhatsApp CRM automation, and dedicated growth architect.</p>
+                      <span className="text-[10px] text-slate-400">Market Range: Custom quotation</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {policyTab === "COMMUNICATION" && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 space-y-2">
+                    <h4 className="font-bold text-emerald-950 text-xs uppercase tracking-wide">Approved Team Communication Wording</h4>
+                    <blockquote className="italic text-emerald-900 border-l-4 border-emerald-500 pl-3 py-1 text-[11px] leading-relaxed">
+                      “Your initial consultation and the onboarding items specifically mentioned as free are complimentary. Ongoing content creation, social-media management, advertising, SEO, website work, marketplace work, AI automation and other recurring or custom services are chargeable according to the approved package or quotation. Advertising budgets and third-party platform/software costs are separate unless specifically included in writing.”
+                    </blockquote>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-bold text-slate-900 text-xs">2026 Industry Pricing Benchmark Sources</h4>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden text-[11px]">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600">
+                          <tr>
+                            <th className="py-2 px-3">Industry Reference</th>
+                            <th className="py-2 px-3">Relevant Benchmark</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-600">
+                          <tr>
+                            <td className="py-2 px-3 font-semibold text-slate-900">OneCity Technologies (2026)</td>
+                            <td className="py-2 px-3">Local SEO ₹15k–₹25k/mo; growth SEO ₹25k–₹50k/mo; enterprise ₹50k–₹1.5L/mo.</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-3 font-semibold text-slate-900">upGrowth (2026)</td>
+                            <td className="py-2 px-3">India social management spans freelancer/boutique/full-service bands starting ~₹15k/mo.</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-3 font-semibold text-slate-900">Epixs (2026)</td>
+                            <td className="py-2 px-3">Basic ₹8k–₹15k/mo; standard ₹15k–₹35k/mo; premium ₹35k–₹75k+/mo; ad spend separate.</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-3 font-semibold text-slate-900">Preevee (2026)</td>
+                            <td className="py-2 px-3">Benchmarks SEO, Google Ads, Meta Ads and websites across freelancer through enterprise tiers.</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-3 font-semibold text-slate-900">Sky Loop Agency (2026)</td>
+                            <td className="py-2 px-3">Meta/Google Ads management ₹15k–₹45k/mo or percentage; SEO ₹20k–₹60k/mo; websites ₹35k–₹1.5L; WhatsApp chatbot ₹10k–₹25k.</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-3 font-semibold text-slate-900">CoherentLab (2026)</td>
+                            <td className="py-2 px-3">Starter SEO ₹8k–₹15k; local SEO ₹10k–₹25k; small-business SEO ₹20k–₹50k.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400 font-medium">Goodwin Grow AI © 2026 • Confidential Internal Policy</span>
+              <button
+                onClick={() => setPolicyModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition cursor-pointer"
+              >
+                Close Policy Reference
+              </button>
+            </div>
           </div>
         </div>
       )}
