@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileSpreadsheet, Plus, Search, Building2, Download, Trash2, X, Filter, User, Edit2, Save } from "lucide-react";
+import { FileSpreadsheet, Plus, Search, Building2, Download, Trash2, X, Filter, User, Edit2, Save, CheckSquare, Square } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function QuotationsPage() {
@@ -292,6 +292,53 @@ export default function QuotationsPage() {
     return q.createdById === creatorFilter;
   });
 
+  const [selectedQuotationIds, setSelectedQuotationIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const isAllQuotationsSelected =
+    filteredQuotations.length > 0 &&
+    filteredQuotations.every((q) => selectedQuotationIds.includes(q.id));
+
+  function handleSelectAllQuotations() {
+    if (isAllQuotationsSelected) {
+      setSelectedQuotationIds([]);
+    } else {
+      setSelectedQuotationIds(filteredQuotations.map((q) => q.id));
+    }
+  }
+
+  function handleToggleQuotation(id: string) {
+    setSelectedQuotationIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  async function handleBulkDeleteQuotations() {
+    if (selectedQuotationIds.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete all ${selectedQuotationIds.length} selected quotations?`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/quotations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedQuotationIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedQuotationIds([]);
+        fetchQuotations();
+      } else {
+        alert(data.error || "Failed to delete quotations");
+      }
+    } catch {
+      alert("Error deleting quotations");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -335,11 +382,50 @@ export default function QuotationsPage() {
         </div>
       </div>
 
+      {/* Bulk Selection Bar */}
+      {selectedQuotationIds.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2 text-emerald-900 font-semibold">
+            <CheckSquare className="w-4 h-4 text-emerald-600" />
+            <span>{selectedQuotationIds.length} of {filteredQuotations.length} quotations selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkDeleteQuotations}
+              disabled={bulkDeleting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold transition disabled:opacity-50 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{bulkDeleting ? "Deleting..." : `Delete Selected (${selectedQuotationIds.length})`}</span>
+            </button>
+            <button
+              onClick={() => setSelectedQuotationIds([])}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-medium transition cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-500 uppercase text-[10px] tracking-wider">
+                <th className="py-3.5 px-4 w-10">
+                  <button
+                    onClick={handleSelectAllQuotations}
+                    className="p-1 hover:text-emerald-600 transition flex items-center justify-center cursor-pointer"
+                    title={isAllQuotationsSelected ? "Deselect All" : "Select All"}
+                  >
+                    {isAllQuotationsSelected ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3.5 px-4">Quotation #</th>
                 <th className="py-3.5 px-4">Subtotal</th>
                 <th className="py-3.5 px-4">Taxes (GST)</th>
@@ -353,17 +439,29 @@ export default function QuotationsPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">Loading quotations...</td>
+                  <td colSpan={9} className="py-12 text-center text-slate-400">Loading quotations...</td>
                 </tr>
               ) : filteredQuotations.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No quotations generated yet. Create your first quote above!
                   </td>
                 </tr>
               ) : (
                 filteredQuotations.map((q) => (
-                  <tr key={q.id} className="hover:bg-slate-50/60 transition group">
+                  <tr key={q.id} className={`hover:bg-slate-50/60 transition group ${selectedQuotationIds.includes(q.id) ? "bg-emerald-50/40" : ""}`}>
+                    <td className="py-3.5 px-4">
+                      <button
+                        onClick={() => handleToggleQuotation(q.id)}
+                        className="p-1 hover:text-emerald-600 transition flex items-center justify-center cursor-pointer"
+                      >
+                        {selectedQuotationIds.includes(q.id) ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300 group-hover:text-slate-400" />
+                        )}
+                      </button>
+                    </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-slate-900 flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                       <span>{q.quotationNumber}</span>

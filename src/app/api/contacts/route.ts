@@ -106,3 +106,44 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("contacts:delete") && !tenantCtx.hasPermission("contacts:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing contacts:delete permission" }, { status: 403 });
+    }
+
+    const tenantId = tenantCtx.tenant.id;
+    const body = await req.json();
+    const { ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ success: false, error: "Valid array of contact IDs required" }, { status: 400 });
+    }
+
+    await prisma.activity.deleteMany({ where: { contactId: { in: ids }, tenantId } }).catch(() => {});
+    await prisma.note.deleteMany({ where: { contactId: { in: ids }, tenantId } }).catch(() => {});
+
+    const deleted = await prisma.contact.deleteMany({
+      where: {
+        id: { in: ids },
+        tenantId,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Deleted ${deleted.count} contacts`,
+      deletedCount: deleted.count,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

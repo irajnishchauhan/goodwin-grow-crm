@@ -28,6 +28,8 @@ import {
   ChevronRight,
   MessageSquare,
   Sparkles,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -123,6 +125,10 @@ export default function LeadsPage() {
   const [importRawText, setImportRawText] = useState("");
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any | null>(null);
+
+  // Bulk Selection State
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     fetchTeam();
@@ -538,6 +544,70 @@ export default function LeadsPage() {
     (l) => l.nextFollowUp && new Date(l.nextFollowUp) < now && !["CONVERTED", "LOST"].includes(l.status)
   );
 
+  const isAllLeadsSelected =
+    filteredLeads.length > 0 &&
+    filteredLeads.every((l) => selectedLeadIds.includes(l.id));
+
+  function handleSelectAllLeads() {
+    if (isAllLeadsSelected) {
+      setSelectedLeadIds([]);
+    } else {
+      setSelectedLeadIds(filteredLeads.map((l) => l.id));
+    }
+  }
+
+  function handleToggleLead(id: string) {
+    setSelectedLeadIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  async function handleBulkDeleteLeads() {
+    if (selectedLeadIds.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete all ${selectedLeadIds.length} selected leads?`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/leads", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedLeadIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedLeadIds([]);
+        fetchLeads();
+      } else {
+        alert(data.error || "Failed to delete selected leads");
+      }
+    } catch {
+      alert("Error deleting leads");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  async function handleBulkUpdateLeadStatus(newStatus: string) {
+    if (selectedLeadIds.length === 0) return;
+    try {
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedLeadIds, status: newStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedLeadIds([]);
+        fetchLeads();
+      } else {
+        alert(data.error || "Failed to update selected leads");
+      }
+    } catch {
+      alert("Error updating leads");
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -654,6 +724,60 @@ export default function LeadsPage() {
             <option value="LOW">Low</option>
           </select>
         </div>
+
+        {/* Bulk Action Bar */}
+        {selectedLeadIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs animate-in fade-in duration-150">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-emerald-950">
+                {selectedLeadIds.length} of {filteredLeads.length} leads selected
+              </span>
+              <button
+                onClick={handleSelectAllLeads}
+                className="underline text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer ml-1"
+              >
+                {isAllLeadsSelected ? "Deselect All" : "Select All Visible"}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleBulkUpdateLeadStatus(e.target.value);
+                    e.target.value = "";
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold text-xs cursor-pointer shadow-2xs"
+                defaultValue=""
+              >
+                <option value="" disabled>Change Status...</option>
+                <option value="NEW">Set NEW</option>
+                <option value="CONTACTED">Set CONTACTED</option>
+                <option value="QUALIFIED">Set QUALIFIED</option>
+                <option value="PROPOSAL">Set PROPOSAL</option>
+                <option value="CONVERTED">Set CONVERTED</option>
+                <option value="LOST">Set LOST</option>
+              </select>
+
+              <button
+                onClick={handleBulkDeleteLeads}
+                disabled={bulkDeleting}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700 transition shadow-xs cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Bulk Delete ({selectedLeadIds.length})</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedLeadIds([])}
+                className="px-2 py-1 text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Leads Table */}
@@ -662,6 +786,24 @@ export default function LeadsPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-500 uppercase text-[10px] tracking-wider">
+                {/* SELECT ALL AT ONCE CHECKBOX */}
+                <th className="py-3.5 px-4 w-10">
+                  <button
+                    onClick={handleSelectAllLeads}
+                    title={isAllLeadsSelected ? "Deselect All" : "Select All Leads"}
+                    className="flex items-center justify-center text-slate-500 hover:text-emerald-600 cursor-pointer"
+                  >
+                    {isAllLeadsSelected ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-600" />
+                    ) : selectedLeadIds.length > 0 ? (
+                      <div className="w-4 h-4 rounded border-2 border-emerald-600 bg-emerald-100 flex items-center justify-center text-[10px] text-emerald-800 font-bold">
+                        -
+                      </div>
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-300" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3.5 px-4">Lead & Company</th>
                 <th className="py-3.5 px-3">Service Required</th>
                 <th className="py-3.5 px-3">Deal Value</th>
@@ -675,18 +817,19 @@ export default function LeadsPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     Loading agency leads...
                   </td>
                 </tr>
               ) : filteredLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No leads match the filters. Click "Create New Lead" to add a prospective client.
                   </td>
                 </tr>
               ) : (
                 filteredLeads.map((lead) => {
+                  const isSelected = selectedLeadIds.includes(lead.id);
                   const isFollowUpOverdue = Boolean(
                     lead.nextFollowUp &&
                       new Date(lead.nextFollowUp) < now &&
@@ -697,9 +840,22 @@ export default function LeadsPage() {
                     <tr
                       key={lead.id}
                       className={`hover:bg-slate-50/60 transition group ${
-                        isFollowUpOverdue ? "bg-amber-50/30" : ""
+                        isSelected ? "bg-emerald-50/50" : isFollowUpOverdue ? "bg-amber-50/30" : ""
                       }`}
                     >
+                      {/* Row Checkbox */}
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => handleToggleLead(lead.id)}
+                          className="flex items-center justify-center text-slate-400 hover:text-emerald-600 cursor-pointer"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-300" />
+                          )}
+                        </button>
+                      </td>
                       {/* Name & Company */}
                       <td className="py-3.5 px-4">
                         <button

@@ -22,6 +22,8 @@ import {
   Sparkles,
   UserPlus,
   ChevronDown,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { INVOICE_CATALOG_ITEMS } from "@/lib/agency/packages";
 
@@ -434,6 +436,52 @@ export default function InvoicesPage() {
     .reduce((acc, inv) => acc + Number(inv.totalAmount), 0);
   const totalOutstanding = totalBilled - totalCollected;
 
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const isAllInvoicesSelected =
+    invoices.length > 0 && invoices.every((i) => selectedInvoiceIds.includes(i.id));
+
+  function handleSelectAllInvoices() {
+    if (isAllInvoicesSelected) {
+      setSelectedInvoiceIds([]);
+    } else {
+      setSelectedInvoiceIds(invoices.map((i) => i.id));
+    }
+  }
+
+  function handleToggleInvoice(id: string) {
+    setSelectedInvoiceIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  async function handleBulkDeleteInvoices() {
+    if (selectedInvoiceIds.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete all ${selectedInvoiceIds.length} selected invoices?`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/agency/invoices", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedInvoiceIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedInvoiceIds([]);
+        fetchInvoices();
+      } else {
+        alert(data.error || "Failed to delete invoices");
+      }
+    } catch {
+      alert("Error deleting invoices");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -517,12 +565,51 @@ export default function InvoicesPage() {
         ))}
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedInvoiceIds.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2 text-emerald-900 font-semibold">
+            <CheckSquare className="w-4 h-4 text-emerald-600" />
+            <span>{selectedInvoiceIds.length} of {invoices.length} invoices selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkDeleteInvoices}
+              disabled={bulkDeleting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold transition disabled:opacity-50 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{bulkDeleting ? "Deleting..." : `Delete Selected (${selectedInvoiceIds.length})`}</span>
+            </button>
+            <button
+              onClick={() => setSelectedInvoiceIds([])}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-medium transition cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Invoices Table */}
       <div className="bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <th className="py-3.5 px-4 w-10">
+                  <button
+                    onClick={handleSelectAllInvoices}
+                    className="p-1 hover:text-emerald-600 transition flex items-center justify-center cursor-pointer"
+                    title={isAllInvoicesSelected ? "Deselect All" : "Select All"}
+                  >
+                    {isAllInvoicesSelected ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3.5 px-5">Invoice #</th>
                 <th className="py-3.5 px-4">Client</th>
                 <th className="py-3.5 px-4">Issue Date</th>
@@ -536,13 +623,13 @@ export default function InvoicesPage() {
             <tbody className="divide-y divide-slate-100 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     Loading invoices...
                   </td>
                 </tr>
               ) : invoices.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No invoices recorded in this view.
                   </td>
                 </tr>
@@ -550,9 +637,23 @@ export default function InvoicesPage() {
                 invoices.map((inv) => (
                   <tr
                     key={inv.id}
-                    className="hover:bg-slate-50/70 transition-colors cursor-pointer group"
+                    className={`hover:bg-slate-50/70 transition-colors cursor-pointer group ${
+                      selectedInvoiceIds.includes(inv.id) ? "bg-emerald-50/40" : ""
+                    }`}
                     onClick={() => setSelectedInvoice(inv)}
                   >
+                    <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleToggleInvoice(inv.id)}
+                        className="p-1 hover:text-emerald-600 transition flex items-center justify-center cursor-pointer"
+                      >
+                        {selectedInvoiceIds.includes(inv.id) ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300 group-hover:text-slate-400" />
+                        )}
+                      </button>
+                    </td>
                     <td className="py-3.5 px-5 font-bold text-slate-900 group-hover:text-emerald-700">
                       {inv.invoiceNumber}
                     </td>

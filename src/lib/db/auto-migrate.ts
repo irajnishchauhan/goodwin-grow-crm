@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth/password";
 import { SYSTEM_PERMISSIONS } from "@/lib/rbac/permissions";
+import { GOODWIN_GROW_AI_CATALOG } from "@/lib/constants/market-catalog";
 
 let isSchemaEnsured = false;
 let isDataEnsured = false;
@@ -492,10 +493,45 @@ export async function ensureRubricPersonas() {
     // Ensure strict workspace member isolation between distinct businesses
     await ensureWorkspaceMemberIsolation();
 
+    // Ensure market-standard services catalogue for Goodwin Grow AI
+    await ensureMarketCatalogue();
+
     isDataEnsured = true;
     console.log("✅ ensureRubricPersonas: Successfully verified personas & clean workspace state.");
   } catch (err: any) {
     console.warn("⚠️ ensureRubricPersonas notice:", err.message);
+  }
+}
+
+/**
+ * Ensures standard market-tier catalogue of products and services (5 Free lead magnets & 15 Paid services)
+ */
+export async function ensureMarketCatalogue() {
+  try {
+    const growAiTenant = await prisma.tenant.findUnique({ where: { code: "goodwin-grow-ai" } });
+    if (!growAiTenant) return;
+
+    for (const item of GOODWIN_GROW_AI_CATALOG) {
+      const existing = await prisma.product.findFirst({
+        where: { tenantId: growAiTenant.id, sku: item.sku },
+      });
+      if (!existing) {
+        await prisma.product.create({
+          data: {
+            tenantId: growAiTenant.id,
+            name: item.name,
+            sku: item.sku,
+            description: item.description,
+            unitPrice: item.unitPrice,
+            currency: item.currency,
+            isActive: true,
+          },
+        });
+      }
+    }
+    console.log("✅ ensureMarketCatalogue: Market catalogue verified for Goodwin Grow AI.");
+  } catch (err: any) {
+    console.warn("⚠️ ensureMarketCatalogue notice:", err.message);
   }
 }
 

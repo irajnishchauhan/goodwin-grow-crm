@@ -142,3 +142,43 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("quotations:delete") && !tenantCtx.hasPermission("quotations:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing quotations:delete permission" }, { status: 403 });
+    }
+
+    const tenantId = tenantCtx.tenant.id;
+    const body = await req.json();
+    const { ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ success: false, error: "Valid array of quotation IDs required" }, { status: 400 });
+    }
+
+    await prisma.quotationItem.deleteMany({ where: { quotationId: { in: ids } } }).catch(() => {});
+
+    const deleted = await prisma.quotation.deleteMany({
+      where: {
+        id: { in: ids },
+        tenantId,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Deleted ${deleted.count} quotations`,
+      deletedCount: deleted.count,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

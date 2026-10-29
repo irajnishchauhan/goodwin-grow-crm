@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, Plus, Search, Globe, Phone, Mail, X, Filter, User, Edit2, Trash2, Save } from "lucide-react";
+import { Building2, Plus, Search, Globe, Phone, Mail, X, Filter, User, Edit2, Trash2, Save, CheckSquare, Square } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 export default function CompaniesPage() {
@@ -180,6 +180,52 @@ export default function CompaniesPage() {
       (c.industry && c.industry.toLowerCase().includes(search.toLowerCase()))
   );
 
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const isAllCompaniesSelected =
+    filtered.length > 0 && filtered.every((c) => selectedCompanyIds.includes(c.id));
+
+  function handleSelectAllCompanies() {
+    if (isAllCompaniesSelected) {
+      setSelectedCompanyIds([]);
+    } else {
+      setSelectedCompanyIds(filtered.map((c) => c.id));
+    }
+  }
+
+  function handleToggleCompany(id: string) {
+    setSelectedCompanyIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  async function handleBulkDeleteCompanies() {
+    if (selectedCompanyIds.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete all ${selectedCompanyIds.length} selected companies? Linked contacts and deals will be unlinked.`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/companies", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedCompanyIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedCompanyIds([]);
+        fetchCompanies();
+      } else {
+        alert(data.error || "Failed to delete companies");
+      }
+    } catch {
+      alert("Error deleting companies");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -230,11 +276,50 @@ export default function CompaniesPage() {
         </div>
       </div>
 
+      {/* Bulk Selection Bar */}
+      {selectedCompanyIds.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2 text-emerald-900 font-semibold">
+            <CheckSquare className="w-4 h-4 text-emerald-600" />
+            <span>{selectedCompanyIds.length} of {filtered.length} companies selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkDeleteCompanies}
+              disabled={bulkDeleting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold transition disabled:opacity-50 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{bulkDeleting ? "Deleting..." : `Delete Selected (${selectedCompanyIds.length})`}</span>
+            </button>
+            <button
+              onClick={() => setSelectedCompanyIds([])}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-medium transition cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-500 uppercase text-[10px] tracking-wider">
+                <th className="py-3.5 px-4 w-10">
+                  <button
+                    onClick={handleSelectAllCompanies}
+                    className="p-1 hover:text-emerald-600 transition flex items-center justify-center cursor-pointer"
+                    title={isAllCompaniesSelected ? "Deselect All" : "Select All"}
+                  >
+                    {isAllCompaniesSelected ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3.5 px-4">Company</th>
                 <th className="py-3.5 px-4">Industry</th>
                 <th className="py-3.5 px-4">Website</th>
@@ -248,15 +333,27 @@ export default function CompaniesPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">Loading companies...</td>
+                  <td colSpan={9} className="py-12 text-center text-slate-400">Loading companies...</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">No client companies found.</td>
+                  <td colSpan={9} className="py-12 text-center text-slate-400">No client companies found.</td>
                 </tr>
               ) : (
                 filtered.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/60 transition group">
+                  <tr key={c.id} className={`hover:bg-slate-50/60 transition group ${selectedCompanyIds.includes(c.id) ? "bg-emerald-50/40" : ""}`}>
+                    <td className="py-3.5 px-4">
+                      <button
+                        onClick={() => handleToggleCompany(c.id)}
+                        className="p-1 hover:text-emerald-600 transition flex items-center justify-center cursor-pointer"
+                      >
+                        {selectedCompanyIds.includes(c.id) ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300 group-hover:text-slate-400" />
+                        )}
+                      </button>
+                    </td>
                     <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2.5">
                       <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-800 font-bold text-xs flex items-center justify-center border border-emerald-100">
                         {c.name.charAt(0)}

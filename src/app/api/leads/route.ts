@@ -227,3 +227,89 @@ export async function POST(req: Request) {
   }
 }
 
+export async function PATCH(req: Request) {
+  try {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("leads:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing leads:write permission" }, { status: 403 });
+    }
+
+    const tenantId = tenantCtx.tenant.id;
+    const body = await req.json();
+    const { ids, status, priority, assignedOwnerId } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ success: false, error: "Valid array of lead IDs required" }, { status: 400 });
+    }
+
+    const dataToUpdate: any = {};
+    if (status) dataToUpdate.status = status;
+    if (priority) dataToUpdate.priority = priority;
+    if (assignedOwnerId !== undefined) dataToUpdate.assignedOwnerId = assignedOwnerId || null;
+
+    const result = await prisma.lead.updateMany({
+      where: {
+        id: { in: ids },
+        tenantId,
+      },
+      data: dataToUpdate,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Updated ${result.count} leads`,
+      count: result.count,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("leads:delete") && !tenantCtx.hasPermission("leads:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing leads:delete permission" }, { status: 403 });
+    }
+
+    const tenantId = tenantCtx.tenant.id;
+    const body = await req.json();
+    const { ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ success: false, error: "Valid array of lead IDs required" }, { status: 400 });
+    }
+
+    // Clean up dependent activities, notes, and tasks
+    await prisma.activity.deleteMany({ where: { leadId: { in: ids }, tenantId } }).catch(() => {});
+    await prisma.note.deleteMany({ where: { leadId: { in: ids }, tenantId } }).catch(() => {});
+
+    const deleted = await prisma.lead.deleteMany({
+      where: {
+        id: { in: ids },
+        tenantId,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Deleted ${deleted.count} leads`,
+      deletedCount: deleted.count,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+

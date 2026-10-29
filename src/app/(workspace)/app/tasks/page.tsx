@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   CheckSquare,
+  Square,
   Plus,
   Search,
   Calendar,
@@ -392,6 +393,76 @@ export default function TasksPage() {
     return true;
   });
 
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+
+  const isAllTasksSelected =
+    filteredTasks.length > 0 && filteredTasks.every((t) => selectedTaskIds.includes(t.id));
+
+  function handleSelectAllTasks() {
+    if (isAllTasksSelected) {
+      setSelectedTaskIds([]);
+    } else {
+      setSelectedTaskIds(filteredTasks.map((t) => t.id));
+    }
+  }
+
+  function handleToggleTask(id: string) {
+    setSelectedTaskIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  async function handleBulkDeleteTasks() {
+    if (selectedTaskIds.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete all ${selectedTaskIds.length} selected tasks?`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedTaskIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedTaskIds([]);
+        fetchTasks();
+      } else {
+        alert(data.error || "Failed to delete tasks");
+      }
+    } catch {
+      alert("Error deleting tasks");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  async function handleBulkUpdateTaskStatus(status: string) {
+    if (selectedTaskIds.length === 0) return;
+    setBulkUpdating(true);
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedTaskIds, status }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedTaskIds([]);
+        fetchTasks();
+      } else {
+        alert(data.error || "Failed to update task status");
+      }
+    } catch {
+      alert("Error updating task status");
+    } finally {
+      setBulkUpdating(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -522,8 +593,70 @@ export default function TasksPage() {
                 <option value="IN_PROGRESS">In Progress</option>
                 <option value="COMPLETED">Completed</option>
               </select>
+
+              {/* Select All Toggle Button */}
+              <button
+                onClick={handleSelectAllTasks}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition cursor-pointer"
+                title={isAllTasksSelected ? "Deselect All Tasks" : "Select All Tasks"}
+              >
+                {isAllTasksSelected ? (
+                  <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 text-slate-400" />
+                )}
+                <span>{isAllTasksSelected ? "Deselect All" : "Select All"}</span>
+              </button>
             </div>
           </div>
+
+          {/* Bulk Action Bar */}
+          {selectedTaskIds.length > 0 && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+              <div className="flex items-center gap-2 text-emerald-900 font-semibold">
+                <CheckSquare className="w-4 h-4 text-emerald-600" />
+                <span>{selectedTaskIds.length} of {filteredTasks.length} tasks selected</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-slate-500 font-medium text-[11px]">Set Status:</span>
+                <button
+                  onClick={() => handleBulkUpdateTaskStatus("COMPLETED")}
+                  disabled={bulkUpdating}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition disabled:opacity-50 cursor-pointer"
+                >
+                  Completed
+                </button>
+                <button
+                  onClick={() => handleBulkUpdateTaskStatus("IN_PROGRESS")}
+                  disabled={bulkUpdating}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition disabled:opacity-50 cursor-pointer"
+                >
+                  In Progress
+                </button>
+                <button
+                  onClick={() => handleBulkUpdateTaskStatus("PENDING")}
+                  disabled={bulkUpdating}
+                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold transition disabled:opacity-50 cursor-pointer"
+                >
+                  Pending
+                </button>
+                <button
+                  onClick={handleBulkDeleteTasks}
+                  disabled={bulkDeleting}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold transition disabled:opacity-50 cursor-pointer ml-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{bulkDeleting ? "Deleting..." : `Delete Selected (${selectedTaskIds.length})`}</span>
+                </button>
+                <button
+                  onClick={() => setSelectedTaskIds([])}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-medium transition cursor-pointer"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Tasks List */}
           <div className="space-y-3">
@@ -556,8 +689,20 @@ export default function TasksPage() {
                     }`}
                   >
                     <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      {/* Left: Completion Checkbox & Title */}
+                      {/* Left: Select Checkbox & Completion Checkbox & Title */}
                       <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <button
+                          onClick={() => handleToggleTask(task.id)}
+                          className="mt-0.5 text-slate-300 hover:text-emerald-600 transition shrink-0 cursor-pointer"
+                          title={selectedTaskIds.includes(task.id) ? "Deselect task" : "Select task"}
+                        >
+                          {selectedTaskIds.includes(task.id) ? (
+                            <CheckSquare className="w-5 h-5 text-emerald-600" />
+                          ) : (
+                            <Square className="w-5 h-5 text-slate-300 hover:text-slate-400" />
+                          )}
+                        </button>
+
                         <button
                           onClick={() => toggleCrmStatus(task)}
                           className="mt-0.5 text-slate-400 hover:text-emerald-600 transition shrink-0 cursor-pointer"

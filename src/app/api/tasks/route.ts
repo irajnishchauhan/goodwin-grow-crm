@@ -164,14 +164,40 @@ export async function PATCH(req: Request) {
         { status: 403 }
       );
     }
+    if (!tenantCtx.hasPermission("tasks:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing tasks:write permission" }, { status: 403 });
+    }
 
-    const { id, status } = await req.json();
+    const tenantId = tenantCtx.tenant.id;
+    const body = await req.json();
+    const { id, ids, status, priority, assignedToId } = body;
+
+    // Bulk update support
+    if (Array.isArray(ids) && ids.length > 0) {
+      const updateData: any = {};
+      if (status) updateData.status = status;
+      if (priority) updateData.priority = priority;
+      if (assignedToId) updateData.assignedToId = assignedToId;
+
+      const updated = await prisma.task.updateMany({
+        where: { id: { in: ids }, tenantId },
+        data: updateData,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: `Updated ${updated.count} tasks`,
+        updatedCount: updated.count,
+      });
+    }
+
+    // Single update support
     if (!id || !status) {
-      return NextResponse.json({ success: false, error: "id and status are required" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "id and status (or ids array) are required" }, { status: 400 });
     }
 
     const task = await prisma.task.findFirst({
-      where: { id, tenantId: tenantCtx.tenant.id },
+      where: { id, tenantId },
     });
 
     if (!task) {
@@ -189,5 +215,43 @@ export async function PATCH(req: Request) {
       { success: false, error: err.message || "Failed to update task" },
       { status: 500 }
     );
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("tasks:delete") && !tenantCtx.hasPermission("tasks:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing tasks:delete permission" }, { status: 403 });
+    }
+
+    const tenantId = tenantCtx.tenant.id;
+    const body = await req.json();
+    const { ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ success: false, error: "Valid array of task IDs required" }, { status: 400 });
+    }
+
+    const deleted = await prisma.task.deleteMany({
+      where: {
+        id: { in: ids },
+        tenantId,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Deleted ${deleted.count} tasks`,
+      deletedCount: deleted.count,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

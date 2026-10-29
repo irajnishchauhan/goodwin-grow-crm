@@ -85,3 +85,44 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    if (!tenantCtx.hasPermission("companies:delete") && !tenantCtx.hasPermission("companies:write")) {
+      return NextResponse.json({ success: false, error: "Forbidden: Missing companies:delete permission" }, { status: 403 });
+    }
+
+    const tenantId = tenantCtx.tenant.id;
+    const body = await req.json();
+    const { ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ success: false, error: "Valid array of company IDs required" }, { status: 400 });
+    }
+
+    await prisma.deal.updateMany({ where: { companyId: { in: ids }, tenantId }, data: { companyId: null } }).catch(() => {});
+    await prisma.contact.updateMany({ where: { companyId: { in: ids }, tenantId }, data: { companyId: null } }).catch(() => {});
+
+    const deleted = await prisma.company.deleteMany({
+      where: {
+        id: { in: ids },
+        tenantId,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Deleted ${deleted.count} companies`,
+      deletedCount: deleted.count,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

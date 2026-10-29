@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users2, Plus, Search, Mail, Phone, Building2, X, Filter, User, Edit2, Trash2, Save } from "lucide-react";
+import { Users2, Plus, Search, Mail, Phone, Building2, X, Filter, User, Edit2, Trash2, Save, CheckSquare, Square } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 export default function ContactsPage() {
@@ -207,6 +207,52 @@ export default function ContactsPage() {
       (c.company?.name && c.company.name.toLowerCase().includes(search.toLowerCase()))
   );
 
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const isAllContactsSelected =
+    filtered.length > 0 && filtered.every((c) => selectedContactIds.includes(c.id));
+
+  function handleSelectAllContacts() {
+    if (isAllContactsSelected) {
+      setSelectedContactIds([]);
+    } else {
+      setSelectedContactIds(filtered.map((c) => c.id));
+    }
+  }
+
+  function handleToggleContact(id: string) {
+    setSelectedContactIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  async function handleBulkDeleteContacts() {
+    if (selectedContactIds.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete all ${selectedContactIds.length} selected contacts?`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedContactIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedContactIds([]);
+        fetchContacts();
+      } else {
+        alert(data.error || "Failed to delete contacts");
+      }
+    } catch {
+      alert("Error deleting contacts");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -255,6 +301,41 @@ export default function ContactsPage() {
             ))}
           </select>
         </div>
+
+        {/* Bulk Action Bar */}
+        {selectedContactIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs w-full animate-in fade-in duration-150">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-emerald-950">
+                {selectedContactIds.length} of {filtered.length} contacts selected
+              </span>
+              <button
+                onClick={handleSelectAllContacts}
+                className="underline text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer ml-1"
+              >
+                {isAllContactsSelected ? "Deselect All" : "Select All Visible"}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleBulkDeleteContacts}
+                disabled={bulkDeleting}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700 transition shadow-xs cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Bulk Delete ({selectedContactIds.length})</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedContactIds([])}
+                className="px-2 py-1 text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -262,6 +343,24 @@ export default function ContactsPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-500 uppercase text-[10px] tracking-wider">
+                {/* SELECT ALL CHECKBOX */}
+                <th className="py-3.5 px-4 w-10">
+                  <button
+                    onClick={handleSelectAllContacts}
+                    title={isAllContactsSelected ? "Deselect All" : "Select All Contacts"}
+                    className="flex items-center justify-center text-slate-500 hover:text-emerald-600 cursor-pointer"
+                  >
+                    {isAllContactsSelected ? (
+                      <CheckSquare className="w-4 h-4 text-emerald-600" />
+                    ) : selectedContactIds.length > 0 ? (
+                      <div className="w-4 h-4 rounded border-2 border-emerald-600 bg-emerald-100 flex items-center justify-center text-[10px] text-emerald-800 font-bold">
+                        -
+                      </div>
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-300" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3.5 px-4">Contact</th>
                 <th className="py-3.5 px-4">Company</th>
                 <th className="py-3.5 px-4">Job Title</th>
@@ -275,19 +374,39 @@ export default function ContactsPage() {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     Loading contacts...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     No contacts found.
                   </td>
                 </tr>
               ) : (
-                filtered.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/60 transition group">
+                filtered.map((c) => {
+                  const isSelected = selectedContactIds.includes(c.id);
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`hover:bg-slate-50/60 transition group ${
+                        isSelected ? "bg-emerald-50/40" : ""
+                      }`}
+                    >
+                      {/* Row Checkbox */}
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => handleToggleContact(c.id)}
+                          className="flex items-center justify-center text-slate-400 hover:text-emerald-600 cursor-pointer"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-300" />
+                          )}
+                        </button>
+                      </td>
                     <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2.5">
                       <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center">
                         {c.firstName.charAt(0)}
@@ -333,8 +452,9 @@ export default function ContactsPage() {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })
+            )}
             </tbody>
           </table>
         </div>

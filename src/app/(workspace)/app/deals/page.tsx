@@ -18,6 +18,9 @@ import {
   Edit2,
   Trash2,
   Save,
+  CheckSquare,
+  Square,
+  List,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -54,6 +57,53 @@ export default function DealsPage() {
   const [editStatus, setEditStatus] = useState("OPEN");
   const [editAssignedOwnerId, setEditAssignedOwnerId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Bulk Selection & View Mode
+  const [selectedDealIds, setSelectedDealIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [viewMode, setViewMode] = useState<"board" | "table">("board");
+
+  const isAllDealsSelected = deals.length > 0 && deals.every((d) => selectedDealIds.includes(d.id));
+
+  function handleSelectAllDeals() {
+    if (isAllDealsSelected) {
+      setSelectedDealIds([]);
+    } else {
+      setSelectedDealIds(deals.map((d) => d.id));
+    }
+  }
+
+  function handleToggleDeal(id: string) {
+    setSelectedDealIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  async function handleBulkDeleteDeals() {
+    if (selectedDealIds.length === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete ${selectedDealIds.length} selected deals? This cannot be undone.`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/deals", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedDealIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedDealIds([]);
+        fetchPipelineAndDeals();
+      } else {
+        alert(data.error || "Failed to delete deals (RBAC restriction)");
+      }
+    } catch {
+      alert("Error deleting deals");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   useEffect(() => {
     fetchTeam();
@@ -283,13 +333,41 @@ export default function DealsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setNewDealModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Opportunity Deal</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              onClick={() => setViewMode("board")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                viewMode === "board"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Kanban className="w-3.5 h-3.5" />
+              <span>Board</span>
+            </button>
+            <button
+              onClick={() => setViewMode("table")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                viewMode === "table"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>Table</span>
+            </button>
+          </div>
+
+          <button
+            onClick={() => setNewDealModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Opportunity Deal</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Employee Assigned Work Toolbar */}
@@ -317,9 +395,139 @@ export default function DealsPage() {
         </div>
       </div>
 
-      {/* Visual Kanban Columns */}
+      {/* Bulk Action Bar */}
+      {selectedDealIds.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2 text-emerald-900 font-semibold">
+            <CheckSquare className="w-4 h-4 text-emerald-600" />
+            <span>{selectedDealIds.length} of {deals.length} opportunities selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleBulkDeleteDeals}
+              disabled={bulkDeleting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold transition disabled:opacity-50 cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{bulkDeleting ? "Deleting..." : `Delete Selected (${selectedDealIds.length})`}</span>
+            </button>
+            <button
+              onClick={() => setSelectedDealIds([])}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-medium transition cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content: Kanban Board or Table View */}
       {loading ? (
-        <div className="py-24 text-center text-xs text-slate-400">Loading Kanban pipeline...</div>
+        <div className="py-24 text-center text-xs text-slate-400">Loading pipeline deals...</div>
+      ) : viewMode === "table" ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/75 text-slate-500 uppercase text-[10px] tracking-wider">
+                  <th className="py-3.5 px-4 w-10">
+                    <button
+                      onClick={handleSelectAllDeals}
+                      className="p-1 hover:text-emerald-600 transition flex items-center justify-center cursor-pointer"
+                      title={isAllDealsSelected ? "Deselect All" : "Select All"}
+                    >
+                      {isAllDealsSelected ? (
+                        <CheckSquare className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-400" />
+                      )}
+                    </button>
+                  </th>
+                  <th className="py-3.5 px-4">Deal Title</th>
+                  <th className="py-3.5 px-4">Stage</th>
+                  <th className="py-3.5 px-4">Value</th>
+                  <th className="py-3.5 px-4">Company</th>
+                  <th className="py-3.5 px-4">Contact</th>
+                  <th className="py-3.5 px-4">Expected Close</th>
+                  <th className="py-3.5 px-4">Assigned Owner</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {deals.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                      No deals found.
+                    </td>
+                  </tr>
+                ) : (
+                  deals.map((deal) => (
+                    <tr
+                      key={deal.id}
+                      className={`hover:bg-slate-50/60 transition group ${
+                        selectedDealIds.includes(deal.id) ? "bg-emerald-50/40" : ""
+                      }`}
+                    >
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => handleToggleDeal(deal.id)}
+                          className="p-1 hover:text-emerald-600 transition flex items-center justify-center cursor-pointer"
+                        >
+                          {selectedDealIds.includes(deal.id) ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-300 group-hover:text-slate-400" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        {deal.title}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                          {deal.stage?.name || "Stage"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-extrabold text-emerald-700">
+                        {formatCurrency(Number(deal.value))}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600 font-medium">
+                        {deal.company?.name || "—"}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600 font-medium">
+                        {deal.contact ? `${deal.contact.firstName} ${deal.contact.lastName || ""}` : "—"}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-500">
+                        {deal.expectedCloseDate ? formatDate(deal.expectedCloseDate) : "—"}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600">
+                        {deal.assignedOwner?.fullName || "Unassigned"}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEditModal(deal)}
+                            className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-emerald-600 transition cursor-pointer"
+                            title="Edit Deal"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDeal(deal.id, deal.title)}
+                            className="p-1.5 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                            title="Delete Deal"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-6 pt-1 items-start min-h-[calc(100vh-250px)]">
           {stages.map((stage, idx) => {
@@ -355,12 +563,27 @@ export default function DealsPage() {
                     stageDeals.map((deal) => (
                       <div
                         key={deal.id}
-                        className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs hover:border-emerald-500 hover:shadow-md transition space-y-2.5 group relative"
+                        className={`bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs hover:border-emerald-500 hover:shadow-md transition space-y-2.5 group relative ${
+                          selectedDealIds.includes(deal.id) ? "ring-2 ring-emerald-500 bg-emerald-50/20" : ""
+                        }`}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-bold text-xs text-slate-900 group-hover:text-emerald-900 transition leading-snug">
-                            {deal.title}
-                          </h3>
+                          <div className="flex items-start gap-2 flex-1">
+                            <button
+                              onClick={() => handleToggleDeal(deal.id)}
+                              className="mt-0.5 p-0.5 hover:text-emerald-600 transition cursor-pointer"
+                              title={selectedDealIds.includes(deal.id) ? "Deselect" : "Select"}
+                            >
+                              {selectedDealIds.includes(deal.id) ? (
+                                <CheckSquare className="w-4 h-4 text-emerald-600" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-300 group-hover:text-slate-400" />
+                              )}
+                            </button>
+                            <h3 className="font-bold text-xs text-slate-900 group-hover:text-emerald-900 transition leading-snug">
+                              {deal.title}
+                            </h3>
+                          </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                             <button
                               onClick={() => openEditModal(deal)}
