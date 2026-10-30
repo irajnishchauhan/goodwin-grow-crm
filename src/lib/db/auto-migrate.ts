@@ -416,7 +416,7 @@ export async function ensureRubricPersonas() {
           userId: user.id,
           agencyClientId: agencyClientId || null,
           status: "ACTIVE",
-          isOwner: email === "admin@goodwingrowai.com",
+          isOwner: email === "admin@goodwingrowai.com" || email === "superadmin@goodwingrowai.com",
         },
       });
 
@@ -439,15 +439,44 @@ export async function ensureRubricPersonas() {
       true
     );
 
-    // Agency Admin
+    // Agency Admin / Owner
     await ensureUserWithMembership(
       "admin@goodwingrowai.com",
-      "Aarav Singhania (Agency Director)",
+      "Rajnish Chauhan (Agency Director)",
       "AgencyAdmin@2026!",
       agencyAdminRole.id,
       null,
       false
     );
+
+    // Automation / Account Team
+    const kunalUser = await prisma.user.upsert({
+      where: { email: "kunalgoodwingrow@gmail.com" },
+      update: {
+        fullName: "Kunal Sen",
+        phone: "8435110363",
+        isActive: true,
+      },
+      create: {
+        email: "kunalgoodwingrow@gmail.com",
+        fullName: "Kunal Sen",
+        phone: "8435110363",
+        passwordHash: await hashPassword("Goodwin@2026!"),
+        isActive: true,
+      },
+    });
+
+    const kunalMem = await prisma.tenantMembership.upsert({
+      where: { tenantId_userId: { tenantId, userId: kunalUser.id } },
+      update: { status: "ACTIVE", isOwner: false },
+      create: { tenantId, userId: kunalUser.id, status: "ACTIVE", isOwner: false },
+    });
+
+    await prisma.membershipRole.upsert({
+      where: { membershipId_roleId: { membershipId: kunalMem.id, roleId: agencyAdminRole.id } },
+      update: {},
+      create: { membershipId: kunalMem.id, roleId: agencyAdminRole.id },
+    });
 
     // Clean up any fake users / demo logins (Pooja Verma, Kunal Sharma, demo clients)
     const fakeEmails = [
@@ -728,18 +757,21 @@ export async function ensureWorkspaceMemberIsolation() {
       }
     }
 
-    // Clean out Batteries members from Goodwin Grow AI
+    // Clean out Batteries members and extraneous demo personas from Goodwin Grow AI
     if (growAiTenant) {
-      const batteryEmailsToExcludeFromGrowAi = [
+      const emailsToExcludeFromGrowAi = [
         "admin@goodwinbatteries.com",
         "sales@goodwinbatteries.com",
         sameerBatteryEmail,
+        "goodwingrow.ansh@gmail.com",
+        "aayan@goodwingrowai.com",
+        "rohit@goodwingrowai.com",
       ];
-      const batteryUsersInGrowAi = await prisma.user.findMany({
-        where: { email: { in: batteryEmailsToExcludeFromGrowAi } },
+      const usersToExcludeFromGrowAi = await prisma.user.findMany({
+        where: { email: { in: emailsToExcludeFromGrowAi } },
         select: { id: true },
       });
-      for (const u of batteryUsersInGrowAi) {
+      for (const u of usersToExcludeFromGrowAi) {
         const mem = await prisma.tenantMembership.findFirst({
           where: { tenantId: growAiTenant.id, userId: u.id },
         });

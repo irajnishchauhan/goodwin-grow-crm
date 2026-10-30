@@ -236,6 +236,11 @@ export async function DELETE(
       where: { roleId: role.id },
     }).catch(() => {});
 
+    // Clear any invitations referencing this role
+    await prisma.invitation.deleteMany({
+      where: { roleId: role.id },
+    }).catch(() => {});
+
     // Delete role permissions
     await prisma.rolePermission.deleteMany({
       where: { roleId: role.id },

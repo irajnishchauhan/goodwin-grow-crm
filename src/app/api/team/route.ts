@@ -107,12 +107,15 @@ export async function GET(req: Request) {
         }
       }
 
-      // In Goodwin Grow AI, do not display battery distribution employees
+      // In Goodwin Grow AI, do not display battery distribution employees or extraneous demo personas
       if (tenantCode === "goodwin-grow-ai") {
         if (
           email === "admin@goodwinbatteries.com" ||
           email === "sales@goodwinbatteries.com" ||
-          email === "sameergoodwinbatteries@gmail.com"
+          email === "sameergoodwinbatteries@gmail.com" ||
+          email === "goodwingrow.ansh@gmail.com" ||
+          email === "aayan@goodwingrowai.com" ||
+          email === "rohit@goodwingrowai.com"
         ) {
           return false;
         }
