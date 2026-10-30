@@ -27,6 +27,10 @@ import {
   UserX,
   Upload,
   Image as ImageIcon,
+  Key,
+  Lock,
+  EyeOff,
+  Sparkles,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -51,9 +55,13 @@ function SettingsContent() {
   const [newMemberName, setNewMemberName] = useState("");
   const [newMemberPhone, setNewMemberPhone] = useState("");
   const [newMemberRoleId, setNewMemberRoleId] = useState("");
+  const [newMemberPassword, setNewMemberPassword] = useState("Goodwin@2026!");
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [addingMember, setAddingMember] = useState(false);
   const [addMemberError, setAddMemberError] = useState<string | null>(null);
   const [inviteResult, setInviteResult] = useState<any | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string; fullName: string } | null>(null);
+  const [copiedCreds, setCopiedCreds] = useState(false);
 
   // Edit Member Modal
   const [editMemberModal, setEditMemberModal] = useState(false);
@@ -62,7 +70,17 @@ function SettingsContent() {
   const [editMemberPhone, setEditMemberPhone] = useState("");
   const [editMemberRoleId, setEditMemberRoleId] = useState("");
   const [editMemberStatus, setEditMemberStatus] = useState("ACTIVE");
+  const [editMemberPassword, setEditMemberPassword] = useState("");
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [savingMember, setSavingMember] = useState(false);
+
+  // Quick Reset Password Modal
+  const [resetPwdModal, setResetPwdModal] = useState(false);
+  const [resetPwdMember, setResetPwdMember] = useState<any | null>(null);
+  const [resetPwdValue, setResetPwdValue] = useState("Goodwin@2026!");
+  const [showResetPwd, setShowResetPwd] = useState(false);
+  const [resettingPwd, setResettingPwd] = useState(false);
+  const [resetPwdSuccess, setResetPwdSuccess] = useState<string | null>(null);
 
   // View Member Details Modal
   const [viewMemberModal, setViewMemberModal] = useState(false);
@@ -293,6 +311,8 @@ function SettingsContent() {
     setAddMemberError(null);
     setInviteResult(null);
 
+    const passwordToSet = newMemberPassword.trim() || "Goodwin@2026!";
+
     try {
       const res = await fetch("/api/team", {
         method: "POST",
@@ -302,15 +322,23 @@ function SettingsContent() {
           fullName: newMemberName,
           phone: newMemberPhone,
           roleId: newMemberRoleId,
+          password: passwordToSet,
+          initialPassword: passwordToSet,
           status: "ACTIVE",
         }),
       });
 
       const resData = await res.json();
       if (res.ok && resData.success) {
+        setCreatedCredentials({
+          email: newMemberEmail,
+          password: passwordToSet,
+          fullName: newMemberName || newMemberEmail.split("@")[0],
+        });
         setNewMemberEmail("");
         setNewMemberName("");
         setNewMemberPhone("");
+        setNewMemberPassword("Goodwin@2026!");
         setAddMemberModal(false);
         fetchTeam();
         fetchRoles();
@@ -330,6 +358,7 @@ function SettingsContent() {
     setEditMemberPhone(member.phone || "");
     setEditMemberStatus(member.status);
     setEditMemberRoleId(member.roleIds?.[0] || roles[0]?.id || "");
+    setEditMemberPassword("");
     setEditMemberModal(true);
   }
 
@@ -339,30 +368,65 @@ function SettingsContent() {
     setSavingMember(true);
 
     try {
+      const updatePayload: any = {
+        fullName: editMemberName,
+        phone: editMemberPhone,
+        status: editMemberStatus,
+        roleId: editMemberRoleId,
+      };
+      if (editMemberPassword.trim()) {
+        updatePayload.password = editMemberPassword.trim();
+      }
+
       const res = await fetch(`/api/team/${editingMember.membershipId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: editMemberName,
-          phone: editMemberPhone,
-          status: editMemberStatus,
-          roleId: editMemberRoleId,
-        }),
+        body: JSON.stringify(updatePayload),
       });
 
       const resData = await res.json();
       if (res.ok && resData.success) {
         setEditMemberModal(false);
         setEditingMember(null);
+        setEditMemberPassword("");
         fetchTeam();
         fetchRoles();
       } else {
         alert(resData.error || "Failed to update team member");
       }
-    } catch (err: any) {
+    } catch {
       alert("Error updating team member");
     } finally {
       setSavingMember(false);
+    }
+  }
+
+  async function handleQuickResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resetPwdMember) return;
+    setResettingPwd(true);
+    setResetPwdSuccess(null);
+
+    try {
+      const res = await fetch(`/api/team/${resetPwdMember.membershipId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          password: resetPwdValue.trim(),
+        }),
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        setResetPwdSuccess(`Password for ${resetPwdMember.fullName} updated successfully!`);
+        fetchTeam();
+      } else {
+        alert(resData.error || "Failed to reset password");
+      }
+    } catch {
+      alert("Error resetting password");
+    } finally {
+      setResettingPwd(false);
     }
   }
 
@@ -422,6 +486,18 @@ function SettingsContent() {
       setNewRolePermissions(updated);
     } else {
       setEditRolePermissions(updated);
+    }
+  }
+
+  function toggleAllGlobalPermissions(isCreate: boolean) {
+    const allCodes = availablePermissions.map((p) => p.code);
+    const targetList = isCreate ? newRolePermissions : editRolePermissions;
+    const allSelected = allCodes.every((c) => targetList.includes(c));
+
+    if (isCreate) {
+      setNewRolePermissions(allSelected ? [] : allCodes);
+    } else {
+      setEditRolePermissions(allSelected ? [] : allCodes);
     }
   }
 
@@ -754,6 +830,18 @@ function SettingsContent() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => {
+                                setResetPwdMember(member);
+                                setResetPwdValue("Goodwin@2026!");
+                                setResetPwdSuccess(null);
+                                setResetPwdModal(true);
+                              }}
+                              title="Set / Reset Account Password"
+                              className="p-1 hover:bg-amber-50 rounded text-slate-400 hover:text-amber-600 cursor-pointer"
+                            >
+                              <Key className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
                                 setViewingMember(member);
                                 setViewMemberModal(true);
                               }}
@@ -823,81 +911,87 @@ function SettingsContent() {
 
           {/* Roles Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {roles.map((role) => (
-              <div
-                key={role.id}
-                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-500/80 transition flex flex-col justify-between space-y-4 group"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-bold text-sm text-slate-900 group-hover:text-emerald-950 transition">
-                      {role.name}
-                    </div>
-                    {role.isSystem ? (
-                      <span className="text-[10px] font-extrabold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full shrink-0">
-                        System Default
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full shrink-0">
-                        Workspace Custom
-                      </span>
-                    )}
-                  </div>
+            {roles.map((role) => {
+              const isRootRole =
+                role.name.toLowerCase().trim() === "company owner" ||
+                role.name.toLowerCase().trim() === "super admin";
 
-                  <p className="text-xs text-slate-500 line-clamp-2">
-                    {role.description || "Custom functional role controlling access to CRM modules."}
-                  </p>
-                </div>
-
-                <div className="space-y-3 pt-3 border-t border-slate-100 text-xs">
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span className="font-medium">Assigned Team Members:</span>
-                    <span className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
-                      {role.memberCount || 0} members
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span className="font-medium">Granted Permissions:</span>
-                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                      {role.permissions?.length || 0} privileges
-                    </span>
-                  </div>
-
-                  <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-50">
-                    <button
-                      onClick={() => {
-                        setViewingRole(role);
-                        setViewRoleModal(true);
-                      }}
-                      className="px-2.5 py-1 rounded-lg text-slate-600 hover:bg-slate-100 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>View Rights</span>
-                    </button>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEditRole(role)}
-                        title="Edit Role & Permissions"
-                        className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-emerald-600 cursor-pointer"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      {!role.isSystem && (
-                        <button
-                          onClick={() => handleDeleteRole(role)}
-                          title="Delete Custom Role"
-                          className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+              return (
+                <div
+                  key={role.id}
+                  className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-emerald-500/80 transition flex flex-col justify-between space-y-4 group"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-bold text-sm text-slate-900 group-hover:text-emerald-950 transition">
+                        {role.name}
+                      </div>
+                      {isRootRole ? (
+                        <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full shrink-0">
+                          Primary Workspace Role
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full shrink-0">
+                          Editable Role
+                        </span>
                       )}
                     </div>
+
+                    <p className="text-xs text-slate-500 line-clamp-2">
+                      {role.description || "Custom functional role controlling access to CRM modules."}
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 pt-3 border-t border-slate-100 text-xs">
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span className="font-medium">Assigned Team Members:</span>
+                      <span className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                        {role.memberCount || 0} members
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span className="font-medium">Granted Permissions:</span>
+                      <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                        {role.permissions?.length || 0} privileges
+                      </span>
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-50">
+                      <button
+                        onClick={() => {
+                          setViewingRole(role);
+                          setViewRoleModal(true);
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-slate-600 hover:bg-slate-100 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View Rights</span>
+                      </button>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEditRole(role)}
+                          title="Edit Role & Permissions"
+                          className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-emerald-600 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        {!isRootRole && (
+                          <button
+                            onClick={() => handleDeleteRole(role)}
+                            title="Delete Role"
+                            className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1221,6 +1315,43 @@ function SettingsContent() {
                 </select>
               </div>
 
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">Account Password *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rand = "Goodwin@" + Math.random().toString(36).slice(-6) + "!";
+                      setNewMemberPassword(rand);
+                    }}
+                    className="text-[10px] text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" /> Auto-Generate
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={newMemberPassword}
+                    onChange={(e) => setNewMemberPassword(e.target.value)}
+                    placeholder="Enter password (minimum 6 characters)"
+                    className="w-full px-3 py-2 pr-9 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Employee can sign in immediately with this email and password at /login.
+                </span>
+              </div>
+
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
@@ -1307,6 +1438,29 @@ function SettingsContent() {
                     Workspace Owner status cannot be changed.
                   </span>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Reset Password (leave blank to keep current)
+                </label>
+                <div className="relative">
+                  <input
+                    type={showEditPassword ? "text" : "password"}
+                    minLength={6}
+                    value={editMemberPassword}
+                    onChange={(e) => setEditMemberPassword(e.target.value)}
+                    placeholder="Enter new password (optional)"
+                    className="w-full px-3 py-2 pr-9 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(!showEditPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showEditPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
@@ -1437,7 +1591,16 @@ function SettingsContent() {
               {/* Permissions Checklist by Module */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span>Grant Granular Module Permissions</span>
+                  <div className="flex items-center gap-2">
+                    <span>Grant Granular Module Permissions</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleAllGlobalPermissions(true)}
+                      className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold cursor-pointer"
+                    >
+                      {newRolePermissions.length === availablePermissions.length ? "Deselect All (0)" : `Select All (${availablePermissions.length})`}
+                    </button>
+                  </div>
                   <span className="text-[11px] text-emerald-700 font-bold">
                     {newRolePermissions.length} selected
                   </span>
@@ -1523,7 +1686,10 @@ function SettingsContent() {
                 <input
                   type="text"
                   required
-                  disabled={editingRole.isSystem && editingRole.tenantId === null}
+                  disabled={
+                    editingRole.name.toLowerCase().trim() === "company owner" ||
+                    editingRole.name.toLowerCase().trim() === "super admin"
+                  }
                   value={editRoleName}
                   onChange={(e) => setEditRoleName(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl disabled:opacity-60"
@@ -1543,7 +1709,16 @@ function SettingsContent() {
               {/* Permissions Checklist by Module */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span>Grant Granular Module Permissions</span>
+                  <div className="flex items-center gap-2">
+                    <span>Grant Granular Module Permissions</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleAllGlobalPermissions(false)}
+                      className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold cursor-pointer"
+                    >
+                      {editRolePermissions.length === availablePermissions.length ? "Deselect All (0)" : "Select All (" + availablePermissions.length + ")"}
+                    </button>
+                  </div>
                   <span className="text-[11px] text-emerald-700 font-bold">
                     {editRolePermissions.length} selected
                   </span>
@@ -1591,22 +1766,41 @@ function SettingsContent() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditRoleModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingRole}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>{savingRole ? "Saving..." : "Save Role"}</span>
-                </button>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                {editingRole.name.toLowerCase().trim() !== "company owner" &&
+                editingRole.name.toLowerCase().trim() !== "super admin" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditRoleModal(false);
+                      handleDeleteRole(editingRole);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-semibold transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Role</span>
+                  </button>
+                ) : (
+                  <div></div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditRoleModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingRole}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingRole ? "Saving..." : "Save Role"}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1667,6 +1861,180 @@ function SettingsContent() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. New Member Created Credentials Modal */}
+      {createdCredentials && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-emerald-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Employee Account Created</h2>
+                <p className="text-xs text-slate-500">Provide these login credentials to {createdCredentials.fullName}.</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 text-xs font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-sans font-medium">Employee Name:</span>
+                <span className="font-bold text-slate-900">{createdCredentials.fullName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-sans font-medium">Work Email:</span>
+                <span className="font-bold text-slate-900 select-all">{createdCredentials.email}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-sans font-medium">Account Password:</span>
+                <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 select-all">
+                  {createdCredentials.password}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-sans font-medium">Login URL:</span>
+                <span className="text-slate-700 select-all">/login</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const credsText = `Goodwin Grow CRM Account Credentials:\nName: ${createdCredentials.fullName}\nEmail: ${createdCredentials.email}\nPassword: ${createdCredentials.password}\nLogin URL: ${typeof window !== "undefined" ? window.location.origin : ""}/login`;
+                  navigator.clipboard.writeText(credsText);
+                  setCopiedCreds(true);
+                  setTimeout(() => setCopiedCreds(false), 2500);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
+              >
+                {copiedCreds ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedCreds ? "Credentials Copied!" : "Copy Credentials"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCreatedCredentials(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Quick Reset Password Modal */}
+      {resetPwdModal && resetPwdMember && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                  <Key className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Set Account Password</h2>
+                  <p className="text-xs text-slate-500">{resetPwdMember.fullName} ({resetPwdMember.email})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setResetPwdModal(false);
+                  setResetPwdMember(null);
+                  setResetPwdSuccess(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {resetPwdSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{resetPwdSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleQuickResetPassword} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">New Password *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rand = "Goodwin@" + Math.random().toString(36).slice(-6) + "!";
+                      setResetPwdValue(rand);
+                    }}
+                    className="text-[10px] text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" /> Auto-Generate
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showResetPwd ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={resetPwdValue}
+                    onChange={(e) => setResetPwdValue(e.target.value)}
+                    placeholder="Enter new password (min 6 characters)"
+                    className="w-full px-3 py-2 pr-9 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPwd(!showResetPwd)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {showResetPwd ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  The employee can use this password to immediately log in to their account.
+                </span>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `Goodwin Grow CRM Account Credentials:\nName: ${resetPwdMember.fullName}\nEmail: ${resetPwdMember.email}\nPassword: ${resetPwdValue}\nLogin URL: ${typeof window !== "undefined" ? window.location.origin : ""}/login`;
+                    navigator.clipboard.writeText(text);
+                    alert("Credentials copied to clipboard!");
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-700 bg-slate-100 hover:bg-slate-200 text-xs font-semibold transition cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Credentials</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetPwdModal(false);
+                      setResetPwdMember(null);
+                      setResetPwdSuccess(null);
+                    }}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={resettingPwd}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    <span>{resettingPwd ? "Updating..." : "Update Password"}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

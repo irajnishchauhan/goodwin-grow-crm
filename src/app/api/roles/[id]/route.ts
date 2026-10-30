@@ -122,20 +122,14 @@ export async function PUT(
     const body = await req.json();
     const { name, description, permissionCodes } = body;
 
-    const isProtectedAdminRole =
-      role.isSystem &&
-      ["super admin", "agency admin"].includes(role.name.toLowerCase().trim());
+    const isRootOwnerRole =
+      role.name.toLowerCase().trim() === "company owner" ||
+      role.name.toLowerCase().trim() === "super admin";
 
-    if (role.isSystem && name && name.trim().toLowerCase() !== role.name.toLowerCase()) {
+    // Prevent stripping all administrative permissions from root owner
+    if (isRootOwnerRole && Array.isArray(permissionCodes) && permissionCodes.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Cannot rename built-in system roles." },
-        { status: 400 }
-      );
-    }
-
-    if (isProtectedAdminRole && Array.isArray(permissionCodes)) {
-      return NextResponse.json(
-        { success: false, error: `Cannot strip or modify permissions of built-in "${role.name}" role.` },
+        { success: false, error: `Root "${role.name}" role must retain administrative privileges.` },
         { status: 400 }
       );
     }
@@ -215,43 +209,39 @@ export async function DELETE(
     const role = await prisma.role.findFirst({
       where: {
         id,
-        tenantId, // Must belong to this tenant (cannot delete global system roles)
+        OR: [{ tenantId }, { tenantId: null }],
       },
     });
 
     if (!role) {
       return NextResponse.json(
-        { success: false, error: "Role not found or cannot delete global system role" },
+        { success: false, error: "Role not found" },
         { status: 404 }
       );
     }
 
-    if (role.isSystem) {
+    const isRootOwnerRole =
+      role.name.toLowerCase().trim() === "company owner" ||
+      role.name.toLowerCase().trim() === "super admin";
+
+    if (isRootOwnerRole) {
       return NextResponse.json(
-        { success: false, error: "Cannot delete built-in system role" },
+        { success: false, error: `Cannot delete primary workspace role "${role.name}".` },
         { status: 400 }
       );
     }
 
-    // Check if role is currently assigned to any team member in this workspace
-    const assignedCount = await prisma.membershipRole.count({
-      where: {
-        roleId: role.id,
-        membership: { tenantId },
-      },
-    });
+    // Automatically unassign any team members who had this role
+    await prisma.membershipRole.deleteMany({
+      where: { roleId: role.id },
+    }).catch(() => {});
 
-    if (assignedCount > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Cannot delete role "${role.name}" because it is currently assigned to ${assignedCount} team member(s). Reassign them first.`,
-        },
-        { status: 400 }
-      );
-    }
+    // Delete role permissions
+    await prisma.rolePermission.deleteMany({
+      where: { roleId: role.id },
+    }).catch(() => {});
 
-    // Delete role (cascade deletes role_permissions)
+    // Delete role
     await prisma.role.delete({
       where: { id: role.id },
     });

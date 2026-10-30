@@ -78,7 +78,7 @@ export default function LeadsPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState("Website Inbound");
-  const [serviceRequired, setServiceRequired] = useState(serviceOptions[0]);
+  const [serviceRequired, setServiceRequired] = useState("");
   const [dealValue, setDealValue] = useState<number | string>(150000);
   const [nextFollowUp, setNextFollowUp] = useState(() => new Date(Date.now() + 86400000).toISOString().slice(0, 16));
   const [priority, setPriority] = useState("MEDIUM");
@@ -242,7 +242,7 @@ export default function LeadsPage() {
     setEmail("");
     setPhone("");
     setSource("Website Inbound");
-    setServiceRequired(serviceOptions[0]);
+    setServiceRequired("");
     setDealValue(150000);
     setNextFollowUp(new Date(Date.now() + 86400000).toISOString().slice(0, 16));
     setPriority("MEDIUM");
@@ -284,7 +284,7 @@ export default function LeadsPage() {
     setEditPriority(lead.priority);
     setEditScore(lead.score || 50);
     setEditSource(lead.source || "");
-    setEditServiceRequired(lead.serviceRequired || serviceOptions[0]);
+    setEditServiceRequired(lead.serviceRequired || "");
     setEditDealValue(lead.dealValue || 0);
     setEditNextFollowUp(
       lead.nextFollowUp ? new Date(lead.nextFollowUp).toISOString().slice(0, 16) : ""
@@ -1229,20 +1229,54 @@ export default function LeadsPage() {
                 </div>
               </div>
 
-              {/* Service Required */}
+              {/* Service Required (Combobox + Choice to Add) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Service Required *</label>
-                <select
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Service Required <span className="text-slate-400 font-normal">(type custom or select suggestion)</span> *
+                  </label>
+                  {serviceRequired && (
+                    <button
+                      type="button"
+                      onClick={() => setServiceRequired("")}
+                      className="text-[10px] text-slate-400 hover:text-rose-600 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  list="serviceOptionsList"
+                  required
                   value={serviceRequired}
                   onChange={(e) => setServiceRequired(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-semibold text-slate-800"
-                >
+                  placeholder="e.g. AI Automation, Meta Performance Ads, Custom..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-semibold text-slate-800"
+                />
+                <datalist id="serviceOptionsList">
                   {serviceOptions.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
+                    <option key={opt} value={opt} />
                   ))}
-                </select>
+                </datalist>
+
+                {/* Popular Quick Suggestions */}
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {serviceOptions.slice(0, 6).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setServiceRequired(opt)}
+                      className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer ${
+                        serviceRequired === opt
+                          ? "bg-emerald-600 text-white border-emerald-600"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1497,20 +1531,53 @@ export default function LeadsPage() {
                 </div>
               )}
 
-              {/* Service Required */}
+              {/* Service Required (Combobox + Choice to Add) */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Service Required</label>
-                <select
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Service Required <span className="text-slate-400 font-normal">(type custom or select suggestion)</span>
+                  </label>
+                  {editServiceRequired && (
+                    <button
+                      type="button"
+                      onClick={() => setEditServiceRequired("")}
+                      className="text-[10px] text-slate-400 hover:text-rose-600 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  list="editServiceOptionsList"
                   value={editServiceRequired}
                   onChange={(e) => setEditServiceRequired(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-medium text-slate-800"
-                >
+                  placeholder="e.g. AI Automation, Meta Performance Ads, Custom..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-semibold text-slate-800"
+                />
+                <datalist id="editServiceOptionsList">
                   {serviceOptions.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
+                    <option key={opt} value={opt} />
                   ))}
-                </select>
+                </datalist>
+
+                {/* Popular Quick Suggestions */}
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {serviceOptions.slice(0, 6).map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setEditServiceRequired(opt)}
+                      className={`text-[10px] px-2 py-0.5 rounded-md border transition cursor-pointer ${
+                        editServiceRequired === opt
+                          ? "bg-emerald-600 text-white border-emerald-600"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

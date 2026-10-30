@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
+import { hashPassword } from "@/lib/auth/password";
 
 function canManageTeam(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
   const isAdminOrOwner =
@@ -145,7 +146,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { fullName, phone, status, roleId, roleIds } = body;
+    const { fullName, phone, status, roleId, roleIds, password, newPassword } = body;
 
     // Safeguard: Owner cannot be suspended
     if (membership.isOwner && status && status !== "ACTIVE") {
@@ -155,14 +156,20 @@ export async function PUT(
       );
     }
 
-    // 1. Update user details
-    if (fullName !== undefined || phone !== undefined) {
+    // 1. Update user details & password
+    const userUpdateData: any = {};
+    if (fullName !== undefined) userUpdateData.fullName = fullName;
+    if (phone !== undefined) userUpdateData.phone = phone;
+
+    const pwdToSet = password || newPassword;
+    if (pwdToSet && typeof pwdToSet === "string" && pwdToSet.trim().length >= 6) {
+      userUpdateData.passwordHash = await hashPassword(pwdToSet.trim());
+    }
+
+    if (Object.keys(userUpdateData).length > 0) {
       await prisma.user.update({
         where: { id: membership.userId },
-        data: {
-          fullName: fullName !== undefined ? fullName : membership.user.fullName,
-          phone: phone !== undefined ? phone : membership.user.phone,
-        },
+        data: userUpdateData,
       });
     }
 
