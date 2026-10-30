@@ -107,6 +107,14 @@ export async function POST(req: Request) {
     if (!resolvedTenantId) {
       if (user.memberships.length >= 1) {
         resolvedTenantId = user.memberships[0].tenantId;
+      } else if (user.isPlatformAdmin) {
+        const primaryTenant = await prisma.tenant.findFirst({
+          where: { status: "ACTIVE" },
+          orderBy: [{ code: "asc" }],
+        });
+        if (primaryTenant) {
+          resolvedTenantId = primaryTenant.id;
+        }
       }
     }
 
@@ -155,7 +163,7 @@ export async function POST(req: Request) {
           isOwner: m.isOwner,
         })),
         activeTenantId: resolvedTenantId,
-        redirectTo: user.isPlatformAdmin && !resolvedTenantId ? "/platform" : "/app/dashboard",
+        redirectTo: "/app/dashboard",
       },
     });
   } catch (err: any) {

@@ -439,14 +439,14 @@ export async function ensureRubricPersonas() {
       true
     );
 
-    // Agency Admin / Owner
+    // Agency Director / Platform Super Admin & Workspace Owner
     await ensureUserWithMembership(
       "admin@goodwingrowai.com",
       "Rajnish Chauhan (Agency Director)",
       "AgencyAdmin@2026!",
       agencyAdminRole.id,
       null,
-      false
+      true
     );
 
     // Automation / Account Team

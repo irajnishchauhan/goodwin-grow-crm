@@ -22,9 +22,6 @@ export default async function WorkspaceLayout({
     if (session.user.memberships.length > 0) {
       redirect("/select-company");
     }
-    if (session.user.isPlatformAdmin) {
-      redirect("/platform");
-    }
     redirect("/login");
   }
 

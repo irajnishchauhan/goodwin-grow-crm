@@ -49,10 +49,22 @@ export async function getTenantContext(customToken?: string): Promise<TenantCont
   // Find target active tenant
   let activeTenantId = session.activeTenantId;
 
-  // If no activeTenantId is set in session, auto-select first active membership
-  if (!activeTenantId && session.user.memberships.length > 0) {
-    activeTenantId = session.user.memberships[0].tenantId;
-    await updateSessionActiveTenant(session.token, activeTenantId);
+  // If no activeTenantId is set in session, auto-select first active membership or primary tenant
+  if (!activeTenantId) {
+    if (session.user.memberships.length > 0) {
+      activeTenantId = session.user.memberships[0].tenantId;
+    } else if (session.user.isPlatformAdmin) {
+      const firstTenant = await prisma.tenant.findFirst({
+        where: { status: "ACTIVE" },
+        orderBy: [{ code: "asc" }],
+      });
+      if (firstTenant) {
+        activeTenantId = firstTenant.id;
+      }
+    }
+    if (activeTenantId) {
+      await updateSessionActiveTenant(session.token, activeTenantId);
+    }
   }
 
   if (!activeTenantId) {
