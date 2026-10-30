@@ -31,18 +31,33 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 
 function parseMeta(desc?: string) {
   if (!desc) return { category: null, status: null, scope: null, marketRange: null, text: "" };
-  const match = desc.match(/^\[(.*?)\]\s*\[(.*?)\]\s*Scope:\s*(.*?)\s*\|\s*2026 Market Range:\s*(.*?)\.\s*(.*)$/);
+  const match = desc.match(/^\[(.*?)\]\s*\[(.*?)\]\s*Scope:\s*(.*?)\s*\|\s*(?:2026 Market Range:\s*(.*?)\.\s*)?(.*)$/);
   if (match) {
     return {
-      category: match[1],
-      status: match[2],
-      scope: match[3],
-      marketRange: match[4],
-      text: match[5],
+      category: match[1]?.trim() || null,
+      status: match[2]?.trim() || null,
+      scope: match[3]?.trim() || null,
+      marketRange: match[4]?.trim() || null,
+      text: match[5]?.trim() || "",
     };
+  }
+  const simpleMatch = desc.match(/^\[(.*?)\]\s*(.*)$/);
+  if (simpleMatch) {
+    return { category: simpleMatch[1]?.trim() || null, status: null, scope: null, marketRange: null, text: simpleMatch[2]?.trim() || "" };
   }
   return { category: null, status: null, scope: null, marketRange: null, text: desc };
 }
+
+const BATTERY_CATEGORIES = [
+  "Inverter Tall Tubular",
+  "Solar C10 Tubular",
+  "Automotive SLI",
+  "Commercial & Heavy Vehicle",
+  "E-Rickshaw & EV Traction",
+  "Lithium Iron Phosphate (LFP)",
+  "Industrial & Telecom VRLA",
+  "Two-Wheeler VRLA",
+];
 
 const SERVICE_CATEGORIES = [
   "Consultation & Onboarding",
@@ -67,6 +82,7 @@ const SERVICE_CATEGORIES = [
 export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isBattery, setIsBattery] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pricingFilter, setPricingFilter] = useState<"ALL" | "FREE" | "PAID" | "PACKAGES" | "ACTIVE">("ALL");
@@ -110,6 +126,9 @@ export default function ProductsPage() {
       const data = await res.json();
       if (data.success) {
         setProducts(data.data || []);
+        if (data.isBatteryWorkspace !== undefined) {
+          setIsBattery(Boolean(data.isBatteryWorkspace));
+        }
       }
     } catch (err) {
       console.error(err);
@@ -371,6 +390,7 @@ export default function ProductsPage() {
     return Number(p.unitPrice) > 0 && meta.category !== "Packages" && !p.sku?.includes("PKG");
   }).length;
   const activeCount = products.filter((p) => p.isActive !== false).length;
+  const activeCategories = isBattery ? BATTERY_CATEGORIES : SERVICE_CATEGORIES;
 
   return (
     <div className="space-y-6">
@@ -378,33 +398,45 @@ export default function ProductsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Goodwin Grow AI Service Catalogue</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              {isBattery ? "Goodwin Batteries Catalog & SKUs" : "Goodwin Grow AI Service Catalogue"}
+            </h1>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              India 2026 Reference
+              {isBattery ? "Battery Distribution & SKUs" : "India 2026 Reference"}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Internal team & client scope reference: Free onboarding & setup vs. chargeable retainers, market benchmarks, and Goodwin pricing.
+            {isBattery
+              ? "Industrial, automotive, solar, and EV battery product line, specifications, pricing, and warranty."
+              : "Internal team & client scope reference: Free onboarding & setup vs. chargeable retainers, market benchmarks, and Goodwin pricing."}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setPolicyModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-xs transition cursor-pointer"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Commercial Policy & Scopes</span>
-          </button>
+          {!isBattery && (
+            <button
+              onClick={() => setPolicyModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-xs transition cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Commercial Policy & Scopes</span>
+            </button>
+          )}
 
           <button
             onClick={handleLoadMarketCatalog}
             disabled={seedingLoading}
-            title="Auto-fill with all 75 Goodwin Grow AI 2026 official services & packages"
+            title={isBattery ? "Sync all Goodwin Batteries official SKUs" : "Auto-fill with all 75 Goodwin Grow AI 2026 official services & packages"}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/80 text-indigo-700 font-bold text-xs shadow-xs transition cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>{seedingLoading ? "Syncing Catalogue..." : "Sync 2026 Official Catalogue"}</span>
+            <span>
+              {seedingLoading
+                ? "Syncing Catalogue..."
+                : isBattery
+                ? "Sync Battery SKUs"
+                : "Sync 2026 Official Catalogue"}
+            </span>
           </button>
 
           <button
@@ -412,7 +444,7 @@ export default function ProductsPage() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Custom Service</span>
+            <span>{isBattery ? "Add Battery SKU" : "Add Custom Service"}</span>
           </button>
         </div>
       </div>
@@ -525,9 +557,12 @@ export default function ProductsPage() {
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
             >
-              <option value="ALL">All Categories ({products.length} services)</option>
-              {SERVICE_CATEGORIES.map((cat) => {
-                const count = products.filter((p) => parseMeta(p.description).category === cat).length;
+              <option value="ALL">All Categories ({products.length} {isBattery ? "products" : "services"})</option>
+              {activeCategories.map((cat) => {
+                const count = products.filter((p) => {
+                  const m = parseMeta(p.description);
+                  return m.category === cat || p.name?.toLowerCase().includes(cat.toLowerCase());
+                }).length;
                 return (
                   <option key={cat} value={cat}>
                     {cat} ({count})

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { BatteryOrderStatus } from "@prisma/client";
+import { processAutomationRules } from "@/lib/automation/engine";
 
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
@@ -158,6 +159,20 @@ export async function POST(req: Request) {
         },
       }).catch(() => {});
     }
+
+    processAutomationRules({
+      tenantId,
+      triggerEvent: "order.created",
+      entityType: "BatteryOrder",
+      entityId: order.id,
+      data: {
+        orderNumber: order.orderNumber,
+        partnerId: partner.id,
+        partnerName: partner.businessName,
+        totalAmount: calculatedTotal,
+        status: order.status,
+      },
+    }).catch((err) => console.error("Order automation error:", err));
 
     return NextResponse.json({ success: true, data: order }, { status: 201 });
   } catch (error: any) {

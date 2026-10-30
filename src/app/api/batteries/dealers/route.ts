@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { PartnerType, PartnerStatus, PartnerTier } from "@prisma/client";
+import { processAutomationRules } from "@/lib/automation/engine";
 
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
@@ -186,6 +187,21 @@ export async function POST(req: Request) {
         status: PartnerStatus.ACTIVE,
       },
     });
+
+    processAutomationRules({
+      tenantId,
+      triggerEvent: "dealer.onboarded",
+      entityType: "BatteryPartner",
+      entityId: partner.id,
+      data: {
+        code: partner.code,
+        businessName: partner.businessName,
+        ownerName: partner.ownerName,
+        city: partner.city,
+        territory: partner.territory,
+        type: partner.type,
+      },
+    }).catch((err) => console.error("Dealer onboarding automation error:", err));
 
     return NextResponse.json({ success: true, data: partner }, { status: 201 });
   } catch (error: any) {

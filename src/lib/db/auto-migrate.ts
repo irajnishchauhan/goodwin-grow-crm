@@ -671,27 +671,19 @@ export async function ensureWorkspaceMemberIsolation() {
       });
     }
 
-    const sameerMembership = await prisma.tenantMembership.upsert({
-      where: { tenantId_userId: { tenantId: batteriesTenant.id, userId: sameerUser.id } },
-      update: { status: "ACTIVE" },
-      create: {
-        tenantId: batteriesTenant.id,
-        userId: sameerUser.id,
-        status: "ACTIVE",
-        isOwner: false,
-      },
-    });
-
-    if (gbSalesManagerRole) {
-      await prisma.membershipRole.upsert({
-        where: { membershipId_roleId: { membershipId: sameerMembership.id, roleId: gbSalesManagerRole.id } },
-        update: {},
-        create: { membershipId: sameerMembership.id, roleId: gbSalesManagerRole.id },
+    // Clean up Sameer from Goodwin Batteries if deleted by admin (do not resurrect)
+    if (sameerUser) {
+      const sameerBatteryMem = await prisma.tenantMembership.findFirst({
+        where: { tenantId: batteriesTenant.id, userId: sameerUser.id },
       });
+      if (sameerBatteryMem) {
+        await prisma.membershipRole.deleteMany({ where: { membershipId: sameerBatteryMem.id } });
+        await prisma.tenantMembership.delete({ where: { id: sameerBatteryMem.id } });
+      }
     }
 
     // Disassociate Sameer from Goodwin Grow AI
-    if (growAiTenant) {
+    if (growAiTenant && sameerUser) {
       const wrongSameerMem = await prisma.tenantMembership.findFirst({
         where: { tenantId: growAiTenant.id, userId: sameerUser.id },
       });
@@ -781,7 +773,136 @@ export async function ensureWorkspaceMemberIsolation() {
         }
       }
     }
+
+    // Seed Goodwin Batteries Distribution Automations
+    await ensureBatteryAutomations(batteriesTenant.id);
   } catch (err: any) {
     console.warn("⚠️ ensureWorkspaceMemberIsolation notice:", err.message);
+  }
+}
+
+async function ensureBatteryAutomations(batteriesTenantId: string) {
+  const batteryAutomationRules = [
+    {
+      name: "High-Priority EV & Lithium Fleet Lead Auto-Routing",
+      triggerEvent: "lead.created",
+      conditions: [],
+      actions: [
+        {
+          type: "CREATE_TASK",
+          title: "Urgent: Assign EV & Commercial Battery Lead to Territory Manager",
+          dueInDays: 1,
+          priority: "URGENT",
+        },
+      ],
+    },
+    {
+      name: "Dealer Warranty Claim & Instant SLA Verification",
+      triggerEvent: "warranty.claim_filed",
+      conditions: [],
+      actions: [
+        {
+          type: "CREATE_TASK",
+          title: "Dispatch Service Engineer for Battery Hydrometer & Load Test within 24h SLA",
+          dueInDays: 1,
+          priority: "URGENT",
+        },
+      ],
+    },
+    {
+      name: "Low Inventory & Buffer Stock Battery Reorder Alert",
+      triggerEvent: "order.created",
+      conditions: [],
+      actions: [
+        {
+          type: "CREATE_TASK",
+          title: "Verify Factory Buffer Stock & Schedule Battery Dispatch Batch",
+          dueInDays: 2,
+          priority: "HIGH",
+        },
+      ],
+    },
+    {
+      name: "Overdue Dealer Payment & Dispatch Hold Warning",
+      triggerEvent: "payment.overdue",
+      conditions: [],
+      actions: [
+        {
+          type: "CREATE_TASK",
+          title: "Initiate Payment Follow-up & Place Temporary Dispatch Hold",
+          dueInDays: 1,
+          priority: "HIGH",
+        },
+      ],
+    },
+    {
+      name: "Dealer Partner Onboarding & KYC Approval Workflow",
+      triggerEvent: "dealer.onboarded",
+      conditions: [],
+      actions: [
+        {
+          type: "CREATE_TASK",
+          title: "Verify Dealer GSTIN, Credit Limit & Send Partner Welcome Kit",
+          dueInDays: 2,
+          priority: "MEDIUM",
+        },
+      ],
+    },
+    {
+      name: "Field Sales Visit Follow-up Auto-Task",
+      triggerEvent: "field_visit.completed",
+      conditions: [],
+      actions: [
+        {
+          type: "CREATE_TASK",
+          title: "Send Sample Unit & Dealer Margin Quotation within 48h",
+          dueInDays: 2,
+          priority: "HIGH",
+        },
+      ],
+    },
+    {
+      name: "Commercial Battery Proposal 48-Hour Follow-up Reminder",
+      triggerEvent: "deal.stage_changed",
+      conditions: [],
+      actions: [
+        {
+          type: "CREATE_TASK",
+          title: "Follow up with Dealer on Battery Proposal & Pricing Tier",
+          dueInDays: 2,
+          priority: "HIGH",
+        },
+      ],
+    },
+    {
+      name: "Competitor Replacement Battlecard Trigger",
+      triggerEvent: "lead.created",
+      conditions: [],
+      actions: [
+        {
+          type: "LOG_ACTIVITY",
+          title: "Competitor Battlecard Generated (Exide, Amaron, Luminous comparison)",
+          description: "Auto-logged competitive price-per-Ah and warranty advantage battlecard",
+        },
+      ],
+    },
+  ];
+
+  for (const rule of batteryAutomationRules) {
+    const existing = await prisma.automationRule.findFirst({
+      where: { tenantId: batteriesTenantId, name: rule.name },
+    });
+    if (!existing) {
+      await prisma.automationRule.create({
+        data: {
+          tenantId: batteriesTenantId,
+          name: rule.name,
+          triggerEvent: rule.triggerEvent,
+          conditions: rule.conditions,
+          actions: rule.actions,
+          isActive: true,
+        },
+      });
+    }
   }
 }

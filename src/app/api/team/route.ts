@@ -3,9 +3,6 @@ import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { hashPassword } from "@/lib/auth/password";
-import { ensureWorkspaceMemberIsolation } from "@/lib/db/auto-migrate";
-
-let isIsolationChecked = false;
 
 function canManageTeam(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
   const isAdminOrOwner =
@@ -22,11 +19,6 @@ function canManageTeam(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenan
 }
 
 export async function GET(req: Request) {
-  if (!isIsolationChecked) {
-    isIsolationChecked = true;
-    await ensureWorkspaceMemberIsolation().catch(() => {});
-  }
-
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
+import { processAutomationRules } from "@/lib/automation/engine";
 
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
@@ -88,6 +89,20 @@ export async function POST(req: Request) {
       },
       include: { partner: true },
     });
+
+    processAutomationRules({
+      tenantId,
+      triggerEvent: "field_visit.completed",
+      entityType: "FieldVisit",
+      entityId: visit.id,
+      data: {
+        partnerId: partner.id,
+        partnerName: partner.businessName,
+        purpose: visit.purpose,
+        outcome: visit.outcome,
+        orderBooked: visit.orderBooked,
+      },
+    }).catch((err) => console.error("Field visit automation error:", err));
 
     return NextResponse.json({ success: true, data: visit }, { status: 201 });
   } catch (error: any) {

@@ -25,6 +25,16 @@ const EVENT_EQUIVALENTS: Record<string, string[]> = {
   "deal.lost": ["DEAL_LOST", "deal.lost"],
   "TASK_OVERDUE": ["TASK_OVERDUE", "task.overdue"],
   "task.overdue": ["TASK_OVERDUE", "task.overdue"],
+  "WARRANTY_CLAIM_FILED": ["WARRANTY_CLAIM_FILED", "warranty.claim_filed"],
+  "warranty.claim_filed": ["WARRANTY_CLAIM_FILED", "warranty.claim_filed"],
+  "ORDER_CREATED": ["ORDER_CREATED", "order.created"],
+  "order.created": ["ORDER_CREATED", "order.created"],
+  "PAYMENT_OVERDUE": ["PAYMENT_OVERDUE", "payment.overdue"],
+  "payment.overdue": ["PAYMENT_OVERDUE", "payment.overdue"],
+  "FIELD_VISIT_COMPLETED": ["FIELD_VISIT_COMPLETED", "field_visit.completed"],
+  "field_visit.completed": ["FIELD_VISIT_COMPLETED", "field_visit.completed"],
+  "DEALER_ONBOARDED": ["DEALER_ONBOARDED", "dealer.onboarded"],
+  "dealer.onboarded": ["DEALER_ONBOARDED", "dealer.onboarded"],
 };
 
 export async function processAutomationRules(ctx: AutomationTriggerContext) {
@@ -115,6 +125,9 @@ export async function processAutomationRules(ctx: AutomationTriggerContext) {
             mergedData.ownerId ||
             null;
 
+          const fallbackAssignedId =
+            resolvedAssignedToId || (await getSystemUserId(tenantId));
+
           const task = await prisma.task.create({
             data: {
               tenantId,
@@ -123,7 +136,7 @@ export async function processAutomationRules(ctx: AutomationTriggerContext) {
               dueDate: new Date(Date.now() + (action.dueInDays || 1) * 86400000),
               priority: action.priority || "HIGH",
               status: "PENDING",
-              assignedToId: resolvedAssignedToId,
+              assignedToId: fallbackAssignedId,
               leadId: entityType === "Lead" ? entityId : null,
               dealId: entityType === "Deal" ? entityId : null,
               contactId: entityType === "Contact" ? entityId : null,

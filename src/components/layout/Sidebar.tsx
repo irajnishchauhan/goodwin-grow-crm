@@ -154,7 +154,7 @@ const batteriesNavGroups = [
       { name: "Leads & Enquiries", href: "/app/leads", icon: TrendingUp },
       { name: "Sales Pipeline", href: "/app/deals", icon: Kanban },
       { name: "Quotations", href: "/app/quotations", icon: FileSpreadsheet },
-      { name: "Purchase Orders", href: "/app/orders", icon: ShoppingBag },
+      { name: "Purchase Orders & Dispatch", href: "/app/orders", icon: ShoppingBag },
     ],
   },
   {
@@ -168,15 +168,17 @@ const batteriesNavGroups = [
   {
     category: "SERVICE & PRODUCTS",
     links: [
-      { name: "Warranty & Service", href: "/app/warranty", icon: ShieldAlert },
-      { name: "Battery Catalog", href: "/app/products", icon: BatteryCharging },
+      { name: "Warranty & Service Claims", href: "/app/warranty", icon: ShieldAlert },
+      { name: "Battery Catalog & SKUs", href: "/app/products", icon: BatteryCharging },
     ],
   },
   {
-    category: "INTELLIGENCE & PORTAL",
+    category: "INTELLIGENCE & AUTOMATIONS",
     links: [
+      { name: "Automations & Workflows", href: "/app/automations", icon: Zap },
       { name: "Reports & Analytics", href: "/app/reports", icon: BarChart3 },
       { name: "Dealer Partner Portal", href: "/app/portal", icon: ExternalLink },
+      { name: "Team & CRM Roles", href: "/app/settings?tab=team", icon: ShieldCheck },
       { name: "Company Settings", href: "/app/settings", icon: Settings },
     ],
   },

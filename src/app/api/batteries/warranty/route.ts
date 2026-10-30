@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { WarrantyClaimStatus } from "@prisma/client";
+import { processAutomationRules } from "@/lib/automation/engine";
 
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
@@ -130,6 +131,21 @@ export async function POST(req: Request) {
       },
       include: { partner: true },
     });
+
+    processAutomationRules({
+      tenantId,
+      triggerEvent: "warranty.claim_filed",
+      entityType: "WarrantyClaim",
+      entityId: claim.id,
+      data: {
+        claimNumber: claim.claimNumber,
+        customerName: claim.customerName,
+        customerPhone: claim.customerPhone,
+        batterySerialNumber: claim.batterySerialNumber,
+        batteryModel: claim.batteryModel,
+        status: claim.status,
+      },
+    }).catch((err) => console.error("Warranty automation error:", err));
 
     return NextResponse.json({ success: true, data: claim }, { status: 201 });
   } catch (error: any) {

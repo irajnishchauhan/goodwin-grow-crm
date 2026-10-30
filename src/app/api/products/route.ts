@@ -28,7 +28,13 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json(
-    { success: true, data: products },
+    {
+      success: true,
+      data: products,
+      tenantCode: tenantCtx.tenant.code,
+      tenantName: tenantCtx.tenant.name,
+      isBatteryWorkspace: tenantCtx.tenant.code?.toLowerCase().includes("battery"),
+    },
     { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
   );
 }

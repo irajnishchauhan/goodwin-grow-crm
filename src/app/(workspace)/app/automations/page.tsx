@@ -366,10 +366,15 @@ export default function AutomationsPage() {
                   onChange={(e) => setTriggerEvent(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono"
                 >
-                  <option value="lead.created">lead.created (When a new lead is captured)</option>
+                  <option value="lead.created">lead.created (When a new lead / enquiry is captured)</option>
                   <option value="lead.qualified">lead.qualified (When lead moves to QUALIFIED)</option>
-                  <option value="deal.won">deal.won (When opportunity is won)</option>
+                  <option value="deal.won">deal.won (When opportunity / deal is won)</option>
                   <option value="deal.stage_changed">deal.stage_changed (When deal stage changes)</option>
+                  <option value="warranty.claim_filed">warranty.claim_filed (When a warranty claim is logged)</option>
+                  <option value="order.created">order.created (When a purchase order / dispatch request is created)</option>
+                  <option value="payment.overdue">payment.overdue (When dealer payment crosses 30+ days overdue)</option>
+                  <option value="field_visit.completed">field_visit.completed (When a sales rep completes a dealer visit)</option>
+                  <option value="dealer.onboarded">dealer.onboarded (When a new dealer or distributor registers)</option>
                   <option value="task.overdue">task.overdue (When task passes deadline)</option>
                 </select>
               </div>
@@ -447,10 +452,15 @@ export default function AutomationsPage() {
                   onChange={(e) => setEditTriggerEvent(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-mono"
                 >
-                  <option value="lead.created">lead.created (When a new lead is captured)</option>
+                  <option value="lead.created">lead.created (When a new lead / enquiry is captured)</option>
                   <option value="lead.qualified">lead.qualified (When lead moves to QUALIFIED)</option>
-                  <option value="deal.won">deal.won (When opportunity is won)</option>
+                  <option value="deal.won">deal.won (When opportunity / deal is won)</option>
                   <option value="deal.stage_changed">deal.stage_changed (When deal stage changes)</option>
+                  <option value="warranty.claim_filed">warranty.claim_filed (When a warranty claim is logged)</option>
+                  <option value="order.created">order.created (When a purchase order / dispatch request is created)</option>
+                  <option value="payment.overdue">payment.overdue (When dealer payment crosses 30+ days overdue)</option>
+                  <option value="field_visit.completed">field_visit.completed (When a sales rep completes a dealer visit)</option>
+                  <option value="dealer.onboarded">dealer.onboarded (When a new dealer or distributor registers)</option>
                   <option value="task.overdue">task.overdue (When task passes deadline)</option>
                 </select>
               </div>

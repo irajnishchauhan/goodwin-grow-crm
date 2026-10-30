@@ -112,13 +112,20 @@ export async function PUT(req: Request) {
       );
     }
 
-    const updatedTenant =
-      name && typeof name === "string" && name.trim()
-        ? await prisma.tenant.update({
-            where: { id: tenantId },
-            data: { name: name.trim() },
-          })
-        : await prisma.tenant.findUnique({ where: { id: tenantId } });
+    const tenantUpdateData: any = {};
+    if (name && typeof name === "string" && name.trim()) {
+      tenantUpdateData.name = name.trim();
+    }
+    if (logoUrl !== undefined) {
+      tenantUpdateData.logoUrl = logoUrl ? String(logoUrl).trim() : null;
+    }
+
+    const updatedTenant = Object.keys(tenantUpdateData).length > 0
+      ? await prisma.tenant.update({
+          where: { id: tenantId },
+          data: tenantUpdateData,
+        })
+      : await prisma.tenant.findUnique({ where: { id: tenantId } });
 
     const settingsData: any = {};
     if (businessEmail !== undefined) settingsData.businessEmail = businessEmail ? String(businessEmail).trim() : null;
