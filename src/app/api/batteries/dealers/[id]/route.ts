@@ -156,6 +156,12 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: "Partner not found" }, { status: 404 });
     }
 
+    // Unlink any child dealers pointing to this distributor
+    await prisma.batteryPartner.updateMany({
+      where: { parentDistributorId: partner.id, tenantId: tenantCtx.tenant.id },
+      data: { parentDistributorId: null },
+    }).catch(() => {});
+
     // Cascade delete any child records before deleting partner
     await prisma.batteryFieldVisit.deleteMany({ where: { partnerId: partner.id } }).catch(() => {});
     await prisma.batteryWarrantyClaim.deleteMany({ where: { partnerId: partner.id } }).catch(() => {});

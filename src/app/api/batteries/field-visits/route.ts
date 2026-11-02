@@ -58,7 +58,19 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { partnerId, purpose, outcome, notes, orderBooked, collectionMade, followUpDate } = body;
+    const {
+      partnerId,
+      purpose,
+      outcome,
+      notes,
+      orderBooked,
+      collectionMade,
+      followUpDate,
+      latitude,
+      longitude,
+      autoCreateOrder,
+      autoCreateCollection,
+    } = body;
 
     if (!partnerId || !purpose) {
       return NextResponse.json({ success: false, error: "Partner and purpose are required" }, { status: 400 });
@@ -75,6 +87,11 @@ export async function POST(req: Request) {
       );
     }
 
+    let resolvedNotes = notes || "GPS Verified Check-in.";
+    if (latitude && longitude) {
+      resolvedNotes = `[GPS Coordinates: ${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)}] ${resolvedNotes}`.trim();
+    }
+
     const visit = await prisma.batteryFieldVisit.create({
       data: {
         tenantId,
@@ -82,13 +99,84 @@ export async function POST(req: Request) {
         salesUserId: tenantCtx.user.id,
         purpose,
         outcome: outcome || "Visit completed as scheduled.",
-        notes: notes || "GPS Verified Check-in.",
+        notes: resolvedNotes,
         orderBooked: orderBooked ? Number(orderBooked) : null,
         collectionMade: collectionMade ? Number(collectionMade) : null,
         followUpDate: followUpDate ? new Date(followUpDate) : null,
       },
       include: { partner: true },
     });
+
+    // Auto-create purchase order if requested and order booked > 0
+    if (autoCreateOrder && Number(orderBooked) > 0) {
+      const orderCount = await prisma.batteryOrder.count({ where: { tenantId } });
+      const orderNumber = `GB-ORD-2026-${(orderCount + 1).toString().padStart(3, "0")}`;
+      await prisma.batteryOrder.create({
+        data: {
+          tenantId,
+          orderNumber,
+          partnerId,
+          salesUserId: tenantCtx.user.id,
+          totalAmount: Number(orderBooked),
+          status: "PENDING_APPROVAL",
+          erpSyncStatus: "QUEUED_FOR_ERP_VALIDATION",
+          items: [
+            {
+              sku: "GB-FLD-BOOKING",
+              name: `Field Sales Booking (${partner.businessName})`,
+              quantity: 1,
+              unitPrice: Number(orderBooked),
+            },
+          ],
+          deliveryAddress: partner.address,
+          notes: `Booked on field visit on ${new Date().toLocaleDateString("en-IN")}. Purpose: ${purpose}`,
+        },
+      }).catch((e) => console.warn("Notice: Order auto-creation error:", e));
+
+      await prisma.batteryPartner.update({
+        where: { id: partner.id },
+        data: {
+          outstandingBalance: {
+            increment: Number(orderBooked),
+          },
+        },
+      }).catch(() => {});
+    }
+
+    // Auto-record collection payment if requested and collection made > 0
+    if (autoCreateCollection && Number(collectionMade) > 0) {
+      const colCount = await prisma.batteryCollection.count({ where: { tenantId } });
+      const invoiceNumber = `GB-RCPT-2026-${(colCount + 1).toString().padStart(3, "0")}`;
+      const amountPaidVal = Number(collectionMade);
+
+      await prisma.batteryCollection.create({
+        data: {
+          tenantId,
+          partnerId,
+          invoiceNumber,
+          amountDue: amountPaidVal,
+          amountPaid: amountPaidVal,
+          dueDate: new Date(),
+          paymentDate: new Date(),
+          paymentMode: "Field Executive Cash/Cheque Collection",
+          status: "PAID",
+          ageingDays: 0,
+          followUpNotes: `Collected by field executive during on-site visit (${purpose})`,
+        },
+      }).catch((e) => console.warn("Notice: Collection auto-creation error:", e));
+
+      await prisma.batteryPartner.update({
+        where: { id: partner.id },
+        data: {
+          outstandingBalance: {
+            decrement: Math.min(Number(partner.outstandingBalance), amountPaidVal),
+          },
+          overdueAmount: {
+            decrement: Math.min(Number(partner.overdueAmount), amountPaidVal),
+          },
+        },
+      }).catch(() => {});
+    }
 
     processAutomationRules({
       tenantId,

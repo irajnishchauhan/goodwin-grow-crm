@@ -12,6 +12,123 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const requestedClientId = searchParams.get("clientId");
 
+    const isBatteries = tenantCtx.tenant.code === "goodwin-batteries";
+
+    // Handle Goodwin Batteries Dealer & Channel Partner Portal
+    if (isBatteries) {
+      let targetPartnerId = requestedClientId && requestedClientId !== "ALL" ? requestedClientId : null;
+      if (!targetPartnerId) {
+        const firstPartner = await prisma.batteryPartner.findFirst({
+          where: { tenantId: tenantCtx.tenant.id },
+          orderBy: { businessName: "asc" },
+        });
+        targetPartnerId = firstPartner?.id || null;
+      }
+
+      if (!targetPartnerId) {
+        return NextResponse.json({ success: false, error: "No battery partner found in workspace" }, { status: 404 });
+      }
+
+      const [partner, partnersList, orders, collections, warrantyClaims, fieldVisits] = await Promise.all([
+        prisma.batteryPartner.findFirst({
+          where: { id: targetPartnerId, tenantId: tenantCtx.tenant.id },
+        }),
+        prisma.batteryPartner.findMany({
+          where: { tenantId: tenantCtx.tenant.id },
+          select: { id: true, businessName: true, code: true, city: true, type: true, tier: true },
+          orderBy: { businessName: "asc" },
+        }),
+        prisma.batteryOrder.findMany({
+          where: { partnerId: targetPartnerId, tenantId: tenantCtx.tenant.id },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.batteryCollection.findMany({
+          where: { partnerId: targetPartnerId, tenantId: tenantCtx.tenant.id },
+          orderBy: { dueDate: "asc" },
+        }),
+        prisma.batteryWarrantyClaim.findMany({
+          where: { partnerId: targetPartnerId, tenantId: tenantCtx.tenant.id },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.batteryFieldVisit.findMany({
+          where: { partnerId: targetPartnerId, tenantId: tenantCtx.tenant.id },
+          orderBy: { visitDate: "desc" },
+        }),
+      ]);
+
+      if (!partner) {
+        return NextResponse.json({ success: false, error: "Partner not found" }, { status: 404 });
+      }
+
+      const totalOrderedValue = orders.reduce((acc, o) => acc + Number(o.totalAmount || 0), 0);
+      const openClaimsCount = warrantyClaims.filter((c) => c.status === "SUBMITTED" || c.status === "INSPECTION").length;
+
+      return NextResponse.json({
+        success: true,
+        isBatteries: true,
+        data: {
+          client: {
+            id: partner.id,
+            name: partner.businessName,
+            brandName: `${partner.ownerName} (${partner.code})`,
+            email: partner.email,
+            phone: partner.phone,
+            code: partner.code,
+            city: partner.city,
+            state: partner.state,
+            address: partner.address,
+            gstin: partner.gstin,
+            pan: partner.pan,
+            territory: partner.territory,
+            tier: partner.tier,
+            type: partner.type,
+            creditLimit: Number(partner.creditLimit),
+            creditDays: partner.creditDays,
+            outstandingBalance: Number(partner.outstandingBalance),
+            overdueAmount: Number(partner.overdueAmount),
+          },
+          partner,
+          partnersList,
+          orders,
+          collections,
+          warrantyClaims,
+          fieldVisits,
+          creatives: [],
+          pendingApprovals: [],
+          approvedCreatives: [],
+          revisionCreatives: [],
+          contentPosts: [],
+          projects: [],
+          invoices: collections.map((c) => ({
+            id: c.id,
+            invoiceNumber: c.invoiceNumber,
+            issueDate: c.createdAt,
+            dueDate: c.dueDate,
+            subtotal: Number(c.amountDue),
+            taxAmount: 0,
+            totalAmount: Number(c.amountDue),
+            status: c.status,
+            items: [{ description: `Battery Sales Dispatch Invoice ${c.invoiceNumber}`, amount: Number(c.amountDue) }],
+            paymentMethod: c.paymentMode,
+            paidAt: c.paymentDate,
+          })),
+          adCampaigns: [],
+          deliverables: [],
+          reports: [],
+          stats: {
+            postsPlanned: 0,
+            postsCompleted: 0,
+            deliverablesProgress: 100,
+            pendingApprovalsCount: orders.filter((o) => o.status === "PENDING_APPROVAL").length,
+            totalReach: totalOrderedValue,
+            totalEngagement: Number(partner.outstandingBalance),
+            totalOrdersCount: orders.length,
+            openClaimsCount,
+          },
+        },
+      });
+    }
+
     let targetClientId: string | null = null;
 
     if (tenantCtx.isClientUser) {

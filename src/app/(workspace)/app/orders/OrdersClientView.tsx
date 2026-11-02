@@ -18,6 +18,7 @@ import {
   Layers,
   Send,
   Check,
+  AlertTriangle,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -81,6 +82,7 @@ export function OrdersClientView({
   // New Order Form State
   const [selectedPartnerId, setSelectedPartnerId] = useState(partners[0]?.id || "");
   const [deliveryNotes, setDeliveryNotes] = useState("");
+  const [creditOverride, setCreditOverride] = useState(false);
   const [orderLines, setOrderLines] = useState<Array<{ sku: string; name: string; unitPrice: number; quantity: number }>>([
     {
       sku: products[0]?.sku || "GB-PD-1205",
@@ -129,6 +131,11 @@ export function OrdersClientView({
   };
 
   const totalCalculated = orderLines.reduce((acc, l) => acc + l.unitPrice * l.quantity, 0);
+  const activePartner = partners.find((p) => p.id === selectedPartnerId) || partners[0];
+  const pCreditLimit = Number(activePartner?.creditLimit || 0);
+  const pOutstanding = Number(activePartner?.outstandingBalance || 0);
+  const pProjectedExposure = pOutstanding + totalCalculated;
+  const isCreditExceeded = pCreditLimit > 0 && pProjectedExposure > pCreditLimit;
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,6 +148,7 @@ export function OrdersClientView({
           partnerId: selectedPartnerId,
           items: orderLines,
           notes: deliveryNotes,
+          creditOverride,
         }),
       });
 
@@ -518,6 +526,48 @@ export function OrdersClientView({
                     </option>
                   ))}
                 </select>
+
+                {/* Partner Commercial Credit Snapshot */}
+                {activePartner && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-3 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-400 font-bold block">Credit Limit</span>
+                      <span className="font-black text-slate-800">₹{pCreditLimit.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-bold block">Current Ledger Balance</span>
+                      <span className="font-black text-slate-800">₹{pOutstanding.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-bold block">New Exposure</span>
+                      <span className={`font-black ${isCreditExceeded ? "text-rose-600" : "text-emerald-700"}`}>
+                        ₹{pProjectedExposure.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Credit Limit Alert Banner */}
+                {isCreditExceeded && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span>Commercial Credit Limit Breached (Exceeded by ₹{(pProjectedExposure - pCreditLimit).toLocaleString("en-IN")})</span>
+                    </div>
+                    <p className="text-[11px] text-amber-700 leading-snug">
+                      This order will be placed on commercial hold for manager review unless an authorized override is applied.
+                    </p>
+                    <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={creditOverride}
+                        onChange={(e) => setCreditOverride(e.target.checked)}
+                        className="rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="font-bold text-[11px] text-amber-900">Authorize Manager Commercial Override for this PO</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Order Line Items */}

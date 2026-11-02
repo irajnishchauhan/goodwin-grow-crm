@@ -34,8 +34,9 @@ export async function POST(
       return NextResponse.json({ success: false, error: "Lead is already converted" }, { status: 400 });
     }
 
+    const isBatteries = tenantCtx.tenant.code === "goodwin-batteries";
     const body = await req.json().catch(() => ({}));
-    const { dealTitle, dealValue = 0 } = body;
+    const { dealTitle, dealValue = 0, convertToPartner = true, partnerType = "DEALER", creditLimit = 250000 } = body;
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Company
@@ -103,6 +104,42 @@ export async function POST(
         dealId = deal.id;
       }
 
+      // 4. In Goodwin Batteries, also auto-onboard to Battery Channel Partner
+      let partner = null;
+      if (isBatteries && convertToPartner) {
+        const prefix = partnerType === "DISTRIBUTOR" ? "DIST" : partnerType === "RETAILER" ? "RET" : "DLR";
+        const existingPartners = await tx.batteryPartner.findMany({
+          where: { tenantId, code: { startsWith: `${prefix}-` } },
+          select: { code: true },
+        });
+        let maxSeq = existingPartners.length;
+        for (const p of existingPartners) {
+          const num = parseInt(p.code.replace(`${prefix}-`, ""), 10);
+          if (!isNaN(num) && num > maxSeq) maxSeq = num;
+        }
+        const partnerCode = `${prefix}-${(maxSeq + 1).toString().padStart(3, "0")}`;
+
+        partner = await tx.batteryPartner.create({
+          data: {
+            tenantId,
+            code: partnerCode,
+            businessName: lead.companyName || `${lead.firstName} ${lead.lastName} Battery Point`,
+            ownerName: `${lead.firstName} ${lead.lastName}`.trim(),
+            phone: lead.phone || "+91 98000 00000",
+            email: lead.email || null,
+            address: "Registered Channel Address",
+            city: "Indore",
+            state: "Madhya Pradesh",
+            territory: "Central India",
+            type: partnerType as any,
+            creditLimit: Number(creditLimit),
+            creditDays: 30,
+            assignedSalesUserId: lead.assignedOwnerId || tenantCtx.user.id,
+            status: "ACTIVE",
+          },
+        });
+      }
+
       // 4. Update Lead to Converted
       const updatedLead = await tx.lead.update({
         where: { id: lead.id },
@@ -145,12 +182,14 @@ export async function POST(
         },
       });
 
-      return { lead: updatedLead, contact, dealId };
+      return { lead: updatedLead, contact, dealId, partner };
     });
 
     return NextResponse.json({
       success: true,
-      message: "Lead successfully converted to Contact and Deal",
+      message: result.partner
+        ? "Lead successfully converted to Contact, Deal, and Authorized Battery Partner"
+        : "Lead successfully converted to Contact and Deal",
       data: result,
     });
   } catch (err: any) {

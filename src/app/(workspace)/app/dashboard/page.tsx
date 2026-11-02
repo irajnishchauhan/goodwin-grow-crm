@@ -678,6 +678,7 @@ export default async function DashboardPage() {
       collections,
       fieldVisits,
       warrantyCases,
+      totalOutstandingAgg,
     ] = await Promise.all([
       prisma.batteryPartner.count({ where: { tenantId, type: "DEALER", status: "ACTIVE" } }),
       prisma.lead.count({ where: { tenantId, status: { in: ["NEW", "CONTACTED", "QUALIFIED"] } } }),
@@ -714,6 +715,10 @@ export default async function DashboardPage() {
         orderBy: { createdAt: "desc" },
         include: { partner: true },
       }),
+      prisma.batteryPartner.aggregate({
+        where: { tenantId },
+        _sum: { outstandingBalance: true },
+      }),
     ]);
 
     return (
@@ -728,7 +733,7 @@ export default async function DashboardPage() {
           distributorsCount,
           retailersCount,
           pendingOrdersValue: Number(pendingOrdersValueAgg._sum.totalAmount || 0),
-          totalOutstanding: 1420000,
+          totalOutstanding: Number(totalOutstandingAgg._sum.outstandingBalance || 0),
         }}
         recentOrders={recentOrders.map((o) => ({
           ...o,

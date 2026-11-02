@@ -168,6 +168,18 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: "Collection record not found" }, { status: 404 });
     }
 
+    // Reconcile partner ledger balance if paid collections are deleted
+    if (Number(collection.amountPaid) > 0) {
+      await prisma.batteryPartner.update({
+        where: { id: collection.partnerId },
+        data: {
+          outstandingBalance: {
+            increment: Number(collection.amountPaid),
+          },
+        },
+      }).catch(() => {});
+    }
+
     await prisma.batteryCollection.delete({ where: { id: collection.id } });
 
     return NextResponse.json({ success: true, message: "Collection invoice deleted successfully" });

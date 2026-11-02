@@ -93,7 +93,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { partnerId, items, deliveryAddress, notes, expectedDate, status, totalAmount } = body;
+    const { partnerId, items, deliveryAddress, notes, expectedDate, status, totalAmount, creditOverride } = body;
 
     if (!partnerId || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -119,6 +119,30 @@ export async function POST(req: Request) {
       calculatedTotal = Number(totalAmount);
     }
 
+    // Commercial Credit Limit & Overdue Verification
+    const currentBalance = Number(partner.outstandingBalance || 0);
+    const creditLimit = Number(partner.creditLimit || 0);
+    const overdueAmount = Number(partner.overdueAmount || 0);
+    const projectedExposure = currentBalance + calculatedTotal;
+    const isCreditExceeded = creditLimit > 0 && projectedExposure > creditLimit;
+    const hasOverdue = overdueAmount > 0;
+
+    let finalNotes = notes || `Direct booking for ${partner.businessName}`;
+    let orderStatus = (status as BatteryOrderStatus) || BatteryOrderStatus.PENDING_APPROVAL;
+
+    if (isCreditExceeded || hasOverdue) {
+      if (creditOverride) {
+        finalNotes = `[COMMERCIAL OVERRIDE: Booked by ${tenantCtx.user.fullName}. Limit: ₹${creditLimit.toLocaleString("en-IN")}, New Exposure: ₹${projectedExposure.toLocaleString("en-IN")}] ${finalNotes}`.trim();
+      } else {
+        // Enforce credit hold requiring manager approval
+        orderStatus = BatteryOrderStatus.PENDING_APPROVAL;
+        const reasons: string[] = [];
+        if (isCreditExceeded) reasons.push(`Limit ₹${creditLimit.toLocaleString("en-IN")} exceeded by ₹${(projectedExposure - creditLimit).toLocaleString("en-IN")}`);
+        if (hasOverdue) reasons.push(`Overdue balance of ₹${overdueAmount.toLocaleString("en-IN")} pending`);
+        finalNotes = `[CREDIT HOLD: ${reasons.join("; ")}] ${finalNotes}`.trim();
+      }
+    }
+
     // Auto-generate collision-safe order number
     const existingOrders = await prisma.batteryOrder.findMany({
       where: { tenantId, orderNumber: { startsWith: "GB-ORD-2026-" } },
@@ -130,7 +154,6 @@ export async function POST(req: Request) {
       if (!isNaN(num) && num > maxSeq) maxSeq = num;
     }
     const orderNumber = `GB-ORD-2026-${(maxSeq + 1).toString().padStart(3, "0")}`;
-    const orderStatus = (status as BatteryOrderStatus) || BatteryOrderStatus.PENDING_APPROVAL;
 
     const order = await prisma.batteryOrder.create({
       data: {
@@ -143,7 +166,7 @@ export async function POST(req: Request) {
         erpSyncStatus: "QUEUED_FOR_ERP_VALIDATION",
         items,
         deliveryAddress: deliveryAddress || partner.address,
-        notes: notes || `Direct booking for ${partner.businessName}`,
+        notes: finalNotes,
         expectedDate: expectedDate ? new Date(expectedDate) : new Date(Date.now() + 5 * 86400000),
       },
       include: {

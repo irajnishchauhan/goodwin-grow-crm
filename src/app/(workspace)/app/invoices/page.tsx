@@ -26,6 +26,7 @@ import {
   Square,
 } from "lucide-react";
 import { INVOICE_CATALOG_ITEMS } from "@/lib/agency/packages";
+import { INVOICE_BATTERY_CATALOG_ITEMS } from "@/lib/constants/battery-catalog";
 
 interface AgencyInvoice {
   id: string;
@@ -58,6 +59,7 @@ export default function InvoicesPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isBatteriesWorkspace, setIsBatteriesWorkspace] = useState(false);
 
   // Create Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -118,6 +120,8 @@ export default function InvoicesPage() {
       const data = await res.json();
       if (data.success && data.data) {
         setWorkspaceSettings(data.data);
+        const isBatt = data.data.code === "goodwin-batteries";
+        setIsBatteriesWorkspace(isBatt);
       }
     } catch (err) {
       console.error(err);
@@ -126,6 +130,34 @@ export default function InvoicesPage() {
 
   async function fetchClients() {
     try {
+      const settingsRes = await fetch("/api/settings", { cache: "no-store" });
+      const settingsData = await settingsRes.json();
+      const isBatt = settingsData?.data?.code === "goodwin-batteries";
+      setIsBatteriesWorkspace(isBatt);
+
+      if (isBatt) {
+        const res = await fetch("/api/batteries/dealers");
+        const data = await res.json();
+        if (data.success && data.data) {
+          const mappedPartners = data.data.map((p: any) => ({
+            id: p.id,
+            name: `${p.businessName} (${p.code} • ${p.city})`,
+            brandName: p.businessName,
+            email: p.email,
+            phone: p.phone,
+            gstin: p.gstin,
+            city: p.city,
+            state: p.state,
+            address: p.address,
+            territory: p.territory,
+            type: p.type,
+            isPartner: true,
+          }));
+          setClients(mappedPartners);
+          return;
+        }
+      }
+
       const res = await fetch("/api/agency/clients");
       const data = await res.json();
       if (data.success) setClients(data.data || []);
@@ -154,7 +186,8 @@ export default function InvoicesPage() {
 
   function handleSelectCatalogItem(id: string) {
     setSelectedCatalogId(id);
-    const found = INVOICE_CATALOG_ITEMS.find((it) => it.id === id);
+    const catalogList = isBatteriesWorkspace ? INVOICE_BATTERY_CATALOG_ITEMS : INVOICE_CATALOG_ITEMS;
+    const found = catalogList.find((it) => it.id === id);
     if (!found) return;
 
     setLineItems([
@@ -968,10 +1001,14 @@ export default function InvoicesPage() {
                       onChange={(e) => setClientId(e.target.value)}
                       className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
                     >
-                      <option value="">Select an enrolled client from CRM...</option>
+                      <option value="">
+                        {isBatteriesWorkspace
+                          ? "Select an authorized Dealer / Distributor from CRM..."
+                          : "Select an enrolled client from CRM..."}
+                      </option>
                       {clients.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name} {c.brandName ? `(${c.brandName})` : ""} — ₹{Number(c.monthlyRetainer).toLocaleString("en-IN")}/mo
+                          {c.name} {c.brandName && !c.isPartner ? `(${c.brandName})` : ""} {c.monthlyRetainer ? `— ₹${Number(c.monthlyRetainer).toLocaleString("en-IN")}/mo` : ""}
                         </option>
                       ))}
                     </select>
@@ -1049,11 +1086,11 @@ export default function InvoicesPage() {
                 )}
               </div>
 
-              {/* Standard Service Dropdown Selection */}
+              {/* Standard Service / Battery Product Dropdown Selection */}
               <div className="space-y-1.5 pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-slate-800">
-                    2. Service Catalog Selector
+                    {isBatteriesWorkspace ? "2. Battery SKU & Product Catalog Selector" : "2. Service Catalog Selector"}
                   </label>
                   <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
                     <Sparkles className="w-3.5 h-3.5" />
@@ -1065,28 +1102,64 @@ export default function InvoicesPage() {
                   onChange={(e) => handleSelectCatalogItem(e.target.value)}
                   className="w-full px-3 py-2.5 text-xs bg-emerald-50/50 border border-emerald-200 rounded-xl font-semibold text-emerald-900 cursor-pointer"
                 >
-                  <option value="">Choose a Standard Service Package or Retainer...</option>
-                  <optgroup label="Standard Retainer Packages (Basic, Standard, Premium)">
-                    {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Core Retainer").map((it) => (
-                      <option key={it.id} value={it.id}>
-                        {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Specialized Services & Retainers">
-                    {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Specialized Service").map((it) => (
-                      <option key={it.id} value={it.id}>
-                        {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Development & Add-On Services">
-                    {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Add-On Service" || it.category === "Development" || it.category === "Custom").map((it) => (
-                      <option key={it.id} value={it.id}>
-                        {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
-                      </option>
-                    ))}
-                  </optgroup>
+                  {isBatteriesWorkspace ? (
+                    <>
+                      <option value="">Choose a Battery SKU or Product...</option>
+                      <optgroup label="Tall Tubular & Solar Batteries">
+                        {INVOICE_BATTERY_CATALOG_ITEMS.filter((it) => it.category.includes("Tubular") || it.category.includes("Solar")).map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Automotive & Two-Wheeler VRLA">
+                        {INVOICE_BATTERY_CATALOG_ITEMS.filter((it) => it.category.includes("Automotive") || it.category.includes("Two-Wheeler") || it.category.includes("Commercial")).map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Lithium Iron Phosphate (LFP) & EV Traction">
+                        {INVOICE_BATTERY_CATALOG_ITEMS.filter((it) => it.category.includes("Lithium") || it.category.includes("EV")).map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Industrial & C&I Energy Storage">
+                        {INVOICE_BATTERY_CATALOG_ITEMS.filter((it) => it.category.includes("Industrial") || it.category.includes("Storage")).map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </>
+                  ) : (
+                    <>
+                      <option value="">Choose a Standard Service Package or Retainer...</option>
+                      <optgroup label="Standard Retainer Packages (Basic, Standard, Premium)">
+                        {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Core Retainer").map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Specialized Services & Retainers">
+                        {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Specialized Service").map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Development & Add-On Services">
+                        {INVOICE_CATALOG_ITEMS.filter((it) => it.category === "Add-On Service" || it.category === "Development" || it.category === "Custom").map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} — ₹{it.defaultPrice.toLocaleString("en-IN")} ({it.cadence})
+                          </option>
+                        ))}
+                      </optgroup>
+                    </>
+                  )}
                 </select>
               </div>
 

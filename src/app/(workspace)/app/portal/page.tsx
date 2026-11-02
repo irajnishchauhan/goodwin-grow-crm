@@ -9,6 +9,11 @@ export default async function PartnerPortalPage() {
     redirect("/login");
   }
 
+  // If accessed within marketing agency workspace, redirect to marketing client portal
+  if (tenantCtx.tenant.code === "goodwin-grow-ai") {
+    redirect("/app/clients/portal");
+  }
+
   const tenantId = tenantCtx.tenant.id;
 
   // Fetch partners with their orders, collections, warranty claims

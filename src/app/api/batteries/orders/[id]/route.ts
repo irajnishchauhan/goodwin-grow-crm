@@ -75,6 +75,50 @@ async function updateOrder(
       }
     }
 
+    // If order is being cancelled, rollback outstandingBalance on partner ledger
+    if (status === "CANCELLED" && order.status !== "CANCELLED" && order.status !== "DRAFT" && Number(order.totalAmount) > 0) {
+      await prisma.batteryPartner.update({
+        where: { id: order.partnerId },
+        data: {
+          outstandingBalance: {
+            decrement: Math.min(Number(order.totalAmount), Number(order.totalAmount)),
+          },
+        },
+      }).catch(() => {});
+    }
+
+    // If order is marked DISPATCHED, ensure BatteryCollection record exists for billing & ageing
+    if ((status === "DISPATCHED" || status === "APPROVED") && Number(order.totalAmount) > 0) {
+      const existingCollection = await prisma.batteryCollection.findFirst({
+        where: {
+          tenantId: tenantCtx.tenant.id,
+          partnerId: order.partnerId,
+          invoiceNumber: { contains: order.orderNumber.replace("GB-ORD-", "") },
+        },
+      });
+
+      if (!existingCollection) {
+        const partner = await prisma.batteryPartner.findUnique({ where: { id: order.partnerId } });
+        const randSeq = Math.floor(1000 + Math.random() * 9000);
+        const invNum = `GB-INV-2026-${randSeq}`;
+        const dueDate = new Date(Date.now() + (partner?.creditDays || 30) * 86400000);
+
+        await prisma.batteryCollection.create({
+          data: {
+            tenantId: tenantCtx.tenant.id,
+            partnerId: order.partnerId,
+            invoiceNumber: invNum,
+            amountDue: order.totalAmount,
+            amountPaid: 0,
+            dueDate,
+            status: "PENDING",
+            ageingDays: 0,
+            followUpNotes: `Generated on order dispatch for PO ${order.orderNumber}`,
+          },
+        }).catch((e) => console.warn("Notice: Collection auto-creation error", e));
+      }
+    }
+
     const updated = await prisma.batteryOrder.update({
       where: { id: order.id },
       data: updateData,
@@ -123,6 +167,18 @@ export async function DELETE(
 
     if (!order) {
       return NextResponse.json({ success: false, error: "Order not found" }, { status: 404 });
+    }
+
+    // Roll back partner outstanding balance so deleted orders do not create phantom debt
+    if (order.status !== "CANCELLED" && order.status !== "DRAFT" && Number(order.totalAmount) > 0) {
+      await prisma.batteryPartner.update({
+        where: { id: order.partnerId },
+        data: {
+          outstandingBalance: {
+            decrement: Number(order.totalAmount),
+          },
+        },
+      }).catch(() => {});
     }
 
     await prisma.batteryOrder.delete({ where: { id: order.id } });

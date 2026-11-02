@@ -129,8 +129,35 @@ export async function POST(req: Request) {
           email: existingClient.email,
           phone: existingClient.phone,
         };
+      } else {
+        const partner = await prisma.batteryPartner.findFirst({
+          where: { id: targetClientId, tenantId: tenantCtx.tenant.id },
+        });
+        if (partner) {
+          targetClientName = partner.businessName;
+          billingDetails = {
+            partnerId: partner.id,
+            code: partner.code,
+            ownerName: partner.ownerName,
+            phone: partner.phone,
+            email: partner.email,
+            gstin: partner.gstin,
+            pan: partner.pan,
+            address: partner.address,
+            city: partner.city,
+            state: partner.state,
+            pincode: partner.pincode,
+            territory: partner.territory,
+            type: partner.type,
+          };
+          // Set to null to satisfy foreign key constraint on AgencyClient
+          targetClientId = null;
+        }
       }
     }
+
+    const isBatteriesTenant = tenantCtx.tenant.code === "goodwin-batteries";
+    const invoicePrefix = isBatteriesTenant ? "GB-INV-2026-" : "INV-GGA-2026-";
 
     const existingInvoices = await prisma.agencyInvoice.findMany({
       where: { tenantId: tenantCtx.tenant.id },
@@ -138,23 +165,25 @@ export async function POST(req: Request) {
     });
     let maxSeq = existingInvoices.length;
     for (const inv of existingInvoices) {
-      const match = inv.invoiceNumber?.match(/INV-GGA-\d{4}-(\d+)/);
+      const match = inv.invoiceNumber?.match(/(\d+)$/);
       if (match) {
         const num = parseInt(match[1], 10);
         if (!isNaN(num) && num > maxSeq) maxSeq = num;
       }
     }
     let nextSeq = maxSeq + 1;
-    let invoiceNumber = `INV-GGA-2026-${String(nextSeq).padStart(3, "0")}`;
+    let invoiceNumber = `${invoicePrefix}${String(nextSeq).padStart(3, "0")}`;
     const existingNumberSet = new Set(existingInvoices.map((i) => i.invoiceNumber));
     while (existingNumberSet.has(invoiceNumber)) {
       nextSeq += 1;
-      invoiceNumber = `INV-GGA-2026-${String(nextSeq).padStart(3, "0")}`;
+      invoiceNumber = `${invoicePrefix}${String(nextSeq).padStart(3, "0")}`;
     }
 
     const sub = subtotal ? Number(subtotal) : 0;
     const tax = taxAmount !== undefined ? Number(taxAmount) : sub * 0.18; // default 18% GST
     const total = totalAmount ? Number(totalAmount) : sub + tax;
+
+    const resolvedDueDate = dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 86400000);
 
     const invoice = await prisma.agencyInvoice.create({
       data: {
@@ -164,18 +193,44 @@ export async function POST(req: Request) {
         clientBillingDetails: billingDetails || undefined,
         invoiceNumber,
         issueDate: new Date(),
-        dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 10 * 86400000),
+        dueDate: resolvedDueDate,
         subtotal: sub,
         taxAmount: tax,
         totalAmount: total,
         status: "SENT",
         items: items || [],
-        paymentMethod: paymentMethod || "Bank Transfer / UPI",
+        paymentMethod: paymentMethod || (isBatteriesTenant ? "NEFT / RTGS / Cheque" : "Bank Transfer / UPI"),
       },
       include: {
         client: { select: { id: true, name: true, brandName: true, email: true, phone: true } },
       },
     });
+
+    // If this invoice was created for a battery partner, sync to BatteryCollection and partner outstanding
+    if (billingDetails?.partnerId && isBatteriesTenant) {
+      await prisma.batteryCollection.create({
+        data: {
+          tenantId: tenantCtx.tenant.id,
+          partnerId: billingDetails.partnerId,
+          invoiceNumber,
+          amountDue: total,
+          amountPaid: 0,
+          dueDate: resolvedDueDate,
+          status: "PENDING",
+          ageingDays: 0,
+          followUpNotes: `Generated via ERP Invoicing for ${targetClientName}`,
+        },
+      }).catch((e) => console.warn("Battery collection invoice creation notice:", e));
+
+      await prisma.batteryPartner.update({
+        where: { id: billingDetails.partnerId },
+        data: {
+          outstandingBalance: {
+            increment: total,
+          },
+        },
+      }).catch((e) => console.warn("Battery partner balance update notice:", e));
+    }
 
     return NextResponse.json({ success: true, data: invoice });
   } catch (err: any) {

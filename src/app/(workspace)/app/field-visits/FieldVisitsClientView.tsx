@@ -80,7 +80,40 @@ export function FieldVisitsClientView({
     orderBooked: "",
     collectionMade: "",
     followUpDate: "",
+    latitude: "",
+    longitude: "",
+    autoCreateOrder: true,
+    autoCreateCollection: true,
   });
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<string | null>(null);
+
+  const captureGpsLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setGpsLoading(true);
+    setGpsStatus("Capturing current location...");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setFormData((prev) => ({
+          ...prev,
+          latitude: pos.coords.latitude.toString(),
+          longitude: pos.coords.longitude.toString(),
+          notes: prev.notes || `Verified GPS: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)} (Accuracy: ${Math.round(pos.coords.accuracy)}m)`,
+        }));
+        setGpsStatus(`📍 Lat ${pos.coords.latitude.toFixed(4)}, Long ${pos.coords.longitude.toFixed(4)} (±${Math.round(pos.coords.accuracy)}m)`);
+        setGpsLoading(false);
+      },
+      (err) => {
+        console.warn("GPS capture error:", err);
+        setGpsStatus("⚠️ Location access denied or unavailable. Fallback to IP location.");
+        setGpsLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const handleOpenEdit = (v: VisitItem) => {
     setEditingVisit(v);
@@ -170,7 +203,12 @@ export function FieldVisitsClientView({
           orderBooked: "",
           collectionMade: "",
           followUpDate: "",
+          latitude: "",
+          longitude: "",
+          autoCreateOrder: true,
+          autoCreateCollection: true,
         });
+        setGpsStatus(null);
         setToastMessage("Field visit logged with verified GPS coordinates!");
         setTimeout(() => setToastMessage(null), 5000);
       } else {
@@ -426,6 +464,49 @@ export function FieldVisitsClientView({
                     className="w-full px-3 py-2 rounded-xl border border-slate-200"
                   />
                 </div>
+              </div>
+
+              {/* Automatic Order & Ledger Automation Toggles */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Field Automation Workflows
+                </span>
+                <label className="flex items-center gap-2 cursor-pointer text-[11px] font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={formData.autoCreateOrder}
+                    onChange={(e) => setFormData({ ...formData, autoCreateOrder: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>Auto-create draft Purchase Order in CRM when order amount is entered</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-[11px] font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={formData.autoCreateCollection}
+                    onChange={(e) => setFormData({ ...formData, autoCreateCollection: e.target.checked })}
+                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>Auto-record payment receipt and deduct from dealer outstanding balance</span>
+                </label>
+              </div>
+
+              {/* GPS Location Capture */}
+              <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3">
+                <div className="text-xs">
+                  <span className="font-bold text-emerald-950 block">Geolocation Geofence Verification</span>
+                  <span className="text-[11px] text-emerald-700">
+                    {gpsStatus || "Capture live coordinates to verify dealer counter presence"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={captureGpsLocation}
+                  disabled={gpsLoading}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shrink-0 transition cursor-pointer disabled:opacity-50"
+                >
+                  {gpsLoading ? "Capturing..." : "📍 Capture GPS"}
+                </button>
               </div>
 
               <div>

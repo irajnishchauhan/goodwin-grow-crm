@@ -106,3 +106,13 @@ export const GOODWIN_BATTERIES_CATALOG: BatteryProductSeed[] = [
   },
 ];
 
+export const INVOICE_BATTERY_CATALOG_ITEMS = GOODWIN_BATTERIES_CATALOG.map((item) => ({
+  id: item.sku,
+  name: `${item.name} (${item.sku})`,
+  category: item.category,
+  defaultPrice: item.unitPrice,
+  cadence: "per unit",
+  defaultDescription: `${item.name} [SKU: ${item.sku}] — ${item.warrantyMonths}-Month Manufacturer Warranty.`,
+}));
+
+

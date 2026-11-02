@@ -76,17 +76,30 @@ export default function QuotationsPage() {
 
   async function fetchEntities() {
     try {
-      const [compRes, contRes, dealRes] = await Promise.all([
+      const [compRes, contRes, dealRes, dealerRes] = await Promise.all([
         fetch("/api/companies"),
         fetch("/api/contacts"),
         fetch("/api/deals"),
+        fetch("/api/batteries/dealers").catch(() => null),
       ]);
-      const [compData, contData, dealData] = await Promise.all([
+      const [compData, contData, dealData, dealerData] = await Promise.all([
         compRes.json(),
         contRes.json(),
         dealRes.json(),
+        dealerRes ? dealerRes.json().catch(() => ({})) : Promise.resolve({}),
       ]);
-      if (compData.success) setCompanies(compData.data || []);
+
+      const baseCompanies = compData.success ? compData.data || [] : [];
+      const batteryPartners = dealerData?.success && Array.isArray(dealerData.data)
+        ? dealerData.data.map((p: any) => ({
+            id: p.id,
+            name: `${p.businessName} (${p.code} • ${p.city})`,
+            isPartner: true,
+            gstin: p.gstin,
+          }))
+        : [];
+
+      setCompanies([...baseCompanies, ...batteryPartners]);
       if (contData.success) setContacts(contData.data || []);
       if (dealData.success) setDeals(dealData.data || []);
     } catch (err) {

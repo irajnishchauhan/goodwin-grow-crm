@@ -678,7 +678,7 @@ export async function ensureWorkspaceMemberIsolation() {
       });
     }
 
-    // Ensure Sameer Meena in Goodwin Batteries
+    // Ensure Sameer Meena in Goodwin Batteries as Sales Manager if present
     const sameerBatteryEmail = "sameergoodwinbatteries@gmail.com";
     let sameerUser = await prisma.user.findFirst({
       where: {
@@ -716,14 +716,34 @@ export async function ensureWorkspaceMemberIsolation() {
       });
     }
 
-    // Clean up Sameer from Goodwin Batteries if deleted by admin (do not resurrect)
-    if (sameerUser) {
-      const sameerBatteryMem = await prisma.tenantMembership.findFirst({
-        where: { tenantId: batteriesTenant.id, userId: sameerUser.id },
+    // Attach Sameer Meena as Sales Manager in Goodwin Batteries
+    if (sameerUser && gbSalesManagerRole) {
+      const sameerBatteryMem = await prisma.tenantMembership.upsert({
+        where: { tenantId_userId: { tenantId: batteriesTenant.id, userId: sameerUser.id } },
+        update: { status: "ACTIVE", isOwner: false },
+        create: {
+          tenantId: batteriesTenant.id,
+          userId: sameerUser.id,
+          status: "ACTIVE",
+          isOwner: false,
+        },
       });
-      if (sameerBatteryMem) {
-        await prisma.membershipRole.deleteMany({ where: { membershipId: sameerBatteryMem.id } });
-        await prisma.tenantMembership.delete({ where: { id: sameerBatteryMem.id } });
+      await prisma.membershipRole.upsert({
+        where: { membershipId_roleId: { membershipId: sameerBatteryMem.id, roleId: gbSalesManagerRole.id } },
+        update: {},
+        create: { membershipId: sameerBatteryMem.id, roleId: gbSalesManagerRole.id },
+      });
+    }
+
+    // Remove legacy/demo sales@goodwinbatteries.com if Sameer is active
+    const legacySalesUser = await prisma.user.findUnique({ where: { email: "sales@goodwinbatteries.com" } });
+    if (legacySalesUser) {
+      const legacyMem = await prisma.tenantMembership.findFirst({
+        where: { tenantId: batteriesTenant.id, userId: legacySalesUser.id },
+      });
+      if (legacyMem) {
+        await prisma.membershipRole.deleteMany({ where: { membershipId: legacyMem.id } });
+        await prisma.tenantMembership.delete({ where: { id: legacyMem.id } });
       }
     }
 

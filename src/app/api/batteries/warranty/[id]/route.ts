@@ -54,6 +54,30 @@ async function updateClaim(
     const body = await req.json();
     const { status, technicianNotes, replacementSerial, resolutionDate, erpSyncStatus } = body;
 
+    // Validate replacement serial uniqueness
+    if (replacementSerial) {
+      const cleanRepl = replacementSerial.trim().toUpperCase();
+      const duplicateReplacement = await prisma.batteryWarrantyClaim.findFirst({
+        where: {
+          tenantId: tenantCtx.tenant.id,
+          id: { not: claim.id },
+          OR: [
+            { replacementSerial: cleanRepl },
+            { batterySerialNumber: cleanRepl },
+          ],
+        },
+      });
+      if (duplicateReplacement) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Replacement Serial Conflict: Serial "${cleanRepl}" has already been issued under claim ${duplicateReplacement.claimNumber}.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const isResolvedStatus =
       status === "APPROVED_REPLACEMENT" ||
       status === "APPROVED_PRORATA" ||
