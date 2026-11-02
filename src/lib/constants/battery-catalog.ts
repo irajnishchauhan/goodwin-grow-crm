@@ -105,3 +105,4 @@ export const GOODWIN_BATTERIES_CATALOG: BatteryProductSeed[] = [
     warrantyMonths: 48,
   },
 ];
+

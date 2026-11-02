@@ -91,6 +91,33 @@ export async function POST(req: Request) {
       );
     }
 
+    const cleanSerial = batterySerialNumber.trim().toUpperCase();
+    if (cleanSerial.length < 5) {
+      return NextResponse.json(
+        { success: false, error: "Battery Serial Number must be at least 5 alphanumeric characters" },
+        { status: 400 }
+      );
+    }
+
+    // Fraud prevention: Check for conflicting active claim on the same battery serial
+    const activeClaim = await prisma.batteryWarrantyClaim.findFirst({
+      where: {
+        tenantId,
+        batterySerialNumber: cleanSerial,
+        status: { in: [WarrantyClaimStatus.SUBMITTED, WarrantyClaimStatus.INSPECTION] },
+      },
+    });
+
+    if (activeClaim) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Claim Conflict: An active claim (${activeClaim.claimNumber}) is already in review for serial number "${cleanSerial}". Please resolve or inspect the existing claim.`,
+        },
+        { status: 409 }
+      );
+    }
+
     if (partnerId) {
       const partner = await prisma.batteryPartner.findFirst({
         where: { id: partnerId, tenantId },

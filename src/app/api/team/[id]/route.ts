@@ -280,7 +280,39 @@ export async function DELETE(
       );
     }
 
-    // Delete membership
+    // Reassign active leads, deals, tasks, and partner assignments to prevent orphaned records
+    const fallbackOwner = await prisma.tenantMembership.findFirst({
+      where: { tenantId, isOwner: true, status: "ACTIVE" },
+      select: { userId: true },
+    });
+    const reassignUserId = fallbackOwner?.userId || tenantCtx.user.id;
+
+    if (reassignUserId && reassignUserId !== membership.userId) {
+      await Promise.all([
+        prisma.lead.updateMany({
+          where: { tenantId, assignedOwnerId: membership.userId },
+          data: { assignedOwnerId: reassignUserId },
+        }),
+        prisma.deal.updateMany({
+          where: { tenantId, assignedOwnerId: membership.userId },
+          data: { assignedOwnerId: reassignUserId },
+        }),
+        prisma.task.updateMany({
+          where: { tenantId, assignedToId: membership.userId, status: { not: "COMPLETED" } },
+          data: { assignedToId: reassignUserId },
+        }),
+        prisma.batteryPartner.updateMany({
+          where: { tenantId, assignedSalesUserId: membership.userId },
+          data: { assignedSalesUserId: reassignUserId },
+        }),
+      ]).catch((err) => console.warn("Reassignment notice:", err));
+    }
+
+    // Delete membership and assigned role mappings
+    await prisma.membershipRole.deleteMany({
+      where: { membershipId: membership.id },
+    }).catch(() => {});
+
     await prisma.tenantMembership.delete({
       where: { id: membership.id },
     });

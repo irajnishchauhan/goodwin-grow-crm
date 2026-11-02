@@ -84,6 +84,7 @@ model TenantSettings {
   timezone      String   @default("Asia/Kolkata")
   logoUrl       String?  @map("logo_url")
   seatLimit     Int      @default(10) @map("seat_limit")
+  integrations  Json     @default("[]")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

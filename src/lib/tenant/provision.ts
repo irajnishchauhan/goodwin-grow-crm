@@ -250,15 +250,26 @@ export async function provisionTenant(input: ProvisionTenantInput) {
       },
     });
 
-    const stages = [
-      { name: "New Lead", orderIndex: 0, winProbability: 10 },
-      { name: "Contacted", orderIndex: 1, winProbability: 25 },
-      { name: "Qualified", orderIndex: 2, winProbability: 50 },
-      { name: "Proposal Sent", orderIndex: 3, winProbability: 70 },
-      { name: "Negotiation", orderIndex: 4, winProbability: 85 },
-      { name: "Won", orderIndex: 5, winProbability: 100 },
-      { name: "Lost", orderIndex: 6, winProbability: 0 },
-    ];
+    const isBattery = tenant.code?.toLowerCase().includes("battery");
+    const stages = isBattery
+      ? [
+          { name: "Dealer Inquiry", orderIndex: 0, winProbability: 15 },
+          { name: "Territory / KYC Verification", orderIndex: 1, winProbability: 35 },
+          { name: "Battery Sample & Demo", orderIndex: 2, winProbability: 55 },
+          { name: "Margin & Credit Agreement", orderIndex: 3, winProbability: 75 },
+          { name: "Initial Stock Order Placed", orderIndex: 4, winProbability: 90 },
+          { name: "Active Channel Partner", orderIndex: 5, winProbability: 100 },
+          { name: "Lost / Inactive", orderIndex: 6, winProbability: 0 },
+        ]
+      : [
+          { name: "New Lead", orderIndex: 0, winProbability: 10 },
+          { name: "Contacted", orderIndex: 1, winProbability: 25 },
+          { name: "Qualified", orderIndex: 2, winProbability: 50 },
+          { name: "Proposal Sent", orderIndex: 3, winProbability: 70 },
+          { name: "Negotiation", orderIndex: 4, winProbability: 85 },
+          { name: "Won", orderIndex: 5, winProbability: 100 },
+          { name: "Lost", orderIndex: 6, winProbability: 0 },
+        ];
 
     for (const stage of stages) {
       await tx.pipelineStage.create({

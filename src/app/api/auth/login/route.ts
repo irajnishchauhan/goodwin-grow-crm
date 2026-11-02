@@ -27,8 +27,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Proactively ensure database schema is up-to-date with rubric columns
-    await ensureDatabaseSchema();
+    // Ensure database schema asynchronously without blocking authentication
+    ensureDatabaseSchema().catch((err) => console.warn("Schema check warning:", err));
 
     const normalizedEmail = email.toLowerCase().trim();
 

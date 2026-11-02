@@ -132,9 +132,11 @@ export async function POST(req: Request) {
       }
     }
 
-    // Duplicate Detection: Check email and phone in tenant
-    const trimmedEmail = email?.trim() || null;
-    const trimmedPhone = phone?.trim() || null;
+    // Duplicate Detection: Check email and normalized phone in tenant
+    const trimmedEmail = email && typeof email === "string" && email.trim().length > 3 ? email.trim() : null;
+    const cleanDigits = phone && typeof phone === "string" ? phone.replace(/\D/g, "") : "";
+    const normalizedPhoneDigits = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+    const trimmedPhone = phone && typeof phone === "string" && phone.trim().length >= 7 ? phone.trim() : null;
 
     if (trimmedEmail || trimmedPhone) {
       const duplicateConditions: any[] = [];
@@ -143,6 +145,9 @@ export async function POST(req: Request) {
       }
       if (trimmedPhone) {
         duplicateConditions.push({ phone: { equals: trimmedPhone } });
+        if (normalizedPhoneDigits.length === 10) {
+          duplicateConditions.push({ phone: { contains: normalizedPhoneDigits } });
+        }
       }
 
       const duplicate = await prisma.lead.findFirst({

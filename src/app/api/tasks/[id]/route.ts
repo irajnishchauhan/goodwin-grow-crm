@@ -121,6 +121,40 @@ export async function PUT(
       },
     });
 
+    // Auto-generate next recurrence cycle when task is marked COMPLETED
+    if (status === "COMPLETED" && (updated.isRecurring || task.isRecurring)) {
+      const interval = (updated.recurringInterval || task.recurringInterval || "WEEKLY").toUpperCase();
+      const baseDate = updated.dueDate ? new Date(updated.dueDate) : new Date();
+      const nextDueDate = new Date(baseDate);
+      if (interval === "DAILY") {
+        nextDueDate.setDate(nextDueDate.getDate() + 1);
+      } else if (interval === "MONTHLY") {
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      } else {
+        nextDueDate.setDate(nextDueDate.getDate() + 7);
+      }
+
+      await prisma.task.create({
+        data: {
+          tenantId: task.tenantId,
+          title: updated.title,
+          description: updated.description,
+          dueDate: nextDueDate,
+          priority: updated.priority,
+          status: "PENDING",
+          assignedToId: updated.assignedToId,
+          clientId: updated.clientId,
+          projectId: updated.projectId,
+          leadId: task.leadId,
+          dealId: task.dealId,
+          contactId: task.contactId,
+          checklist: updated.checklist || [],
+          isRecurring: true,
+          recurringInterval: interval,
+        },
+      }).catch((err) => console.error("Error creating next recurring task cycle:", err));
+    }
+
     return NextResponse.json({ success: true, data: updated });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

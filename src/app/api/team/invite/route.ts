@@ -3,6 +3,7 @@ import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { hashPassword } from "@/lib/auth/password";
+import { sendEmail, generateTeamInviteEmailHtml } from "@/lib/email/sender";
 
 function canManageTeam(tenantCtx: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
   const isAdminOrOwner =
@@ -146,9 +147,19 @@ export async function POST(req: Request) {
       },
     });
 
+    const origin = req.headers.get("origin") || req.headers.get("host") || "https://goodwin-grow-crm-sigma.vercel.app";
+    const fullOrigin = origin.startsWith("http") ? origin : `https://${origin}`;
+    const fullInviteUrl = `${fullOrigin}/activate?token=${token}`;
+
+    await sendEmail({
+      to: cleanEmail,
+      subject: `You've been invited to join ${tenantCtx.tenant.name} on Goodwin CRM`,
+      html: generateTeamInviteEmailHtml(tenantCtx.user.fullName, tenantCtx.tenant.name, role.name, fullInviteUrl),
+    }).catch((err) => console.error("Error sending invite email:", err));
+
     return NextResponse.json({
       success: true,
-      message: `Invitation generated for ${cleanEmail}`,
+      message: `Invitation generated and dispatched to ${cleanEmail}`,
       data: {
         invitationToken: token,
         inviteUrl: `/activate?token=${token}`,

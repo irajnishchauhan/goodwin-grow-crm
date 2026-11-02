@@ -77,8 +77,38 @@ export async function GET(req: Request) {
     }),
   ]);
 
+  const isBattery = tenantCtx.tenant.code?.toLowerCase().includes("battery");
+  const [dealers, warrantyClaims] = isBattery
+    ? await Promise.all([
+        prisma.batteryPartner.findMany({
+          where: {
+            tenantId,
+            OR: [
+              { businessName: { contains: q, mode: "insensitive" } },
+              { code: { contains: q, mode: "insensitive" } },
+              { city: { contains: q, mode: "insensitive" } },
+            ],
+          },
+          take: 5,
+          select: { id: true, businessName: true, code: true, city: true, type: true },
+        }),
+        prisma.batteryWarrantyClaim.findMany({
+          where: {
+            tenantId,
+            OR: [
+              { claimNumber: { contains: q, mode: "insensitive" } },
+              { batterySerialNumber: { contains: q, mode: "insensitive" } },
+              { customerName: { contains: q, mode: "insensitive" } },
+            ],
+          },
+          take: 5,
+          select: { id: true, claimNumber: true, batterySerialNumber: true, customerName: true, status: true },
+        }),
+      ])
+    : [[], []];
+
   return NextResponse.json({
     success: true,
-    data: { leads, contacts, companies, deals },
+    data: { leads, contacts, companies, deals, dealers, warrantyClaims },
   });
 }

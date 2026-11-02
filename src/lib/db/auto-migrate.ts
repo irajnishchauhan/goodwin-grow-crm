@@ -15,8 +15,9 @@ export async function ensureDatabaseSchema() {
   if (isSchemaEnsured) return;
 
   const ddlStatements = [
-    // 0. Tenant Settings Logo Column
+    // 0. Tenant Settings Logo & Integrations Column
     `ALTER TABLE "tenant_settings" ADD COLUMN IF NOT EXISTS "logo_url" TEXT;`,
+    `ALTER TABLE "tenant_settings" ADD COLUMN IF NOT EXISTS "integrations" JSONB DEFAULT '[]'::jsonb;`,
 
     // 1. Tenant Memberships
     `ALTER TABLE "tenant_memberships" ADD COLUMN IF NOT EXISTS "agency_client_id" TEXT;`,
@@ -602,6 +603,50 @@ export async function ensureWorkspaceMemberIsolation() {
           status: "ACTIVE",
         },
       });
+    }
+
+    // Ensure specialized battery sales & distribution pipeline stages
+    let gbPipeline = await prisma.pipeline.findFirst({
+      where: { tenantId: batteriesTenant.id },
+    });
+    if (!gbPipeline) {
+      gbPipeline = await prisma.pipeline.create({
+        data: {
+          tenantId: batteriesTenant.id,
+          name: "Battery Channel Distribution Pipeline",
+          isDefault: true,
+        },
+      });
+    }
+    const batteryStages = [
+      { name: "Dealer Inquiry", orderIndex: 0, winProbability: 15 },
+      { name: "Territory / KYC Verification", orderIndex: 1, winProbability: 35 },
+      { name: "Battery Sample & Demo", orderIndex: 2, winProbability: 55 },
+      { name: "Margin & Credit Agreement", orderIndex: 3, winProbability: 75 },
+      { name: "Initial Stock Order Placed", orderIndex: 4, winProbability: 90 },
+      { name: "Active Channel Partner", orderIndex: 5, winProbability: 100 },
+      { name: "Lost / Inactive", orderIndex: 6, winProbability: 0 },
+    ];
+    for (const bs of batteryStages) {
+      const existingStage = await prisma.pipelineStage.findFirst({
+        where: { pipelineId: gbPipeline.id, orderIndex: bs.orderIndex },
+      });
+      if (existingStage) {
+        await prisma.pipelineStage.update({
+          where: { id: existingStage.id },
+          data: { name: bs.name, winProbability: bs.winProbability },
+        });
+      } else {
+        await prisma.pipelineStage.create({
+          data: {
+            tenantId: batteriesTenant.id,
+            pipelineId: gbPipeline.id,
+            name: bs.name,
+            orderIndex: bs.orderIndex,
+            winProbability: bs.winProbability,
+          },
+        });
+      }
     }
 
     // Ensure roles in Goodwin Batteries

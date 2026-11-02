@@ -91,6 +91,8 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
     contacts: any[];
     companies: any[];
     deals: any[];
+    dealers?: any[];
+    warrantyClaims?: any[];
   } | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -279,7 +281,9 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
     (searchResults.leads.length > 0 ||
       searchResults.contacts.length > 0 ||
       searchResults.companies.length > 0 ||
-      searchResults.deals.length > 0);
+      searchResults.deals.length > 0 ||
+      (searchResults.dealers && searchResults.dealers.length > 0) ||
+      (searchResults.warrantyClaims && searchResults.warrantyClaims.length > 0));
 
   return (
     <header className="h-16 border-b border-slate-200 bg-white px-6 flex items-center justify-between z-20 relative">
@@ -670,6 +674,54 @@ export function Header({ user, activeTenant, memberships, roles = [] }: HeaderPr
                                 className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-left text-xs text-slate-800 font-semibold transition"
                               >
                                 <span>{co.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {searchResults.dealers && searchResults.dealers.length > 0 && (
+                        <div>
+                          <div className="text-[11px] font-bold text-indigo-700 mb-1 flex items-center gap-1">
+                            <Building2 className="w-3.5 h-3.5" />
+                            <span>Dealers & Distributors</span>
+                          </div>
+                          <div className="space-y-1">
+                            {searchResults.dealers.map((dlr: any) => (
+                              <button
+                                key={dlr.id}
+                                onClick={() => {
+                                  setPaletteOpen(false);
+                                  router.push("/app/dealers");
+                                }}
+                                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-left text-xs text-slate-800 transition"
+                              >
+                                <span className="font-semibold">{dlr.businessName}</span>
+                                <span className="text-slate-400 font-mono text-[11px]">{dlr.code} • {dlr.city}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {searchResults.warrantyClaims && searchResults.warrantyClaims.length > 0 && (
+                        <div>
+                          <div className="text-[11px] font-bold text-rose-700 mb-1 flex items-center gap-1">
+                            <Shield className="w-3.5 h-3.5" />
+                            <span>Warranty Claims</span>
+                          </div>
+                          <div className="space-y-1">
+                            {searchResults.warrantyClaims.map((wc: any) => (
+                              <button
+                                key={wc.id}
+                                onClick={() => {
+                                  setPaletteOpen(false);
+                                  router.push("/app/warranty");
+                                }}
+                                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 text-left text-xs text-slate-800 transition"
+                              >
+                                <span className="font-semibold">{wc.claimNumber}</span>
+                                <span className="text-slate-400 font-mono text-[11px]">Serial: {wc.batterySerialNumber}</span>
                               </button>
                             ))}
                           </div>

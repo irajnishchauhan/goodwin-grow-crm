@@ -252,10 +252,10 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       );
     }
 
-    // Safety: Prevent deleting root platform tenant
-    if (existing.code === "goodwin-grow-ai") {
+    // Safety: Prevent deleting root platform & primary operating workspaces
+    if (existing.code === "goodwin-grow-ai" || existing.code === "goodwin-batteries") {
       return NextResponse.json(
-        { success: false, error: "Protected Entity: Cannot delete the root Goodwin Grow AI platform workspace" },
+        { success: false, error: `Protected Entity: Cannot delete primary operating workspace "${existing.name}"` },
         { status: 400 }
       );
     }

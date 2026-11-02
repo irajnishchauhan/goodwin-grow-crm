@@ -8,6 +8,9 @@ export async function GET(req: Request) {
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot access financial collections" }, { status: 403 });
+  }
 
   const tenantId = tenantCtx.tenant.id;
   const { searchParams } = new URL(req.url);
@@ -98,6 +101,9 @@ export async function POST(req: Request) {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (tenantCtx.isClientUser) {
+    return NextResponse.json({ success: false, error: "Forbidden: Client users cannot access financial collections" }, { status: 403 });
   }
   if (tenantCtx.isClientUser) {
     return NextResponse.json({ success: false, error: "Forbidden: Client users cannot modify collections" }, { status: 403 });

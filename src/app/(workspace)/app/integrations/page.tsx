@@ -103,51 +103,57 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
   },
 ];
 
-const STORAGE_KEY = "gga_crm_integrations_state_v1";
-
 export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationItem[]>(DEFAULT_INTEGRATIONS);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Record<string, { status: IntegrationItem["status"]; lastSync: string }>;
-        setIntegrations((prev) =>
-          prev.map((item) =>
-            parsed[item.id]
-              ? { ...item, status: parsed[item.id].status, lastSync: parsed[item.id].lastSync }
-              : item
-          )
-        );
-      }
-    } catch {
-      // ignore storage errors
-    }
+    fetch("/api/integrations")
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          const map: Record<string, any> = {};
+          json.data.forEach((i: any) => {
+            map[i.id] = i;
+          });
+          setIntegrations((prev) =>
+            prev.map((item) =>
+              map[item.id]
+                ? { ...item, status: map[item.id].status, lastSync: map[item.id].lastSync }
+                : item
+            )
+          );
+        }
+      })
+      .catch((err) => console.error("Error loading workspace integrations:", err));
   }, []);
 
-  function toggleConnection(id: string) {
-    setIntegrations((prev) => {
-      const next: IntegrationItem[] = prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: item.status === "CONNECTED" ? "AVAILABLE" : "CONNECTED",
-              lastSync: item.status === "CONNECTED" ? "Disconnected" : "Connected just now",
-            }
-          : item
-      );
-      try {
-        const stateMap: Record<string, { status: IntegrationItem["status"]; lastSync: string }> = {};
-        for (const item of next) {
-          stateMap[item.id] = { status: item.status, lastSync: item.lastSync };
-        }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(stateMap));
-      } catch {
-        // ignore storage errors
-      }
-      return next;
-    });
+  async function toggleConnection(id: string) {
+    const next: IntegrationItem[] = integrations.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            status: item.status === "CONNECTED" ? "AVAILABLE" : "CONNECTED",
+            lastSync: item.status === "CONNECTED" ? "Disconnected" : "Connected just now",
+          }
+        : item
+    );
+    setIntegrations(next);
+
+    try {
+      setSaving(true);
+      await fetch("/api/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          integrations: next.map((i) => ({ id: i.id, status: i.status, lastSync: i.lastSync })),
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to persist integration state to DB:", err);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

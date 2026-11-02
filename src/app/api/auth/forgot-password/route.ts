@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import prisma from "@/lib/prisma";
+import { sendEmail, generatePasswordResetEmailHtml } from "@/lib/email/sender";
 
 export async function POST(req: Request) {
   try {
@@ -59,12 +60,20 @@ export async function POST(req: Request) {
       },
     });
 
-    const resetUrl = `/forgot-password?token=${token}`;
+    const origin = req.headers.get("origin") || req.headers.get("host") || "https://goodwin-grow-crm-sigma.vercel.app";
+    const fullOrigin = origin.startsWith("http") ? origin : `https://${origin}`;
+    const resetUrl = `${fullOrigin}/forgot-password?token=${token}`;
+
+    await sendEmail({
+      to: cleanEmail,
+      subject: "Reset your Goodwin CRM Password",
+      html: generatePasswordResetEmailHtml(user.fullName, resetUrl),
+    }).catch((err) => console.error("Error sending reset email:", err));
 
     return NextResponse.json({
       success: true,
-      message: `Password reset request authorized for ${user.fullName}. Use the link below to set your new password.`,
-      resetUrl,
+      message: `Password reset link sent to ${cleanEmail}. Check your inbox or use the link below.`,
+      resetUrl: `/forgot-password?token=${token}`,
       email: cleanEmail,
     });
   } catch (err: any) {
