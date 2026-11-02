@@ -24,34 +24,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "No leads provided in payload" }, { status: 400 });
     }
 
-    // Extract valid emails for duplicate check
+    // Extract valid emails and phones for duplicate check
     const incomingEmails = rows
       .map((r) => r.email?.toLowerCase().trim())
       .filter(Boolean);
 
-    // Find existing leads in this tenant with these emails (case-insensitive)
-    const existingLeads = incomingEmails.length > 0
-      ? await prisma.lead.findMany({
-          where: {
-            tenantId,
-            OR: incomingEmails.map((em) => ({
-              email: { equals: em, mode: "insensitive" },
-            })),
-          },
-          select: { email: true },
-        })
-      : [];
+    const incomingPhones = rows
+      .map((r) => (r.phone ? r.phone.trim() : null))
+      .filter(Boolean);
 
-    const existingEmailSet = new Set(existingLeads.map((l) => l.email?.toLowerCase()));
+    // Find existing leads in this tenant with these emails or phones
+    const existingLeads = await prisma.lead.findMany({
+      where: {
+        tenantId,
+        OR: [
+          ...(incomingEmails.length > 0
+            ? incomingEmails.map((em) => ({ email: { equals: em, mode: "insensitive" as const } }))
+            : []),
+          ...(incomingPhones.length > 0
+            ? incomingPhones.map((ph) => ({ phone: { equals: ph } }))
+            : []),
+        ],
+      },
+      select: { email: true, phone: true },
+    });
+
+    const existingEmailSet = new Set(existingLeads.map((l) => l.email?.toLowerCase()).filter(Boolean));
+    const existingPhoneSet = new Set(existingLeads.map((l) => l.phone).filter(Boolean));
 
     const leadsToInsert: any[] = [];
-    const duplicateEmails: string[] = [];
+    const duplicateRecords: string[] = [];
 
     for (const row of rows) {
       const email = row.email ? row.email.toLowerCase().trim() : null;
+      const phone = row.phone ? row.phone.trim() : null;
 
-      if (email && existingEmailSet.has(email)) {
-        duplicateEmails.push(email);
+      if ((email && existingEmailSet.has(email)) || (phone && existingPhoneSet.has(phone))) {
+        duplicateRecords.push(email || phone || "Unknown duplicate");
         continue;
       }
 
@@ -64,7 +73,7 @@ export async function POST(req: Request) {
         lastName,
         companyName: row.companyName || row.company || null,
         email: email || null,
-        phone: row.phone || null,
+        phone: phone || null,
         source: row.source || "CSV Import",
         priority: row.priority || "MEDIUM",
         score: Number(row.score) || 50,
@@ -73,6 +82,7 @@ export async function POST(req: Request) {
       });
 
       if (email) existingEmailSet.add(email);
+      if (phone) existingPhoneSet.add(phone);
     }
 
     if (leadsToInsert.length > 0) {
@@ -86,8 +96,8 @@ export async function POST(req: Request) {
       message: `Successfully imported ${leadsToInsert.length} leads.`,
       data: {
         importedCount: leadsToInsert.length,
-        skippedCount: duplicateEmails.length,
-        duplicateEmails,
+        skippedCount: duplicateRecords.length,
+        duplicateRecords,
       },
     });
   } catch (err: any) {

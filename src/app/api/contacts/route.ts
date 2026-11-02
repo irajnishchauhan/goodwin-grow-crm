@@ -83,14 +83,40 @@ export async function POST(req: Request) {
       }
     }
 
+    const cleanEmail = email ? email.trim().toLowerCase() : null;
+    const cleanPhone = phone ? phone.trim() : null;
+
+    if (cleanEmail || cleanPhone) {
+      const duplicate = await prisma.contact.findFirst({
+        where: {
+          tenantId,
+          OR: [
+            ...(cleanEmail ? [{ email: cleanEmail }] : []),
+            ...(cleanPhone ? [{ phone: cleanPhone }] : []),
+          ],
+        },
+      });
+
+      if (duplicate) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Contact already exists with matching ${cleanEmail && duplicate.email === cleanEmail ? "email" : "phone"} (${duplicate.firstName} ${duplicate.lastName}).`,
+            duplicateId: duplicate.id,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const contact = await prisma.contact.create({
       data: {
         tenantId,
         firstName,
         lastName,
         companyId: companyId || null,
-        email: email || null,
-        phone: phone || null,
+        email: cleanEmail,
+        phone: cleanPhone,
         jobTitle: jobTitle || null,
         source: source || null,
         tags: Array.isArray(tags) ? tags : [],

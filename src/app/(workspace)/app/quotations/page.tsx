@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileSpreadsheet, Plus, Search, Building2, Download, Trash2, X, Filter, User, Edit2, Save, CheckSquare, Square } from "lucide-react";
+import { FileSpreadsheet, Plus, Search, Building2, Download, Trash2, X, Filter, User, Edit2, Save, CheckSquare, Square, Receipt } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default function QuotationsPage() {
@@ -35,6 +35,26 @@ export default function QuotationsPage() {
   const [editValidUntil, setEditValidUntil] = useState("");
   const [editTerms, setEditTerms] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
+
+  async function handleConvertToInvoice(q: any) {
+    if (!confirm(`Convert quotation "${q.quoteNumber || q.quotationNumber}" into an official Tax Invoice?`)) return;
+    try {
+      setConvertingId(q.id);
+      const res = await fetch(`/api/quotations/${q.id}/convert-to-invoice`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(`Success! Invoice ${data.data?.invoiceNumber} created. You can view and manage it under Invoices.`);
+        fetchQuotations();
+      } else {
+        alert(data.error || "Failed to convert quotation");
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to convert quotation");
+    } finally {
+      setConvertingId(null);
+    }
+  }
 
   useEffect(() => {
     fetchTeam();
@@ -501,6 +521,14 @@ export default function QuotationsPage() {
                     <td className="py-3.5 px-4 text-slate-400">{formatDate(q.createdAt)}</td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleConvertToInvoice(q)}
+                          disabled={convertingId === q.id}
+                          title="Convert to Tax Invoice (Zoho Standard)"
+                          className="p-1 hover:bg-emerald-50 rounded text-slate-400 hover:text-emerald-700 cursor-pointer transition disabled:opacity-50"
+                        >
+                          <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+                        </button>
                         <button
                           onClick={() => openEditModal(q)}
                           title="Edit Quotation"

@@ -608,6 +608,26 @@ export default function LeadsPage() {
     }
   }
 
+  async function handleBulkAssignOwner(ownerId: string) {
+    if (selectedLeadIds.length === 0) return;
+    try {
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedLeadIds, assignedOwnerId: ownerId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedLeadIds([]);
+        fetchLeads();
+      } else {
+        alert(data.error || "Failed to reassign selected leads");
+      }
+    } catch {
+      alert("Error reassigning leads");
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -758,6 +778,24 @@ export default function LeadsPage() {
                 <option value="PROPOSAL">Set PROPOSAL</option>
                 <option value="CONVERTED">Set CONVERTED</option>
                 <option value="LOST">Set LOST</option>
+              </select>
+
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleBulkAssignOwner(e.target.value);
+                    e.target.value = "";
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold text-xs cursor-pointer shadow-2xs"
+                defaultValue=""
+              >
+                <option value="" disabled>Assign Owner...</option>
+                {teamMembers.map((m) => (
+                  <option key={m.userId || m.id} value={m.userId || m.id}>
+                    Assign to {m.fullName}
+                  </option>
+                ))}
               </select>
 
               <button

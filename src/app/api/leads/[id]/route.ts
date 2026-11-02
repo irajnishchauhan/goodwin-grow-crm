@@ -204,6 +204,23 @@ export async function PUT(
         updateData.convertedAt = new Date();
         updateData.convertedContactId = contact.id;
         updateData.convertedDealId = createdDealId;
+
+        // Migrate tasks and notes to newly converted contact and deal
+        await tx.task.updateMany({
+          where: { leadId: existing.id, tenantId },
+          data: {
+            contactId: contact.id,
+            dealId: createdDealId || undefined,
+          },
+        });
+
+        await tx.note.updateMany({
+          where: { leadId: existing.id, tenantId },
+          data: {
+            contactId: contact.id,
+            dealId: createdDealId || undefined,
+          },
+        });
       }
 
       return tx.lead.update({

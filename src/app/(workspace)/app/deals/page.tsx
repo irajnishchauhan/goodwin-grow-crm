@@ -314,6 +314,11 @@ export default function DealsPage() {
   }
 
   const totalPipelineVal = deals.reduce((acc, d) => acc + Number(d.value), 0);
+  const weightedRevenue = deals.reduce(
+    (acc, d) => acc + Number(d.value) * ((Number(d.probability) || Number(d.stage?.winProbability) || 0) / 100),
+    0
+  );
+  const wonDealsVal = deals.filter((d) => d.status === "WON").reduce((acc, d) => acc + Number(d.value), 0);
 
   return (
     <div className="space-y-6">
@@ -328,9 +333,23 @@ export default function DealsPage() {
               {deals.length} Active Deals
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Total Pipeline Value: <span className="font-bold text-slate-900">{formatCurrency(totalPipelineVal)}</span>
-          </p>
+          <div className="flex items-center gap-4 text-xs text-slate-500 mt-1 flex-wrap">
+            <span>
+              Pipeline Value: <strong className="text-slate-900">{formatCurrency(totalPipelineVal)}</strong>
+            </span>
+            <span>•</span>
+            <span title="Probability-weighted projected close revenue (Zoho Forecast)">
+              Weighted Forecast: <strong className="text-emerald-700">{formatCurrency(weightedRevenue)}</strong>
+            </span>
+            {wonDealsVal > 0 && (
+              <>
+                <span>•</span>
+                <span>
+                  Closed Won: <strong className="text-emerald-800">{formatCurrency(wonDealsVal)}</strong>
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

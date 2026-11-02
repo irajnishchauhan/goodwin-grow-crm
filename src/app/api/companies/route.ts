@@ -57,14 +57,33 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { name, industry, website, phone, email, address, city, state, country, assignedOwnerId } = body;
 
-    if (!name) {
+    if (!name || !name.trim()) {
       return NextResponse.json({ success: false, error: "Company name is required" }, { status: 400 });
+    }
+
+    const trimmedName = name.trim();
+    const duplicate = await prisma.company.findFirst({
+      where: {
+        tenantId,
+        name: { equals: trimmedName, mode: "insensitive" },
+      },
+    });
+
+    if (duplicate) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Company account "${trimmedName}" already exists in this workspace.`,
+          duplicateId: duplicate.id,
+        },
+        { status: 409 }
+      );
     }
 
     const company = await prisma.company.create({
       data: {
         tenantId,
-        name,
+        name: trimmedName,
         industry: industry || null,
         website: website || null,
         phone: phone || null,

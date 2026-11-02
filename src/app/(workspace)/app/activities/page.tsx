@@ -349,7 +349,28 @@ export default function ActivitiesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Details & Meeting Notes</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">Details & Notes</label>
+                  {type === "CALL" && (
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <span className="text-slate-400">Quick Outcome:</span>
+                      {["Connected", "Busy", "Voicemail", "Follow-up"].map((outcome) => (
+                        <button
+                          key={outcome}
+                          type="button"
+                          onClick={() =>
+                            setDescription((prev) =>
+                              prev ? `${prev} | Outcome: ${outcome}` : `Call Outcome: ${outcome}`
+                            )
+                          }
+                          className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-800 font-semibold cursor-pointer"
+                        >
+                          +{outcome}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <textarea
                   rows={3}
                   value={description}

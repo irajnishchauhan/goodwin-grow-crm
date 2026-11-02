@@ -138,6 +138,18 @@ export async function PUT(
         ? targetStage.winProbability
         : deal.probability;
 
+    // Automatic Zoho CRM Stage-to-Status alignment
+    let resolvedStatus = status ?? deal.status;
+    if (stageChanged && targetStage && !status) {
+      if (targetStage.winProbability === 100 || targetStage.name.toLowerCase().includes("won")) {
+        resolvedStatus = "WON";
+      } else if (targetStage.winProbability === 0 || targetStage.name.toLowerCase().includes("lost")) {
+        resolvedStatus = "LOST";
+      } else if (deal.status !== "OPEN") {
+        resolvedStatus = "OPEN";
+      }
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       const upd = await tx.deal.update({
         where: { id: deal.id },
@@ -156,7 +168,7 @@ export async function PUT(
           companyId: companyId !== undefined ? companyId : deal.companyId,
           contactId: contactId !== undefined ? contactId : deal.contactId,
           assignedOwnerId: assignedOwnerId !== undefined ? assignedOwnerId : deal.assignedOwnerId,
-          status: status ?? deal.status,
+          status: resolvedStatus,
           lostReason: lostReason !== undefined ? lostReason : deal.lostReason,
         },
         include: {

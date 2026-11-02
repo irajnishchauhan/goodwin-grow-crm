@@ -3,6 +3,24 @@ import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 import { evaluateAutomations } from "@/lib/automation/engine";
 
+function calculateLeadScore(lead: {
+  phone?: string | null;
+  email?: string | null;
+  companyName?: string | null;
+  serviceRequired?: string | null;
+  dealValue?: number | string | null;
+  priority?: string | null;
+}): number {
+  let score = 20; // Base presence
+  if (lead.phone && lead.phone.replace(/\D/g, "").length >= 10) score += 25;
+  if (lead.email && lead.email.includes("@")) score += 20;
+  if (lead.companyName && lead.companyName.trim().length > 1) score += 15;
+  if (lead.serviceRequired && lead.serviceRequired.trim().length > 1) score += 15;
+  if (lead.dealValue && Number(lead.dealValue) > 0) score += 15;
+  if (lead.priority === "HIGH" || lead.priority === "URGENT") score += 15;
+  return Math.min(100, score);
+}
+
 export async function GET(req: Request) {
   const tenantCtx = await getTenantContext();
   if (!tenantCtx) {
@@ -192,7 +210,7 @@ export async function POST(req: Request) {
         lostReason: status === "LOST" ? lostReason : null,
         clientId: targetClientId,
         priority,
-        score: Number(score) || 0,
+        score: Number(score) > 0 ? Number(score) : calculateLeadScore({ phone: trimmedPhone, email: trimmedEmail, companyName, serviceRequired, dealValue, priority }),
         tags: Array.isArray(tags) ? tags : [],
         assignedOwnerId: assignedOwnerId || tenantCtx.user.id,
       },

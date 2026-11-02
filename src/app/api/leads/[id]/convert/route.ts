@@ -114,13 +114,30 @@ export async function POST(
         },
       });
 
-      // 5. Activity Log
+      // 5. Transfer open tasks and notes to the converted contact & deal (Zoho standard)
+      await tx.task.updateMany({
+        where: { leadId: lead.id, tenantId },
+        data: {
+          contactId: contact.id,
+          dealId: dealId || undefined,
+        },
+      });
+
+      await tx.note.updateMany({
+        where: { leadId: lead.id, tenantId },
+        data: {
+          contactId: contact.id,
+          dealId: dealId || undefined,
+        },
+      });
+
+      // 6. Activity Log
       await tx.activity.create({
         data: {
           tenantId,
           type: "NOTE",
           title: "Lead Converted",
-          description: `Converted into Contact: ${contact.firstName} ${contact.lastName}${dealId ? " and created deal" : ""}`,
+          description: `Converted into Contact: ${contact.firstName} ${contact.lastName}${dealId ? " and created deal" : ""}. Tasks and notes seamlessly migrated.`,
           performedById: tenantCtx.user.id,
           leadId: lead.id,
           contactId: contact.id,
