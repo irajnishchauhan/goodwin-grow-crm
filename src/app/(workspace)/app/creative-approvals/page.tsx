@@ -116,6 +116,7 @@ export default function CreativeApprovalsPage() {
 
   // New Asset Modal
   const [newModalOpen, setNewModalOpen] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [title, setTitle] = useState("");
   const [assetType, setAssetType] = useState("Social Graphic");
   const [dimensions, setDimensions] = useState("1080x1080");
@@ -124,6 +125,35 @@ export default function CreativeApprovalsPage() {
   const [clientId, setClientId] = useState("");
   const [submittedBy, setSubmittedBy] = useState("Creative Pod");
   const [initialStage, setInitialStage] = useState("INTERNAL_REVIEW");
+
+  async function handleFileUpload(file: File, isVersionModal: boolean) {
+    try {
+      setUploadingFile(true);
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/agency/creatives/upload", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (data.success && data.data?.fileUrl) {
+        if (isVersionModal) {
+          setNewVersionUrl(data.data.fileUrl);
+          setNewVersionMediaType(data.data.mediaType || "image");
+        } else {
+          setFileUrl(data.data.fileUrl);
+          setMediaType(data.data.mediaType || "image");
+        }
+        showToast(`Asset "${file.name}" uploaded successfully!`);
+      } else {
+        showToast(data.error || "File upload failed", "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to upload file", "error");
+    } finally {
+      setUploadingFile(false);
+    }
+  }
 
   useEffect(() => {
     fetchClients();
@@ -1003,13 +1033,29 @@ export default function CreativeApprovalsPage() {
 
             <form onSubmit={handleUploadNewVersion} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Revised Asset URL (Image or MP4 Video)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    Revised Asset (Upload File or Enter URL)
+                  </label>
+                  <label className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer inline-flex items-center gap-1">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{uploadingFile ? "Uploading..." : "Upload Local Asset"}</span>
+                    <input
+                      type="file"
+                      accept="image/*,video/mp4,video/quicktime,application/pdf"
+                      className="hidden"
+                      disabled={uploadingFile}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file, true);
+                      }}
+                    />
+                  </label>
+                </div>
                 <input
-                  type="url"
+                  type="text"
                   required
-                  placeholder="https://..."
+                  placeholder="https://... or upload local asset directly above"
                   value={newVersionUrl}
                   onChange={(e) => {
                     setNewVersionUrl(e.target.value);
@@ -1138,10 +1184,27 @@ export default function CreativeApprovalsPage() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Initial Media URL</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">Initial Media Asset</label>
+                  <label className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 cursor-pointer inline-flex items-center gap-1">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{uploadingFile ? "Uploading..." : "Upload File"}</span>
+                    <input
+                      type="file"
+                      accept="image/*,video/mp4,video/quicktime,application/pdf"
+                      className="hidden"
+                      disabled={uploadingFile}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file, false);
+                      }}
+                    />
+                  </label>
+                </div>
                 <input
-                  type="url"
+                  type="text"
                   value={fileUrl}
+                  placeholder="Paste URL or upload local asset above"
                   onChange={(e) => {
                     setFileUrl(e.target.value);
                     if (e.target.value.match(/\.(mp4|webm|mov)(\?|$)/i)) {

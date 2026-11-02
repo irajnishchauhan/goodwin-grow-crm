@@ -29,6 +29,27 @@ export default function RetainersPage() {
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [selectedPlanDetails, setSelectedPlanDetails] = useState<ServicePackage | null>(null);
+  const [generatingInvoices, setGeneratingInvoices] = useState(false);
+  const [invoiceBanner, setInvoiceBanner] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  async function handleGenerateInvoices() {
+    if (!confirm("Generate recurring monthly tax invoices (with 18% GST) for all active retainer clients?")) return;
+    try {
+      setGeneratingInvoices(true);
+      setInvoiceBanner(null);
+      const res = await fetch("/api/agency/retainers/generate-invoices", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setInvoiceBanner({ type: "success", message: data.message });
+      } else {
+        setInvoiceBanner({ type: "error", message: data.error || "Failed to generate invoices" });
+      }
+    } catch (err: any) {
+      setInvoiceBanner({ type: "error", message: err.message || "Network error" });
+    } finally {
+      setGeneratingInvoices(false);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/agency/clients")
@@ -83,6 +104,14 @@ export default function RetainersPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleGenerateInvoices}
+            disabled={generatingInvoices}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-black text-white font-semibold text-xs shadow-sm transition disabled:opacity-50 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>{generatingInvoices ? "Generating Invoices..." : "Generate Monthly Invoices"}</span>
+          </button>
           <Link
             href="/app/clients"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm transition"
@@ -92,6 +121,24 @@ export default function RetainersPage() {
           </Link>
         </div>
       </div>
+
+      {invoiceBanner && (
+        <div
+          className={`p-4 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+            invoiceBanner.type === "success"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+              : "bg-rose-50 border-rose-200 text-rose-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>{invoiceBanner.message}</span>
+          </div>
+          <button onClick={() => setInvoiceBanner(null)} className="text-slate-400 hover:text-slate-600">
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Top Package & Revenue Analytics Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

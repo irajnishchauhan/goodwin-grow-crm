@@ -112,3 +112,4 @@ export function generateTeamInviteEmailHtml(inviterName: string, workspaceName: 
     </div>
   `;
 }
+

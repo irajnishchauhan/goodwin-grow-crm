@@ -49,6 +49,27 @@ export default function ContractsRenewalsPage() {
   const [selectedClient, setSelectedClient] = useState<ClientContract | null>(null);
   const [showRenewModal, setShowRenewModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [notifying, setNotifying] = useState(false);
+  const [notifyBanner, setNotifyBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  async function handleSendRenewalReminders() {
+    if (!confirm("Dispatch automated renewal reminders to all clients with contracts expiring in the next 30 days?")) return;
+    try {
+      setNotifying(true);
+      setNotifyBanner(null);
+      const res = await fetch("/api/agency/clients/renewals/notify", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNotifyBanner({ type: "success", text: data.message });
+      } else {
+        setNotifyBanner({ type: "error", text: data.error || "Failed to dispatch reminders" });
+      }
+    } catch (err: any) {
+      setNotifyBanner({ type: "error", text: err.message || "Network error" });
+    } finally {
+      setNotifying(false);
+    }
+  }
 
   // Form State
   const [monthlyRetainer, setMonthlyRetainer] = useState("");
@@ -226,6 +247,14 @@ export default function ContractsRenewalsPage() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={handleSendRenewalReminders}
+            disabled={notifying}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition disabled:opacity-50 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>{notifying ? "Sending..." : "Send Renewal Reminders (30d)"}</span>
+          </button>
+          <button
             onClick={exportContractsToCSV}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs transition"
           >
@@ -241,6 +270,24 @@ export default function ContractsRenewalsPage() {
           </Link>
         </div>
       </div>
+
+      {notifyBanner && (
+        <div
+          className={`p-4 rounded-xl border text-xs font-semibold flex items-center justify-between ${
+            notifyBanner.type === "success"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+              : "bg-rose-50 border-rose-200 text-rose-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>{notifyBanner.text}</span>
+          </div>
+          <button onClick={() => setNotifyBanner(null)} className="text-slate-400 hover:text-slate-600">
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* KPI Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

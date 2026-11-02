@@ -121,7 +121,11 @@ export async function PUT(
         state: body.state !== undefined ? body.state : existing.state,
         activePackage: body.activePackage ?? existing.activePackage,
         monthlyRetainer: body.monthlyRetainer !== undefined ? Number(body.monthlyRetainer) : existing.monthlyRetainer,
-        status: body.status ?? existing.status,
+        status:
+          body.status ??
+          (body.onboardingProgress !== undefined && Number(body.onboardingProgress) >= 100 && existing.status === "ONBOARDING"
+            ? "ACTIVE"
+            : existing.status),
         onboardingProgress: body.onboardingProgress !== undefined ? Number(body.onboardingProgress) : existing.onboardingProgress,
         postsPlanned: body.postsPlanned !== undefined ? Number(body.postsPlanned) : existing.postsPlanned,
         postsCompleted: body.postsCompleted !== undefined ? Number(body.postsCompleted) : existing.postsCompleted,

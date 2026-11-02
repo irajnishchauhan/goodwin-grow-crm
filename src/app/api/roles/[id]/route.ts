@@ -112,13 +112,6 @@ export async function PUT(
       return NextResponse.json({ success: false, error: "Role not found" }, { status: 404 });
     }
 
-    if (role.tenantId === null) {
-      return NextResponse.json(
-        { success: false, error: "Cannot modify global system default roles. Create a custom workspace role instead." },
-        { status: 403 }
-      );
-    }
-
     const body = await req.json();
     const { name, description, permissionCodes } = body;
 
@@ -134,12 +127,13 @@ export async function PUT(
       );
     }
 
-    // 1. Update Role fields
+    // 1. Update Role fields (and ensure scoped to current tenant if it had null tenantId)
     const updatedRole = await prisma.role.update({
       where: { id: role.id },
       data: {
         name: name !== undefined ? name.trim() : role.name,
         description: description !== undefined ? (description ? description.trim() : null) : role.description,
+        ...(role.tenantId === null && !tenantCtx.isPlatformAdmin ? { tenantId } : {}),
       },
     });
 
@@ -231,9 +225,12 @@ export async function DELETE(
       );
     }
 
-    // Automatically unassign any team members who had this role
+    // Automatically unassign any team members of this tenant who had this role
     await prisma.membershipRole.deleteMany({
-      where: { roleId: role.id },
+      where: {
+        roleId: role.id,
+        ...(tenantCtx.isPlatformAdmin ? {} : { membership: { tenantId } }),
+      },
     }).catch(() => {});
 
     // Clear any invitations referencing this role
@@ -241,15 +238,16 @@ export async function DELETE(
       where: { roleId: role.id },
     }).catch(() => {});
 
-    // Delete role permissions
-    await prisma.rolePermission.deleteMany({
-      where: { roleId: role.id },
-    }).catch(() => {});
+    // Delete role and role permissions if scoped to tenant or platform admin
+    if (role.tenantId === tenantId || tenantCtx.isPlatformAdmin) {
+      await prisma.rolePermission.deleteMany({
+        where: { roleId: role.id },
+      }).catch(() => {});
 
-    // Delete role
-    await prisma.role.delete({
-      where: { id: role.id },
-    });
+      await prisma.role.delete({
+        where: { id: role.id },
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,

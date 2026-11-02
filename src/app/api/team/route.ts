@@ -225,19 +225,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 3. Check existing membership
-    const existingMembership = await prisma.tenantMembership.findUnique({
-      where: { tenantId_userId: { tenantId, userId: user.id } },
-    });
-
-    if (existingMembership) {
-      return NextResponse.json(
-        { success: false, error: "User is already a member of this workspace" },
-        { status: 400 }
-      );
-    }
-
-    // 4. Resolve roles
+    // 3. Resolve roles
     const selectedRoleIds: string[] = [];
     if (roleId) selectedRoleIds.push(roleId);
     if (Array.isArray(roleIds)) {
@@ -247,14 +235,55 @@ export async function POST(req: Request) {
     }
 
     if (selectedRoleIds.length === 0) {
-      // Default to Sales Executive or Viewer
+      // Default to Sales Executive or Viewer or Agency Role
       const defaultRole = await prisma.role.findFirst({
-        where: { tenantId, name: { in: ["Sales Executive", "Sales Rep", "Viewer"] } },
+        where: { tenantId, name: { in: ["Agency Admin", "Account Manager", "Sales Executive", "Sales Rep", "Viewer"] } },
       });
       if (defaultRole) selectedRoleIds.push(defaultRole.id);
     }
 
-    // 5. Create membership
+    // 4. Check existing membership
+    const existingMembership = await prisma.tenantMembership.findUnique({
+      where: { tenantId_userId: { tenantId, userId: user.id } },
+    });
+
+    if (existingMembership) {
+      // Reactivate membership and sync roles and password
+      const updatedMembership = await prisma.tenantMembership.update({
+        where: { id: existingMembership.id },
+        data: {
+          status: status === "INVITED" ? "INVITED" : "ACTIVE",
+        },
+      });
+
+      if (selectedRoleIds.length > 0) {
+        await prisma.membershipRole.deleteMany({
+          where: { membershipId: existingMembership.id },
+        });
+        for (const rId of selectedRoleIds) {
+          await prisma.membershipRole.create({
+            data: {
+              membershipId: existingMembership.id,
+              roleId: rId,
+            },
+          });
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Team member credentials and role updated successfully",
+        data: {
+          membershipId: updatedMembership.id,
+          userId: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          status: updatedMembership.status,
+        },
+      });
+    }
+
+    // 5. Create new membership
     const membership = await prisma.tenantMembership.create({
       data: {
         tenantId,

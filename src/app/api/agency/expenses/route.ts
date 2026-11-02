@@ -40,7 +40,12 @@ export async function GET(req: Request) {
 
   const profitability = clients.map((c) => {
     const totalRevenue = c.invoices.reduce((acc, inv) => acc + Number(inv.subtotal), 0) || Number(c.monthlyRetainer);
-    const recordedExpenses = c.expenses.reduce((acc, exp) => acc + Number(exp.amount), 0);
+    const recordedExpenses = c.expenses
+      .filter((exp) => !exp.isBillable)
+      .reduce((acc, exp) => acc + Number(exp.amount), 0);
+    const passThroughSpend = c.expenses
+      .filter((exp) => exp.isBillable)
+      .reduce((acc, exp) => acc + Number(exp.amount), 0);
     const pkgDef = getPackageByName(c.activePackage);
     const estimatedCost = Number(c.estimatedDeliveryCost) || (pkgDef ? pkgDef.estimatedDeliveryCost : Math.round(Number(c.monthlyRetainer) * 0.3));
     const totalExpenses = recordedExpenses > 0 ? recordedExpenses : estimatedCost;
@@ -54,6 +59,7 @@ export async function GET(req: Request) {
       monthlyRetainer: Number(c.monthlyRetainer),
       totalRevenue,
       totalExpenses,
+      passThroughSpend,
       netProfit,
       grossMargin: Math.round(grossMargin),
     };
