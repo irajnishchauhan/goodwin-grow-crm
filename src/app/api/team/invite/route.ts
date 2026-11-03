@@ -35,10 +35,20 @@ export async function POST(req: Request) {
 
     const tenantId = tenantCtx.tenant.id;
     const body = await req.json();
-    const { email, roleName = "Sales Executive", fullName, password } = body;
+    const { email, roleName = "Sales Executive", fullName, password, agencyClientId } = body;
 
     if (!email) {
       return NextResponse.json({ success: false, error: "Email is required" }, { status: 400 });
+    }
+
+    // Verify agencyClient if inviting an external client portal user
+    if (agencyClientId) {
+      const client = await prisma.agencyClient.findFirst({
+        where: { id: agencyClientId, tenantId },
+      });
+      if (!client) {
+        return NextResponse.json({ success: false, error: "Agency client not found in this workspace" }, { status: 404 });
+      }
     }
 
     // 1. Enforce Seat Limits
@@ -63,8 +73,25 @@ export async function POST(req: Request) {
 
     // 2. Resolve Role
     let role = await prisma.role.findFirst({
-      where: { tenantId, name: roleName },
+      where: { tenantId, name: agencyClientId ? "Client User" : roleName },
     });
+
+    if (!role && agencyClientId) {
+      role = await prisma.role.create({
+        data: {
+          tenantId,
+          name: "Client User",
+          description: "External client user with self-service portal access",
+          isSystem: true,
+        },
+      });
+    }
+
+    if (!role) {
+      role = await prisma.role.findFirst({
+        where: { tenantId, name: roleName },
+      });
+    }
 
     if (!role) {
       role = await prisma.role.findFirst({
@@ -122,6 +149,7 @@ export async function POST(req: Request) {
         userId: user.id,
         isOwner: false,
         status: "INVITED",
+        agencyClientId: agencyClientId || null,
       },
     });
 

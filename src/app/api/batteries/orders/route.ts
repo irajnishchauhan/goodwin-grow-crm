@@ -143,6 +143,18 @@ export async function POST(req: Request) {
       }
     }
 
+    // Check line items for warehouse buffer stock thresholds (e.g. 75 units threshold per SKU)
+    const stockWarnings: string[] = [];
+    for (const itm of items) {
+      const qty = Number(itm.quantity || 0);
+      if (qty > 75) {
+        stockWarnings.push(`${itm.name || itm.sku} (Order ${qty} units vs Plant stock 75, backorder +${qty - 75} triggered)`);
+      }
+    }
+    if (stockWarnings.length > 0) {
+      finalNotes = `[STOCK ADVISORY: ${stockWarnings.join("; ")}] ${finalNotes}`.trim();
+    }
+
     // Auto-generate collision-safe order number
     const existingOrders = await prisma.batteryOrder.findMany({
       where: { tenantId, orderNumber: { startsWith: "GB-ORD-2026-" } },

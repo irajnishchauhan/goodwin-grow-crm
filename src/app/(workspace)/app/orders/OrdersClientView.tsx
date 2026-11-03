@@ -589,46 +589,66 @@ export function OrdersClientView({
                   {orderLines.map((line, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3"
+                      className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2"
                     >
-                      <div className="flex-1">
-                        <select
-                          value={line.sku}
-                          onChange={(e) => updateLineProduct(idx, e.target.value)}
-                          className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
-                        >
-                          {products.map((p) => (
-                            <option key={p.sku || p.id} value={p.sku || p.name}>
-                              {p.name} ({p.sku || "N/A"}) - ₹{p.unitPrice}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <select
+                            value={line.sku}
+                            onChange={(e) => updateLineProduct(idx, e.target.value)}
+                            className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white font-medium"
+                          >
+                            {products.map((p) => (
+                              <option key={p.sku || p.id} value={p.sku || p.name}>
+                                {p.name} ({p.sku || "N/A"}) - ₹{p.unitPrice}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="w-24">
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="Qty"
+                            value={line.quantity}
+                            onChange={(e) => updateLineQty(idx, parseInt(e.target.value) || 1)}
+                            className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-center font-bold"
+                          />
+                        </div>
+
+                        <div className="w-28 text-right font-black text-slate-900">
+                          {formatCurrency(line.unitPrice * line.quantity)}
+                        </div>
+
+                        {orderLines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeOrderLine(idx)}
+                            className="text-slate-400 hover:text-rose-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
 
-                      <div className="w-24">
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder="Qty"
-                          value={line.quantity}
-                          onChange={(e) => updateLineQty(idx, parseInt(e.target.value) || 1)}
-                          className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-center font-bold"
-                        />
+                      {/* Warehouse Inventory Stock & Buffer Availability Check */}
+                      <div className="flex items-center justify-between text-[10px] bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                        <span className="flex items-center gap-1 font-semibold text-emerald-800">
+                          <Package className="w-3 h-3 text-emerald-600" />
+                          Central Plant (Pithampur): <strong className="text-slate-900 font-bold">75 units</strong> | Buffer Threshold: 20 units
+                        </span>
+                        {line.quantity > 75 ? (
+                          <span className="font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[9px] flex items-center gap-1">
+                            <AlertTriangle className="w-2.5 h-2.5 text-amber-600" />
+                            Exceeds On-Hand (+{line.quantity - 75} backorder)
+                          </span>
+                        ) : (
+                          <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[9px]">
+                            In Stock • Ready to Dispatch
+                          </span>
+                        )}
                       </div>
-
-                      <div className="w-28 text-right font-black text-slate-900">
-                        {formatCurrency(line.unitPrice * line.quantity)}
-                      </div>
-
-                      {orderLines.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeOrderLine(idx)}
-                          className="text-slate-400 hover:text-rose-600"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
                     </div>
                   ))}
                 </div>

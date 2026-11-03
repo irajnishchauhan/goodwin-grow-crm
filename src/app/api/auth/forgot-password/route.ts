@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { sendEmail, generatePasswordResetEmailHtml } from "@/lib/email/sender";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
@@ -15,7 +16,15 @@ export async function POST(req: Request) {
       );
     }
 
+    const clientIp = getClientIp(req);
     const cleanEmail = email.toLowerCase().trim();
+    const limitCheck = checkRateLimit(`forgot-pwd:${clientIp}:${cleanEmail}`, 5, 900000);
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many password reset requests. Please wait 15 minutes before trying again." },
+        { status: 429 }
+      );
+    }
 
     // Check if user exists
     const user = await prisma.user.findUnique({

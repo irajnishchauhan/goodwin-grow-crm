@@ -194,6 +194,13 @@ export async function POST(req: Request) {
 
     const targetClientId = clientId || null;
 
+    const utmTags: string[] = [];
+    if (body.utm_source) utmTags.push(`utm_source:${body.utm_source}`);
+    if (body.utm_medium) utmTags.push(`utm_medium:${body.utm_medium}`);
+    if (body.utm_campaign) utmTags.push(`utm_campaign:${body.utm_campaign}`);
+    if (body.utm_content) utmTags.push(`utm_content:${body.utm_content}`);
+    const resolvedTags = Array.from(new Set([...(Array.isArray(tags) ? tags : []), ...utmTags]));
+
     const lead = await prisma.lead.create({
       data: {
         tenantId,
@@ -203,15 +210,15 @@ export async function POST(req: Request) {
         email: trimmedEmail,
         phone: trimmedPhone,
         status,
-        source: source || null,
-        serviceRequired: serviceRequired || null,
+        source: source || (body.utm_source ? body.utm_source.toUpperCase() : null),
+        serviceRequired: serviceRequired || (body.utm_campaign ? `Campaign: ${body.utm_campaign}` : null),
         dealValue: dealValue ? Number(dealValue) : null,
         nextFollowUp: nextFollowUp ? new Date(nextFollowUp) : null,
         lostReason: status === "LOST" ? lostReason : null,
         clientId: targetClientId,
         priority,
         score: Number(score) > 0 ? Number(score) : calculateLeadScore({ phone: trimmedPhone, email: trimmedEmail, companyName, serviceRequired, dealValue, priority }),
-        tags: Array.isArray(tags) ? tags : [],
+        tags: resolvedTags,
         assignedOwnerId: assignedOwnerId || tenantCtx.user.id,
       },
       include: {

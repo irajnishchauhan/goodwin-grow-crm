@@ -125,7 +125,13 @@ export async function POST(req: Request) {
       nextFollowUpDate,
       paymentReceived,
       paymentMode,
+      scrapUnits = 0,
+      scrapRatePerUnit = 1800,
     } = body;
+
+    const numScrapUnits = Number(scrapUnits) || 0;
+    const scrapRate = Number(scrapRatePerUnit) || 1800;
+    const scrapCredit = numScrapUnits * scrapRate;
 
     // If no `id` is provided, create a new collection invoice record
     if (!id) {
@@ -148,10 +154,16 @@ export async function POST(req: Request) {
       const resolvedInvoiceNumber =
         invoiceNumber || `GB-INV-2026-${(existingCount + 1).toString().padStart(3, "0")}`;
       const resolvedDueDate = dueDate ? new Date(dueDate) : new Date(Date.now() + 30 * 86400000);
-      const paidVal = Number(paymentReceived || amountPaid || 0);
+      const paidVal = Number(paymentReceived || amountPaid || 0) + scrapCredit;
       const dueVal = Number(amountDue);
       const diffMs = Date.now() - resolvedDueDate.getTime();
       const ageingDays = diffMs > 0 ? Math.floor(diffMs / 86400000) : 0;
+
+      let scrapNote = "";
+      if (numScrapUnits > 0) {
+        scrapNote = ` [SCRAP BUYBACK: ${numScrapUnits} battery cores returned @ ₹${scrapRate.toLocaleString("en-IN")}/unit = ₹${scrapCredit.toLocaleString("en-IN")} credited]`;
+      }
+      const finalFollowUpNotes = (followUpNotes || "") + scrapNote;
 
       let resolvedStatus: CollectionStatus = status
         ? (status as CollectionStatus)
@@ -172,10 +184,10 @@ export async function POST(req: Request) {
           amountPaid: paidVal,
           dueDate: resolvedDueDate,
           paymentDate: paidVal > 0 ? new Date() : null,
-          paymentMode: paidVal > 0 ? paymentMode || "NEFT / RTGS" : null,
+          paymentMode: numScrapUnits > 0 && Number(paymentReceived || amountPaid || 0) === 0 ? "Scrap Core Return Credit" : paidVal > 0 ? paymentMode || "NEFT / RTGS" : null,
           status: resolvedStatus,
           ageingDays,
-          followUpNotes: followUpNotes || null,
+          followUpNotes: finalFollowUpNotes.trim() || null,
           nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate) : null,
         },
         include: { partner: true },
@@ -207,8 +219,13 @@ export async function POST(req: Request) {
 
     const updateData: any = {};
 
-    if (followUpNotes !== undefined) {
-      updateData.followUpNotes = followUpNotes;
+    let scrapNote = "";
+    if (numScrapUnits > 0) {
+      scrapNote = ` [SCRAP BUYBACK: ${numScrapUnits} battery cores returned @ ₹${scrapRate.toLocaleString("en-IN")}/unit = ₹${scrapCredit.toLocaleString("en-IN")} credited]`;
+    }
+
+    if (followUpNotes !== undefined || scrapNote) {
+      updateData.followUpNotes = `${followUpNotes !== undefined ? followUpNotes : current.followUpNotes || ""}${scrapNote}`.trim() || null;
     }
     if (nextFollowUpDate !== undefined) {
       updateData.nextFollowUpDate = nextFollowUpDate ? new Date(nextFollowUpDate) : null;
@@ -217,12 +234,14 @@ export async function POST(req: Request) {
       updateData.status = status as CollectionStatus;
     }
 
-    const addedPayment = Number(paymentReceived || amountPaid || 0);
+    const addedPayment = Number(paymentReceived || amountPaid || 0) + scrapCredit;
     if (addedPayment > 0) {
       const newPaid = Number(current.amountPaid) + addedPayment;
       updateData.amountPaid = newPaid;
       updateData.paymentDate = new Date();
-      updateData.paymentMode = paymentMode || "NEFT / RTGS";
+      updateData.paymentMode = numScrapUnits > 0 && Number(paymentReceived || amountPaid || 0) === 0
+        ? "Scrap Core Return Credit"
+        : paymentMode || "NEFT / RTGS";
 
       if (newPaid >= Number(current.amountDue)) {
         updateData.status = CollectionStatus.PAID;

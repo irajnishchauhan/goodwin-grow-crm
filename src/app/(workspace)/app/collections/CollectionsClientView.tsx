@@ -71,6 +71,10 @@ export function CollectionsClientView({
   const [selectedCollection, setSelectedCollection] = useState<CollectionItem | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState("NEFT / RTGS");
+  const [scrapUnits, setScrapUnits] = useState("");
+  const [scrapRate, setScrapRate] = useState("1800");
+  const [newScrapUnits, setNewScrapUnits] = useState("");
+  const [newScrapRate, setNewScrapRate] = useState("1800");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [followUpNote, setFollowUpNote] = useState("");
   const [nextFollowUpDate, setNextFollowUpDate] = useState("");
@@ -139,7 +143,11 @@ export function CollectionsClientView({
       const res = await fetch("/api/batteries/collections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newCollection),
+        body: JSON.stringify({
+          ...newCollection,
+          scrapUnits: newScrapUnits ? Number(newScrapUnits) : 0,
+          scrapRatePerUnit: newScrapRate ? Number(newScrapRate) : 1800,
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -153,6 +161,8 @@ export function CollectionsClientView({
           dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
           followUpNotes: "",
         });
+        setNewScrapUnits("");
+        setNewScrapRate("1800");
         setToastMessage(`Created invoice ${data.data.invoiceNumber} in receivables!`);
         setTimeout(() => setToastMessage(null), 5000);
       } else {
@@ -178,6 +188,8 @@ export function CollectionsClientView({
         body: JSON.stringify({
           paymentAmount: paymentAmount ? Number(paymentAmount) : 0,
           paymentMode,
+          scrapUnits: scrapUnits ? Number(scrapUnits) : 0,
+          scrapRatePerUnit: scrapRate ? Number(scrapRate) : 1800,
           status: selectedStatus || undefined,
           followUpNotes: followUpNote,
           nextFollowUpDate: nextFollowUpDate || undefined,
@@ -191,6 +203,8 @@ export function CollectionsClientView({
         );
         setSelectedCollection(null);
         setPaymentAmount("");
+        setScrapUnits("");
+        setScrapRate("1800");
         setSelectedStatus("");
         setFollowUpNote("");
         setNextFollowUpDate("");
@@ -529,7 +543,7 @@ export function CollectionsClientView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Record Payment Received (₹)</label>
+                  <label className="font-bold text-slate-700 block mb-1">Record Cash / Bank Payment (₹)</label>
                   <input
                     type="number"
                     placeholder="e.g. 42000"
@@ -551,6 +565,47 @@ export function CollectionsClientView({
                     <option value="Cash">Cash</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Old Battery Scrap Core Buyback Return */}
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-emerald-950 text-[11px] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Old Battery Scrap Core Buyback (Core Credit)
+                  </div>
+                  {Number(scrapUnits) > 0 && (
+                    <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      + ₹{(Number(scrapUnits) * (Number(scrapRate) || 1800)).toLocaleString("en-IN")} Credit
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-semibold text-emerald-900 block mb-0.5">Scrap Cores Returned (Units)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 10"
+                      value={scrapUnits}
+                      onChange={(e) => setScrapUnits(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white font-bold text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-emerald-900 block mb-0.5">Scrap Buyback Rate (₹/Core)</label>
+                    <input
+                      type="number"
+                      min="500"
+                      value={scrapRate}
+                      onChange={(e) => setScrapRate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white font-bold text-xs"
+                    />
+                  </div>
+                </div>
+                <p className="text-[9px] text-emerald-700 leading-tight">
+                  Spent lead-acid cores returned by dealer automatically offset invoice due amount and sync with the factory scrap recycling ledger.
+                </p>
               </div>
 
               <div>
@@ -685,6 +740,44 @@ export function CollectionsClientView({
                     onChange={(e) => setNewCollection({ ...newCollection, amountPaid: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200"
                   />
+                </div>
+              </div>
+
+              {/* Old Battery Scrap Core Buyback Return on Invoice Creation */}
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-emerald-950 text-[11px] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Old Battery Scrap Core Buyback (Core Credit)
+                  </div>
+                  {Number(newScrapUnits) > 0 && (
+                    <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      + ₹{(Number(newScrapUnits) * (Number(newScrapRate) || 1800)).toLocaleString("en-IN")} Credit
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-semibold text-emerald-900 block mb-0.5">Scrap Cores Returned (Units)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 10"
+                      value={newScrapUnits}
+                      onChange={(e) => setNewScrapUnits(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white font-bold text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-semibold text-emerald-900 block mb-0.5">Scrap Buyback Rate (₹/Core)</label>
+                    <input
+                      type="number"
+                      min="500"
+                      value={newScrapRate}
+                      onChange={(e) => setNewScrapRate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-white font-bold text-xs"
+                    />
+                  </div>
                 </div>
               </div>
 

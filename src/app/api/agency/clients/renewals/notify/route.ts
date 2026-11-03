@@ -43,15 +43,15 @@ export async function POST(req: Request) {
 
     let notifiedCount = 0;
     for (const client of expiringClients) {
-      if (client.email) {
-        const renewalDateStr = client.contractRenewalDate
-          ? new Date(client.contractRenewalDate).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })
-          : "End of month";
+      const renewalDateStr = client.contractRenewalDate
+        ? new Date(client.contractRenewalDate).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })
+        : "End of month";
 
+      if (client.email) {
         await sendEmail({
           to: client.email,
           subject: `Goodwin Grow AI — Retainer Agreement Renewal Reminder (${client.brandName || client.name})`,
@@ -70,6 +70,35 @@ export async function POST(req: Request) {
         }).catch((e) => console.error("Email send failed:", e));
 
         notifiedCount++;
+      }
+
+      // Auto-escalate urgent renewal task for contracts expiring within 15 days
+      const daysUntilExpiry = client.contractRenewalDate
+        ? Math.round((new Date(client.contractRenewalDate).getTime() - now.getTime()) / 86400000)
+        : 30;
+
+      if (daysUntilExpiry <= 15) {
+        const existingTask = await prisma.task.findFirst({
+          where: {
+            tenantId,
+            title: { contains: `Contract Renewal: ${client.brandName || client.name}` },
+            status: { not: "COMPLETED" },
+          },
+        });
+
+        if (!existingTask) {
+          await prisma.task.create({
+            data: {
+              tenantId,
+              title: `Urgent: Contract Renewal: ${client.brandName || client.name} (${daysUntilExpiry} days remaining)`,
+              description: `Contract renewal due in ${daysUntilExpiry} days (${renewalDateStr}). Review quarterly ROAS performance, prepare renewal term sheet, and schedule executive extension review.`,
+              priority: "URGENT",
+              status: "PENDING",
+              dueDate: client.contractRenewalDate ? new Date(client.contractRenewalDate) : new Date(Date.now() + 7 * 86400000),
+              assignedToId: tenantCtx.user.id,
+            },
+          }).catch(() => {});
+        }
       }
     }
 

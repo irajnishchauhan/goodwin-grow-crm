@@ -107,11 +107,11 @@ const agencyNavGroups = [
   {
     category: "MARKETING",
     links: [
-      { name: "Social Media", href: "/app/social-media", icon: Share2 },
+      { name: "Campaigns Hub", href: "/app/campaigns", icon: Megaphone },
       { name: "Meta Ads", href: "/app/meta-ads", icon: Target },
       { name: "Google Ads", href: "/app/google-ads", icon: Search },
       { name: "SEO & Local GBP", href: "/app/seo", icon: Globe },
-      { name: "Campaigns", href: "/app/campaigns", icon: Megaphone },
+      { name: "Social Media", href: "/app/social-media", icon: Share2 },
     ],
   },
   {

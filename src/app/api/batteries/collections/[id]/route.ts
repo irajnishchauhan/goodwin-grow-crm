@@ -62,7 +62,13 @@ async function updateCollection(
       followUpNotes,
       nextFollowUpDate,
       status,
+      scrapUnits = 0,
+      scrapRatePerUnit = 1800,
     } = body;
+
+    const numScrapUnits = Number(scrapUnits) || 0;
+    const scrapRate = Number(scrapRatePerUnit) || 1800;
+    const scrapCredit = numScrapUnits * scrapRate;
 
     let updatedAmountPaid = Number(collection.amountPaid);
     let newStatus = collection.status;
@@ -70,19 +76,31 @@ async function updateCollection(
     let deltaPaid = 0;
 
     if (paymentAmount !== undefined || paymentReceived !== undefined) {
-      deltaPaid = Number(paymentAmount ?? paymentReceived ?? 0);
+      deltaPaid = Number(paymentAmount ?? paymentReceived ?? 0) + scrapCredit;
       if (deltaPaid > 0) {
         updatedAmountPaid += deltaPaid;
         paymentDate = reqPaymentDate ? new Date(reqPaymentDate) : new Date();
       }
     } else if (amountPaid !== undefined) {
-      const nextPaid = Number(amountPaid);
+      const nextPaid = Number(amountPaid) + scrapCredit;
       deltaPaid = Math.max(0, nextPaid - Number(collection.amountPaid));
       updatedAmountPaid = nextPaid;
       if (deltaPaid > 0) {
         paymentDate = reqPaymentDate ? new Date(reqPaymentDate) : new Date();
       }
+    } else if (scrapCredit > 0) {
+      deltaPaid = scrapCredit;
+      updatedAmountPaid += deltaPaid;
+      paymentDate = reqPaymentDate ? new Date(reqPaymentDate) : new Date();
     }
+
+    let scrapNote = "";
+    if (numScrapUnits > 0) {
+      scrapNote = ` [SCRAP BUYBACK: ${numScrapUnits} battery cores returned @ ₹${scrapRate.toLocaleString("en-IN")}/unit = ₹${scrapCredit.toLocaleString("en-IN")} credited]`;
+    }
+    const finalFollowUpNotes = followUpNotes !== undefined
+      ? `${followUpNotes}${scrapNote}`.trim()
+      : scrapNote ? `${collection.followUpNotes || ""}${scrapNote}`.trim() : undefined;
 
     if (deltaPaid > 0) {
       if (updatedAmountPaid >= Number(collection.amountDue)) {
@@ -102,8 +120,10 @@ async function updateCollection(
         amountPaid: updatedAmountPaid,
         status: newStatus,
         paymentDate,
-        ...(paymentMode !== undefined && { paymentMode }),
-        ...(followUpNotes !== undefined && { followUpNotes }),
+        paymentMode: numScrapUnits > 0 && deltaPaid === scrapCredit
+          ? "Scrap Core Return Credit"
+          : paymentMode !== undefined ? paymentMode : collection.paymentMode,
+        ...(finalFollowUpNotes !== undefined && { followUpNotes: finalFollowUpNotes }),
         ...(nextFollowUpDate !== undefined && {
           nextFollowUpDate: nextFollowUpDate ? new Date(nextFollowUpDate) : null,
         }),

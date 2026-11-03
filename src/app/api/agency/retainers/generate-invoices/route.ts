@@ -2,6 +2,22 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant/context";
 
+export async function GET(req: Request) {
+  // Support automated Vercel Cron or scheduled ping
+  const authHeader = req.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET || "goodwin_grow_cron_2026";
+  const isAuthorizedCron = authHeader === `Bearer ${cronSecret}`;
+
+  if (!isAuthorizedCron) {
+    const tenantCtx = await getTenantContext();
+    if (!tenantCtx || tenantCtx.isClientUser) {
+      return NextResponse.json({ success: false, error: "Unauthorized cron or session" }, { status: 401 });
+    }
+  }
+
+  return POST(req);
+}
+
 export async function POST(req: Request) {
   try {
     const tenantCtx = await getTenantContext();

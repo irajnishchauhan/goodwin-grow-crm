@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { ensureDatabaseSchema, ensureRubricPersonas } from "@/lib/db/auto-migrate";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
@@ -27,10 +28,18 @@ export async function POST(req: Request) {
       );
     }
 
+    const clientIp = getClientIp(req);
+    const normalizedEmail = email.toLowerCase().trim();
+    const limitCheck = checkRateLimit(`login:${clientIp}:${normalizedEmail}`, 10, 300000);
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many failed login attempts. Please try again in 5 minutes." },
+        { status: 429 }
+      );
+    }
+
     // Ensure database schema asynchronously without blocking authentication
     ensureDatabaseSchema().catch((err) => console.warn("Schema check warning:", err));
-
-    const normalizedEmail = email.toLowerCase().trim();
 
     let user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
