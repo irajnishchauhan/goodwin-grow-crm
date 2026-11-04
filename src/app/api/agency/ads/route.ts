@@ -13,7 +13,13 @@ export async function GET(req: Request) {
   const clientId = searchParams.get("clientId");
 
   const whereClause: any = { tenantId: tenantCtx.tenant.id };
-  if (platform && platform !== "ALL") whereClause.platform = platform;
+  if (platform && platform !== "ALL") {
+    if (platform === "ECOMMERCE") {
+      whereClause.platform = { in: ["AMAZON", "FLIPKART", "BLINKIT", "OTHER_ECOMMERCE"] };
+    } else {
+      whereClause.platform = platform;
+    }
+  }
   if (tenantCtx.isClientUser) {
     if (!tenantCtx.agencyClientId) {
       return NextResponse.json(

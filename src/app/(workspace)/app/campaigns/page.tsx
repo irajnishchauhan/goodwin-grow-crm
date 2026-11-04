@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Megaphone,
   Plus,
@@ -23,6 +24,14 @@ import {
   CheckCircle2,
   PauseCircle,
   PlayCircle,
+  ShoppingBag,
+  Store,
+  Zap,
+  ShoppingCart,
+  Tag,
+  Globe,
+  Layers,
+  Filter,
 } from "lucide-react";
 
 interface AdCampaign {
@@ -48,12 +57,78 @@ interface ClientOption {
   brandName?: string | null;
 }
 
+function getPlatformBadge(platform?: string) {
+  const p = platform?.toUpperCase();
+  if (p === "AMAZON") {
+    return {
+      name: "Amazon Ads",
+      badgeClass: "bg-amber-100 text-amber-900 border-amber-300 font-bold",
+      icon: ShoppingBag,
+    };
+  }
+  if (p === "FLIPKART") {
+    return {
+      name: "Flipkart Ads",
+      badgeClass: "bg-blue-100 text-blue-900 border-blue-300 font-bold",
+      icon: Store,
+    };
+  }
+  if (p === "BLINKIT") {
+    return {
+      name: "Blinkit Quick Commerce",
+      badgeClass: "bg-yellow-200 text-yellow-950 border-yellow-400 font-bold",
+      icon: Zap,
+    };
+  }
+  if (p === "OTHER_ECOMMERCE") {
+    return {
+      name: "Other E-Commerce",
+      badgeClass: "bg-purple-100 text-purple-900 border-purple-300 font-bold",
+      icon: ShoppingCart,
+    };
+  }
+  if (p === "META") {
+    return {
+      name: "Meta Ads (FB/IG)",
+      badgeClass: "bg-sky-100 text-sky-900 border-sky-300 font-bold",
+      icon: Target,
+    };
+  }
+  if (p === "GOOGLE") {
+    return {
+      name: "Google Ads",
+      badgeClass: "bg-emerald-100 text-emerald-900 border-emerald-300 font-bold",
+      icon: Search,
+    };
+  }
+  if (p === "LINKEDIN") {
+    return {
+      name: "LinkedIn Ads",
+      badgeClass: "bg-indigo-100 text-indigo-900 border-indigo-300 font-bold",
+      icon: Users2,
+    };
+  }
+  return {
+    name: platform || "Paid Media",
+    badgeClass: "bg-slate-100 text-slate-800 border-slate-200 font-medium",
+    icon: Megaphone,
+  };
+}
+
 export default function CampaignsPage() {
+  const searchParams = useSearchParams();
+  const initialPlatform = searchParams.get("platform") || "ALL";
+
   const [campaigns, setCampaigns] = useState<AdCampaign[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [platformFilter, setPlatformFilter] = useState("ALL");
+  const [platformFilter, setPlatformFilter] = useState(initialPlatform);
+
+  useEffect(() => {
+    const p = searchParams.get("platform");
+    if (p) setPlatformFilter(p);
+  }, [searchParams]);
 
   // Modal States
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -285,10 +360,30 @@ export default function CampaignsPage() {
       (c.client?.name && c.client.name.toLowerCase().includes(search.toLowerCase())) ||
       (c.client?.brandName && c.client.brandName.toLowerCase().includes(search.toLowerCase()));
 
-    const matchesPlatform = platformFilter === "ALL" || (c.platform && c.platform.toUpperCase() === platformFilter);
+    const p = c.platform?.toUpperCase() || "";
+    const isEcommerce = ["AMAZON", "FLIPKART", "BLINKIT", "OTHER_ECOMMERCE"].includes(p);
+
+    const matchesPlatform =
+      platformFilter === "ALL"
+        ? true
+        : platformFilter === "ECOMMERCE"
+        ? isEcommerce
+        : p === platformFilter;
 
     return matchesSearch && matchesPlatform;
   });
+
+  const platformCategories = [
+    { key: "ALL", label: "All Platforms" },
+    { key: "ECOMMERCE", label: "🛒 E-Commerce Hub" },
+    { key: "AMAZON", label: "Amazon" },
+    { key: "FLIPKART", label: "Flipkart" },
+    { key: "BLINKIT", label: "Blinkit" },
+    { key: "OTHER_ECOMMERCE", label: "Other E-Commerce" },
+    { key: "META", label: "Meta (FB/IG)" },
+    { key: "GOOGLE", label: "Google Ads" },
+    { key: "LINKEDIN", label: "LinkedIn" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -353,18 +448,18 @@ export default function CampaignsPage() {
           />
         </div>
 
-        <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          {["ALL", "META", "GOOGLE", "LINKEDIN"].map((platform) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+          {platformCategories.map((cat) => (
             <button
-              key={platform}
-              onClick={() => setPlatformFilter(platform)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                platformFilter === platform
-                  ? "bg-slate-900 text-white"
+              key={cat.key}
+              onClick={() => setPlatformFilter(cat.key)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                platformFilter === cat.key
+                  ? "bg-slate-900 text-white shadow-xs"
                   : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
               }`}
             >
-              {platform === "ALL" ? "All Platforms" : platform}
+              {cat.label}
             </button>
           ))}
         </div>
@@ -450,10 +545,17 @@ export default function CampaignsPage() {
                   <span>{c.objective || "Performance Campaign"}</span>
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  <span className="px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 text-[11px] font-medium border border-slate-200/60">
-                    {c.platform || "Paid Media"}
-                  </span>
+                <div className="mt-4 flex flex-wrap gap-1.5 items-center">
+                  {(() => {
+                    const pBadge = getPlatformBadge(c.platform);
+                    const PIcon = pBadge.icon;
+                    return (
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] border ${pBadge.badgeClass}`}>
+                        <PIcon className="w-3 h-3" />
+                        <span>{pBadge.name}</span>
+                      </span>
+                    );
+                  })()}
                   <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-100">
                     Target ROAS: {c.roas}x
                   </span>
@@ -534,11 +636,13 @@ export default function CampaignsPage() {
                     onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
                     className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   >
-                    <option value="META">Meta Ads (FB/IG)</option>
-                    <option value="GOOGLE">Google Search / Performance Max</option>
+                    <option value="AMAZON">Amazon Ads (Sponsored Products, Brands & Display)</option>
+                    <option value="FLIPKART">Flipkart Ads (PLA, PCA & Brand Story)</option>
+                    <option value="BLINKIT">Blinkit Ads (Quick Commerce Brand Placements)</option>
+                    <option value="OTHER_ECOMMERCE">Other E-commerce (Zepto, Instamart, Nykaa, etc.)</option>
+                    <option value="META">Meta Ads (Facebook & Instagram)</option>
+                    <option value="GOOGLE">Google Ads (Search & Performance Max)</option>
                     <option value="LINKEDIN">LinkedIn Ads</option>
-                    <option value="TWITTER">X / Twitter</option>
-                    <option value="YOUTUBE">YouTube Video</option>
                   </select>
                 </div>
 
@@ -712,11 +816,13 @@ export default function CampaignsPage() {
                     onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
                     className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   >
-                    <option value="META">Meta Ads (FB/IG)</option>
-                    <option value="GOOGLE">Google Search / PMax</option>
+                    <option value="AMAZON">Amazon Ads (Sponsored Products, Brands & Display)</option>
+                    <option value="FLIPKART">Flipkart Ads (PLA, PCA & Brand Story)</option>
+                    <option value="BLINKIT">Blinkit Ads (Quick Commerce Brand Placements)</option>
+                    <option value="OTHER_ECOMMERCE">Other E-commerce (Zepto, Instamart, Nykaa, etc.)</option>
+                    <option value="META">Meta Ads (Facebook & Instagram)</option>
+                    <option value="GOOGLE">Google Ads (Search & Performance Max)</option>
                     <option value="LINKEDIN">LinkedIn Ads</option>
-                    <option value="TWITTER">X / Twitter</option>
-                    <option value="YOUTUBE">YouTube Video</option>
                   </select>
                 </div>
               </div>

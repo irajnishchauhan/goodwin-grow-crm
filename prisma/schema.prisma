@@ -1089,6 +1089,10 @@ enum AdPlatform {
   META
   GOOGLE
   LINKEDIN
+  AMAZON
+  FLIPKART
+  BLINKIT
+  OTHER_ECOMMERCE
 }
 
 enum AdStatus {

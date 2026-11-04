@@ -188,6 +188,15 @@ export async function ensureDatabaseSchema() {
     }
   }
 
+  const adPlatformValues = ["META", "GOOGLE", "LINKEDIN", "AMAZON", "FLIPKART", "BLINKIT", "OTHER_ECOMMERCE"];
+  for (const val of adPlatformValues) {
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TYPE "AdPlatform" ADD VALUE IF NOT EXISTS '${val}';`);
+    } catch {
+      // Safe ignore
+    }
+  }
+
   isSchemaEnsured = true;
 }
 

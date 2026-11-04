@@ -69,6 +69,10 @@ export default function TasksPage() {
   const [priorityFilter, setPriorityFilter] = useState("ALL");
   const [assignedToFilter, setAssignedToFilter] = useState(initialAssignedToId);
   const [clientFilter, setClientFilter] = useState("ALL");
+  const [dateFilter, setDateFilter] = useState<"ALL" | "TODAY" | "YESTERDAY" | "UPCOMING" | "OVERDUE" | "CUSTOM">("ALL");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+  const [groupByDate, setGroupByDate] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -139,7 +143,7 @@ export default function TasksPage() {
     } else {
       fetchAgencyTasks();
     }
-  }, [viewMode, statusFilter, priorityFilter, assignedToFilter, clientFilter]);
+  }, [viewMode, statusFilter, priorityFilter, assignedToFilter, clientFilter, dateFilter, customStartDate, customEndDate]);
 
   async function fetchTeam() {
     try {
@@ -179,6 +183,11 @@ export default function TasksPage() {
       if (priorityFilter !== "ALL") params.set("priority", priorityFilter);
       if (assignedToFilter !== "ALL") params.set("assignedToId", assignedToFilter);
       if (clientFilter !== "ALL") params.set("clientId", clientFilter);
+      if (dateFilter !== "ALL") params.set("dateFilter", dateFilter);
+      if (dateFilter === "CUSTOM") {
+        if (customStartDate) params.set("startDate", customStartDate);
+        if (customEndDate) params.set("endDate", customEndDate);
+      }
 
       const res = await fetch(`/api/tasks?${params.toString()}`);
       const data = await res.json();
@@ -342,12 +351,20 @@ export default function TasksPage() {
     }
   }
 
-  async function toggleCrmStatus(task: any) {
-    const newStatus = task.status === "COMPLETED" ? "PENDING" : "COMPLETED";
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t)));
+  async function updateCrmTaskStatus(taskId: string, newStatus: string) {
+    const isCompleted = newStatus === "COMPLETED";
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === taskId) {
+          const isOverdueNow = Boolean(t.dueDate && new Date(t.dueDate) < new Date() && !isCompleted);
+          return { ...t, status: newStatus, isOverdue: isOverdueNow };
+        }
+        return t;
+      })
+    );
 
     try {
-      await fetch(`/api/tasks/${task.id}`, {
+      await fetch(`/api/tasks/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -355,6 +372,31 @@ export default function TasksPage() {
     } catch {
       fetchTasks();
     }
+  }
+
+  async function toggleCrmStatus(task: any) {
+    const newStatus = task.status === "COMPLETED" ? "PENDING" : "COMPLETED";
+    updateCrmTaskStatus(task.id, newStatus);
+  }
+
+  function getTaskDateCategory(dueDate?: string | Date | null, isCompleted?: boolean): "OVERDUE" | "TODAY" | "YESTERDAY" | "UPCOMING" | "FUTURE" | "NO_DATE" {
+    if (!dueDate) return "NO_DATE";
+    const due = new Date(dueDate);
+    const now = new Date();
+
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const endToday = startToday + 86400000 - 1;
+    const startYesterday = startToday - 86400000;
+    const endYesterday = startToday - 1;
+    const endUpcoming = startToday + 7 * 86400000 + 86399999;
+
+    const dueTime = due.getTime();
+    if (dueTime < startToday && !isCompleted) return "OVERDUE";
+    if (dueTime >= startToday && dueTime <= endToday) return "TODAY";
+    if (dueTime >= startYesterday && dueTime <= endYesterday) return "YESTERDAY";
+    if (dueTime > endToday && dueTime <= endUpcoming) return "UPCOMING";
+    if (dueTime > endUpcoming) return "FUTURE";
+    return "NO_DATE";
   }
 
   async function handleDeleteCrmTask(id: string, taskTitle: string) {
@@ -380,18 +422,52 @@ export default function TasksPage() {
     }
   }
 
+  const todayCount = tasks.filter((t) => getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "TODAY").length;
+  const yesterdayCount = tasks.filter((t) => getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "YESTERDAY").length;
+  const upcomingCount = tasks.filter((t) => getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "UPCOMING").length;
   const overdueCount = tasks.filter((t) => t.isOverdue).length;
 
   const filteredTasks = tasks.filter((t) => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitle = t.title.toLowerCase().includes(q);
-      const matchClient = t.client?.name.toLowerCase().includes(q);
-      const matchAssignee = t.assignedTo?.fullName.toLowerCase().includes(q);
-      return matchTitle || matchClient || matchAssignee;
+      const matchClient = t.client?.name?.toLowerCase().includes(q) || t.client?.brandName?.toLowerCase().includes(q);
+      const matchAssignee = t.assignedTo?.fullName?.toLowerCase().includes(q);
+      if (!matchTitle && !matchClient && !matchAssignee) return false;
     }
+
+    if (dateFilter === "TODAY") {
+      return getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "TODAY";
+    }
+    if (dateFilter === "YESTERDAY") {
+      return getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "YESTERDAY";
+    }
+    if (dateFilter === "UPCOMING") {
+      return getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "UPCOMING";
+    }
+    if (dateFilter === "OVERDUE") {
+      return t.isOverdue;
+    }
+    if (dateFilter === "CUSTOM" && (customStartDate || customEndDate)) {
+      if (!t.dueDate) return false;
+      const dueTime = new Date(t.dueDate).getTime();
+      if (customStartDate && dueTime < new Date(customStartDate).getTime()) return false;
+      if (customEndDate) {
+        const endD = new Date(customEndDate);
+        endD.setHours(23, 59, 59, 999);
+        if (dueTime > endD.getTime()) return false;
+      }
+    }
+
     return true;
   });
+
+  const overdueGroup = filteredTasks.filter((t) => t.isOverdue);
+  const todayGroup = filteredTasks.filter((t) => !t.isOverdue && getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "TODAY");
+  const yesterdayGroup = filteredTasks.filter((t) => !t.isOverdue && getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "YESTERDAY");
+  const upcomingGroup = filteredTasks.filter((t) => !t.isOverdue && getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "UPCOMING");
+  const futureGroup = filteredTasks.filter((t) => !t.isOverdue && getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "FUTURE");
+  const noDateGroup = filteredTasks.filter((t) => !t.isOverdue && getTaskDateCategory(t.dueDate, t.status === "COMPLETED") === "NO_DATE");
 
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -461,6 +537,293 @@ export default function TasksPage() {
     } finally {
       setBulkUpdating(false);
     }
+  }
+
+  function getStatusIndicator(status: string, isOverdue: boolean) {
+    if (isOverdue && status !== "COMPLETED") {
+      return {
+        label: "Overdue",
+        badgeClass: "bg-rose-50 border border-rose-300 text-rose-700 font-extrabold",
+        textColor: "text-rose-700 font-extrabold",
+        dotColor: "bg-rose-500",
+      };
+    }
+    if (status === "COMPLETED") {
+      return {
+        label: "Completed",
+        badgeClass: "bg-emerald-50 border border-emerald-300 text-emerald-700 font-bold",
+        textColor: "text-emerald-700 font-bold",
+        dotColor: "bg-emerald-600",
+      };
+    }
+    if (status === "IN_PROGRESS") {
+      return {
+        label: "In Progress",
+        badgeClass: "bg-blue-50 border border-blue-300 text-blue-700 font-bold",
+        textColor: "text-blue-700 font-bold",
+        dotColor: "bg-blue-600",
+      };
+    }
+    return {
+      label: "Pending",
+      badgeClass: "bg-amber-50 border border-amber-300 text-amber-800 font-bold",
+      textColor: "text-amber-800 font-bold",
+      dotColor: "bg-amber-500",
+    };
+  }
+
+  function renderTaskCard(task: any) {
+    const checklistItems: ChecklistItem[] = Array.isArray(task.checklist) ? task.checklist : [];
+    const completedCount = checklistItems.filter((i) => i.completed).length;
+    const totalCount = checklistItems.length;
+    const isExpanded = expandedChecklists[task.id] ?? false;
+    const attachmentList: AttachmentItem[] = Array.isArray(task.attachments) ? task.attachments : [];
+    const statusInfo = getStatusIndicator(task.status, Boolean(task.isOverdue));
+
+    return (
+      <div
+        key={task.id}
+        className={`bg-white rounded-2xl border transition overflow-hidden shadow-xs ${
+          task.isOverdue
+            ? "border-rose-300 ring-2 ring-rose-100"
+            : task.status === "COMPLETED"
+            ? "border-emerald-200/90 bg-emerald-50/20"
+            : "border-slate-200/90 hover:border-slate-300"
+        }`}
+      >
+        <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Left: Select Checkbox & Completion Checkbox & Title */}
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <button
+              onClick={() => handleToggleTask(task.id)}
+              className="mt-0.5 text-slate-300 hover:text-emerald-600 transition shrink-0 cursor-pointer"
+              title={selectedTaskIds.includes(task.id) ? "Deselect task" : "Select task"}
+            >
+              {selectedTaskIds.includes(task.id) ? (
+                <CheckSquare className="w-5 h-5 text-emerald-600" />
+              ) : (
+                <Square className="w-5 h-5 text-slate-300 hover:text-slate-400" />
+              )}
+            </button>
+
+            <button
+              onClick={() => toggleCrmStatus(task)}
+              className="mt-0.5 text-slate-400 hover:text-emerald-600 transition shrink-0 cursor-pointer"
+              title={task.status === "COMPLETED" ? "Mark as Pending" : "Mark as Completed"}
+            >
+              {task.status === "COMPLETED" ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              ) : (
+                <Circle className="w-5 h-5" />
+              )}
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3
+                  className={`text-sm font-bold leading-snug truncate ${
+                    task.status === "COMPLETED"
+                      ? "line-through text-emerald-700/80"
+                      : "text-slate-900"
+                  }`}
+                >
+                  {task.title}
+                </h3>
+
+                {/* Overdue Alert Badge */}
+                {task.isOverdue && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600 text-white font-black text-[10px] animate-pulse">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>OVERDUE ALERT</span>
+                  </span>
+                )}
+
+                {/* Recurring Task Badge */}
+                {task.isRecurring && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-[10px]">
+                    <Repeat className="w-3 h-3" />
+                    <span>{task.recurringInterval || "Recurring"}</span>
+                  </span>
+                )}
+              </div>
+
+              {task.description && (
+                <p className="text-xs text-slate-500 mt-1 line-clamp-1">
+                  {task.description}
+                </p>
+              )}
+
+              {/* Client, Project, Assignee, Status, and Date Tags */}
+              <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500 flex-wrap">
+                {/* Status Indicator Dropdown with Colored Text (Green for Completed) */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Status:</span>
+                  <select
+                    value={task.status}
+                    onChange={(e) => updateCrmTaskStatus(task.id, e.target.value)}
+                    className={`text-[11px] font-bold rounded-lg px-2 py-0.5 border cursor-pointer focus:outline-none transition ${statusInfo.badgeClass}`}
+                  >
+                    <option value="PENDING" className="text-amber-800 font-bold bg-white">
+                      ⏳ Pending
+                    </option>
+                    <option value="IN_PROGRESS" className="text-blue-700 font-bold bg-white">
+                      ⚡ In Progress
+                    </option>
+                    <option value="COMPLETED" className="text-emerald-700 font-bold bg-white">
+                      ✅ Completed
+                    </option>
+                  </select>
+                </div>
+
+                {/* Client Link */}
+                {task.client && (
+                  <span className="flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    <Building2 className="w-3 h-3" />
+                    <span>{task.client.name}</span>
+                  </span>
+                )}
+
+                {/* Project Link */}
+                {task.project && (
+                  <span className="flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                    <FolderGit2 className="w-3 h-3" />
+                    <span>{task.project.name}</span>
+                  </span>
+                )}
+
+                {/* Assignee */}
+                <span className="flex items-center gap-1 font-medium text-slate-700">
+                  <User className="w-3 h-3 text-slate-400" />
+                  <span>{task.assignedTo?.fullName || "Unassigned"}</span>
+                </span>
+
+                {/* Due Date */}
+                {task.dueDate && (
+                  <span
+                    className={`flex items-center gap-1 font-medium ${
+                      task.isOverdue ? "text-rose-600 font-bold" : "text-slate-600"
+                    }`}
+                  >
+                    <Calendar className="w-3 h-3 text-slate-400" />
+                    <span>Due: {formatDate(task.dueDate)}</span>
+                  </span>
+                )}
+
+                {/* Priority Badge */}
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    task.priority === "URGENT"
+                      ? "bg-rose-100 text-rose-800"
+                      : task.priority === "HIGH"
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {task.priority}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Checklist / Attachment pill & action buttons */}
+          <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
+            {/* Checklist Counter Toggle */}
+            {totalCount > 0 && (
+              <button
+                onClick={() =>
+                  setExpandedChecklists((prev) => ({
+                    ...prev,
+                    [task.id]: !isExpanded,
+                  }))
+                }
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
+              >
+                <CheckSquare className="w-3.5 h-3.5 text-slate-500" />
+                <span>
+                  {completedCount}/{totalCount} Checklist
+                </span>
+                {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            )}
+
+            {/* Attachments Counter */}
+            {attachmentList.length > 0 && (
+              <div
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold"
+                title={attachmentList.map((a) => a.name).join(", ")}
+              >
+                <Paperclip className="w-3.5 h-3.5 text-slate-500" />
+                <span>{attachmentList.length}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => openEditCrmModal(task)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-slate-100 transition cursor-pointer"
+                title="Edit Task"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDeleteCrmTask(task.id, task.title)}
+                disabled={deletingId === task.id}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
+                title="Delete Task"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Expandable Checklist Section */}
+        {isExpanded && totalCount > 0 && (
+          <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 space-y-2">
+            <div className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">
+              Task Checklist ({completedCount} of {totalCount} completed)
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {checklistItems.map((item, idx) => (
+                <label
+                  key={item.id || idx}
+                  className="flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200/80 cursor-pointer text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    checked={item.completed}
+                    onChange={() => toggleChecklistItem(task.id, idx)}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className={item.completed ? "line-through text-slate-400" : "text-slate-800 font-medium"}>
+                    {item.text}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {/* Attachments Preview if any */}
+            {attachmentList.length > 0 && (
+              <div className="pt-2 border-t border-slate-200/60 flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400">Attachments:</span>
+                {attachmentList.map((att, i) => (
+                  <a
+                    key={att.id || i}
+                    href={att.url || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs text-indigo-700 font-medium hover:bg-indigo-50 transition"
+                  >
+                    <Paperclip className="w-3 h-3" />
+                    <span>{att.name}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -610,6 +973,111 @@ export default function TasksPage() {
             </div>
           </div>
 
+          {/* Date-Wise Task Filters & Grouping Toolbar */}
+          <div className="bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200/90 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-2xs">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 flex-wrap">
+              <span className="text-slate-600 font-bold text-[11px] flex items-center gap-1.5 mr-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span>Date Filter:</span>
+              </span>
+              <button
+                onClick={() => setDateFilter("ALL")}
+                className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
+                  dateFilter === "ALL"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                All Tasks ({tasks.length})
+              </button>
+              <button
+                onClick={() => setDateFilter("TODAY")}
+                className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
+                  dateFilter === "TODAY"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-white border border-slate-200 text-emerald-800 hover:bg-emerald-50"
+                }`}
+              >
+                Today ({todayCount})
+              </button>
+              <button
+                onClick={() => setDateFilter("YESTERDAY")}
+                className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
+                  dateFilter === "YESTERDAY"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "bg-white border border-slate-200 text-amber-800 hover:bg-amber-50"
+                }`}
+              >
+                Yesterday ({yesterdayCount})
+              </button>
+              <button
+                onClick={() => setDateFilter("UPCOMING")}
+                className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
+                  dateFilter === "UPCOMING"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "bg-white border border-slate-200 text-blue-800 hover:bg-blue-50"
+                }`}
+              >
+                Upcoming 7 Days ({upcomingCount})
+              </button>
+              <button
+                onClick={() => setDateFilter("OVERDUE")}
+                className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
+                  dateFilter === "OVERDUE"
+                    ? "bg-rose-600 text-white shadow-xs"
+                    : "bg-white border border-slate-200 text-rose-800 hover:bg-rose-50"
+                }`}
+              >
+                Overdue ({overdueCount})
+              </button>
+              <button
+                onClick={() => setDateFilter("CUSTOM")}
+                className={`px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer ${
+                  dateFilter === "CUSTOM"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "bg-white border border-slate-200 text-purple-800 hover:bg-purple-50"
+                }`}
+              >
+                Custom Range
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
+              {dateFilter === "CUSTOM" && (
+                <div className="flex items-center gap-2 bg-white px-2.5 py-1 rounded-xl border border-slate-200">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">From:</span>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="text-xs bg-transparent border-0 text-slate-700 focus:outline-none"
+                  />
+                  <span className="text-[10px] uppercase font-bold text-slate-400">To:</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="text-xs bg-transparent border-0 text-slate-700 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              {/* Group by Date Toggle */}
+              <button
+                onClick={() => setGroupByDate(!groupByDate)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                  groupByDate
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs"
+                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+                title="Display tasks separated by their assigned or due dates"
+              >
+                <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Separate by Dates: {groupByDate ? "ON" : "OFF"}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Bulk Action Bar */}
           {selectedTaskIds.length > 0 && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
@@ -658,8 +1126,8 @@ export default function TasksPage() {
             </div>
           )}
 
-          {/* Tasks List */}
-          <div className="space-y-3">
+          {/* Tasks List: Either Grouped by Date Sections or Flat List */}
+          <div className="space-y-4">
             {loading ? (
               <div className="p-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
                 <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-emerald-600" />
@@ -669,236 +1137,108 @@ export default function TasksPage() {
               <div className="p-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
                 No tasks match your filters. Create a task to assign work items to team members.
               </div>
-            ) : (
-              filteredTasks.map((task) => {
-                const checklistItems: ChecklistItem[] = Array.isArray(task.checklist) ? task.checklist : [];
-                const completedCount = checklistItems.filter((i) => i.completed).length;
-                const totalCount = checklistItems.length;
-                const isExpanded = expandedChecklists[task.id] ?? false;
-                const attachmentList: AttachmentItem[] = Array.isArray(task.attachments) ? task.attachments : [];
-
-                return (
-                  <div
-                    key={task.id}
-                    className={`bg-white rounded-2xl border transition overflow-hidden shadow-xs ${
-                      task.isOverdue
-                        ? "border-rose-300 ring-2 ring-rose-100"
-                        : task.status === "COMPLETED"
-                        ? "border-slate-200 bg-slate-50/40 opacity-75"
-                        : "border-slate-200/90 hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      {/* Left: Select Checkbox & Completion Checkbox & Title */}
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <button
-                          onClick={() => handleToggleTask(task.id)}
-                          className="mt-0.5 text-slate-300 hover:text-emerald-600 transition shrink-0 cursor-pointer"
-                          title={selectedTaskIds.includes(task.id) ? "Deselect task" : "Select task"}
-                        >
-                          {selectedTaskIds.includes(task.id) ? (
-                            <CheckSquare className="w-5 h-5 text-emerald-600" />
-                          ) : (
-                            <Square className="w-5 h-5 text-slate-300 hover:text-slate-400" />
-                          )}
-                        </button>
-
-                        <button
-                          onClick={() => toggleCrmStatus(task)}
-                          className="mt-0.5 text-slate-400 hover:text-emerald-600 transition shrink-0 cursor-pointer"
-                        >
-                          {task.status === "COMPLETED" ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                          ) : (
-                            <Circle className="w-5 h-5" />
-                          )}
-                        </button>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3
-                              className={`text-sm font-bold text-slate-900 leading-snug truncate ${
-                                task.status === "COMPLETED" ? "line-through text-slate-400" : ""
-                              }`}
-                            >
-                              {task.title}
-                            </h3>
-
-                            {/* Overdue Alert Badge */}
-                            {task.isOverdue && (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600 text-white font-black text-[10px] animate-pulse">
-                                <AlertTriangle className="w-3 h-3" />
-                                <span>OVERDUE ALERT</span>
-                              </span>
-                            )}
-
-                            {/* Recurring Task Badge */}
-                            {task.isRecurring && (
-                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-[10px]">
-                                <Repeat className="w-3 h-3" />
-                                <span>{task.recurringInterval || "Recurring"}</span>
-                              </span>
-                            )}
-                          </div>
-
-                          {task.description && (
-                            <p className="text-xs text-slate-500 mt-1 line-clamp-1">
-                              {task.description}
-                            </p>
-                          )}
-
-                          {/* Client, Project, Assignee, and Date Tags */}
-                          <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500 flex-wrap">
-                            {/* Client Link */}
-                            {task.client && (
-                              <span className="flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                                <Building2 className="w-3 h-3" />
-                                <span>{task.client.name}</span>
-                              </span>
-                            )}
-
-                            {/* Project Link */}
-                            {task.project && (
-                              <span className="flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
-                                <FolderGit2 className="w-3 h-3" />
-                                <span>{task.project.name}</span>
-                              </span>
-                            )}
-
-                            {/* Assignee */}
-                            <span className="flex items-center gap-1 font-medium text-slate-700">
-                              <User className="w-3 h-3 text-slate-400" />
-                              <span>{task.assignedTo?.fullName || "Unassigned"}</span>
-                            </span>
-
-                            {/* Due Date */}
-                            {task.dueDate && (
-                              <span
-                                className={`flex items-center gap-1 font-medium ${
-                                  task.isOverdue ? "text-rose-600 font-bold" : "text-slate-600"
-                                }`}
-                              >
-                                <Calendar className="w-3 h-3 text-slate-400" />
-                                <span>Due: {formatDate(task.dueDate)}</span>
-                              </span>
-                            )}
-
-                            {/* Priority Badge */}
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                task.priority === "URGENT"
-                                  ? "bg-rose-100 text-rose-800"
-                                  : task.priority === "HIGH"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-slate-100 text-slate-700"
-                              }`}
-                            >
-                              {task.priority}
-                            </span>
-                          </div>
-                        </div>
+            ) : groupByDate ? (
+              <div className="space-y-6">
+                {/* 1. Overdue Section */}
+                {overdueGroup.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-rose-50 border border-rose-200 px-4 py-2.5 rounded-xl">
+                      <div className="flex items-center gap-2 text-rose-800 font-black text-xs uppercase tracking-wide">
+                        <AlertTriangle className="w-4 h-4 text-rose-600" />
+                        <span>🚨 Overdue Tasks ({overdueGroup.length})</span>
                       </div>
-
-                      {/* Right: Checklist / Attachment pill & action buttons */}
-                      <div className="flex items-center justify-between md:justify-end gap-3 shrink-0">
-                        {/* Checklist Counter Toggle */}
-                        {totalCount > 0 && (
-                          <button
-                            onClick={() =>
-                              setExpandedChecklists((prev) => ({
-                                ...prev,
-                                [task.id]: !isExpanded,
-                              }))
-                            }
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer"
-                          >
-                            <CheckSquare className="w-3.5 h-3.5 text-slate-500" />
-                            <span>
-                              {completedCount}/{totalCount} Checklist
-                            </span>
-                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                          </button>
-                        )}
-
-                        {/* Attachments Counter */}
-                        {attachmentList.length > 0 && (
-                          <div
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold"
-                            title={attachmentList.map((a) => a.name).join(", ")}
-                          >
-                            <Paperclip className="w-3.5 h-3.5 text-slate-500" />
-                            <span>{attachmentList.length}</span>
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => openEditCrmModal(task)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-700 hover:bg-slate-100 transition cursor-pointer"
-                            title="Edit Task"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCrmTask(task.id, task.title)}
-                            disabled={deletingId === task.id}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer disabled:opacity-50"
-                            title="Delete Task"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+                      <span className="text-[11px] text-rose-700 font-bold">Action Required Immediately</span>
                     </div>
-
-                    {/* Expandable Checklist Section */}
-                    {isExpanded && totalCount > 0 && (
-                      <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 space-y-2">
-                        <div className="text-[11px] font-bold uppercase text-slate-500 tracking-wider">
-                          Task Checklist ({completedCount} of {totalCount} completed)
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {checklistItems.map((item, idx) => (
-                            <label
-                              key={item.id || idx}
-                              className="flex items-center gap-2 p-2 rounded-xl bg-white border border-slate-200/80 cursor-pointer text-xs"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={item.completed}
-                                onChange={() => toggleChecklistItem(task.id, idx)}
-                                className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
-                              />
-                              <span className={item.completed ? "line-through text-slate-400" : "text-slate-800 font-medium"}>
-                                {item.text}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-
-                        {/* Attachments Preview if any */}
-                        {attachmentList.length > 0 && (
-                          <div className="pt-2 border-t border-slate-200/60 flex items-center gap-2 flex-wrap">
-                            <span className="text-[11px] font-bold text-slate-400">Attachments:</span>
-                            {attachmentList.map((att, i) => (
-                              <a
-                                key={att.id || i}
-                                href={att.url || "#"}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs text-indigo-700 font-medium hover:bg-indigo-50 transition"
-                              >
-                                <Paperclip className="w-3 h-3" />
-                                <span>{att.name}</span>
-                              </a>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <div className="space-y-3">
+                      {overdueGroup.map(renderTaskCard)}
+                    </div>
                   </div>
-                );
-              })
+                )}
+
+                {/* 2. Today Section */}
+                {todayGroup.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-xl">
+                      <div className="flex items-center gap-2 text-emerald-800 font-black text-xs uppercase tracking-wide">
+                        <Calendar className="w-4 h-4 text-emerald-600" />
+                        <span>📅 Today's Tasks & Daily Activities ({todayGroup.length})</span>
+                      </div>
+                      <span className="text-[11px] text-emerald-700 font-bold">Scheduled for Today</span>
+                    </div>
+                    <div className="space-y-3">
+                      {todayGroup.map(renderTaskCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Yesterday Section */}
+                {yesterdayGroup.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 px-4 py-2.5 rounded-xl">
+                      <div className="flex items-center gap-2 text-amber-800 font-black text-xs uppercase tracking-wide">
+                        <Clock className="w-4 h-4 text-amber-600" />
+                        <span>⏪ Yesterday's Tasks ({yesterdayGroup.length})</span>
+                      </div>
+                      <span className="text-[11px] text-amber-700 font-bold">Past Activities</span>
+                    </div>
+                    <div className="space-y-3">
+                      {yesterdayGroup.map(renderTaskCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Upcoming Section */}
+                {upcomingGroup.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-blue-50 border border-blue-200 px-4 py-2.5 rounded-xl">
+                      <div className="flex items-center gap-2 text-blue-800 font-black text-xs uppercase tracking-wide">
+                        <Calendar className="w-4 h-4 text-blue-600" />
+                        <span>🗓️ Upcoming Tasks (Next 7 Days) ({upcomingGroup.length})</span>
+                      </div>
+                      <span className="text-[11px] text-blue-700 font-bold">Next Week Pipeline</span>
+                    </div>
+                    <div className="space-y-3">
+                      {upcomingGroup.map(renderTaskCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 5. Later / Future Section */}
+                {futureGroup.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-purple-50 border border-purple-200 px-4 py-2.5 rounded-xl">
+                      <div className="flex items-center gap-2 text-purple-800 font-black text-xs uppercase tracking-wide">
+                        <Calendar className="w-4 h-4 text-purple-600" />
+                        <span>⏩ Scheduled Later / Future Tasks ({futureGroup.length})</span>
+                      </div>
+                      <span className="text-[11px] text-purple-700 font-bold">Future Milestones</span>
+                    </div>
+                    <div className="space-y-3">
+                      {futureGroup.map(renderTaskCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. No Due Date / Backlog Section */}
+                {noDateGroup.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-xl">
+                      <div className="flex items-center gap-2 text-slate-800 font-black text-xs uppercase tracking-wide">
+                        <Layers className="w-4 h-4 text-slate-600" />
+                        <span>📋 Backlog & Unscheduled Tasks ({noDateGroup.length})</span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-bold">No Due Date Set</span>
+                    </div>
+                    <div className="space-y-3">
+                      {noDateGroup.map(renderTaskCard)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredTasks.map(renderTaskCard)}
+              </div>
             )}
           </div>
         </div>

@@ -108,6 +108,7 @@ const agencyNavGroups = [
     category: "MARKETING",
     links: [
       { name: "Campaigns Hub", href: "/app/campaigns", icon: Megaphone },
+      { name: "E-Commerce Ads", href: "/app/campaigns?platform=ECOMMERCE", icon: ShoppingBag },
       { name: "Meta Ads", href: "/app/meta-ads", icon: Target },
       { name: "Google Ads", href: "/app/google-ads", icon: Search },
       { name: "SEO & Local GBP", href: "/app/seo", icon: Globe },

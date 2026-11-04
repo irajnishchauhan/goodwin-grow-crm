@@ -14,6 +14,9 @@ export async function GET(req: Request) {
   const assignedToId = searchParams.get("assignedToId");
   const clientId = searchParams.get("clientId");
   const projectId = searchParams.get("projectId");
+  const dateFilter = searchParams.get("dateFilter");
+  const startDate = searchParams.get("startDate");
+  const endDate = searchParams.get("endDate");
 
   // Client Isolation: Enforce client scope
   if (tenantCtx.isClientUser) {
@@ -55,6 +58,33 @@ export async function GET(req: Request) {
     whereClause.assignedToId = assignedToId === "me" ? tenantCtx.user.id : assignedToId;
   }
 
+  // Date-wise filtering support: Today, Yesterday, Upcoming, Overdue, Custom Date Range
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
+  const endOfYesterday = new Date(startOfToday.getTime() - 1);
+  const endOfUpcoming = new Date(startOfToday.getTime() + 7 * 86400000 + 86399999);
+
+  if (dateFilter === "TODAY") {
+    whereClause.dueDate = { gte: startOfToday, lte: endOfToday };
+  } else if (dateFilter === "YESTERDAY") {
+    whereClause.dueDate = { gte: startOfYesterday, lte: endOfYesterday };
+  } else if (dateFilter === "UPCOMING") {
+    whereClause.dueDate = { gt: endOfToday, lte: endOfUpcoming };
+  } else if (dateFilter === "OVERDUE") {
+    whereClause.dueDate = { lt: startOfToday };
+    whereClause.status = { not: "COMPLETED" };
+  } else if (dateFilter === "CUSTOM" || (startDate && endDate)) {
+    whereClause.dueDate = {};
+    if (startDate) whereClause.dueDate.gte = new Date(startDate);
+    if (endDate) {
+      const e = new Date(endDate);
+      e.setHours(23, 59, 59, 999);
+      whereClause.dueDate.lte = e;
+    }
+  }
+
   const tasks = await prisma.task.findMany({
     where: whereClause,
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
@@ -68,7 +98,6 @@ export async function GET(req: Request) {
     },
   });
 
-  const now = new Date();
   const enrichedTasks = tasks.map((t) => ({
     ...t,
     isOverdue: Boolean(t.dueDate && new Date(t.dueDate) < now && t.status !== "COMPLETED"),
