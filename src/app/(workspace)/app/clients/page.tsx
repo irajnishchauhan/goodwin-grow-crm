@@ -50,6 +50,62 @@ import {
 } from "lucide-react";
 import { SERVICE_PACKAGES, ADD_ON_SERVICES, getPackageByName, calculatePackageProfitability } from "@/lib/agency/packages";
 
+const PLATFORM_PRESETS = [
+  // 1. Hospitality, Stays & OTAs
+  { name: "Goibibo Extranet", category: "OTA", defaultUrl: "https://in.goibibo.com/extranet", icon: "🏨", group: "Hospitality, Stays & OTAs" },
+  { name: "Booking.com Extranet", category: "OTA", defaultUrl: "https://admin.booking.com", icon: "🏨", group: "Hospitality, Stays & OTAs" },
+  { name: "Airbnb Host Portal", category: "OTA", defaultUrl: "https://www.airbnb.com/login", icon: "🏡", group: "Hospitality, Stays & OTAs" },
+  { name: "MakeMyTrip Ingoibibo", category: "OTA", defaultUrl: "https://in.goibibo.com/extranet/login/", icon: "🏨", group: "Hospitality, Stays & OTAs" },
+  { name: "Agoda YCS", category: "OTA", defaultUrl: "https://ycs.agoda.com", icon: "🌏", group: "Hospitality, Stays & OTAs" },
+  { name: "Expedia Partner Central", category: "OTA", defaultUrl: "https://www.expediapartnercentral.com", icon: "✈️", group: "Hospitality, Stays & OTAs" },
+  { name: "Tripadvisor Management Center", category: "OTA", defaultUrl: "https://www.tripadvisor.com/Owners", icon: "🦉", group: "Hospitality, Stays & OTAs" },
+  { name: "EaseMyTrip / Yatra Hoteliers", category: "OTA", defaultUrl: "https://www.easemytrip.com", icon: "🎫", group: "Hospitality, Stays & OTAs" },
+
+  // 2. Google Workspace & Cloud
+  { name: "Google Drive / Cloud Storage", category: "GOOGLE", defaultUrl: "https://drive.google.com", icon: "📁", group: "Google Workspace & Tools" },
+  { name: "Gmail / Google Workspace", category: "GOOGLE", defaultUrl: "https://mail.google.com", icon: "✉️", group: "Google Workspace & Tools" },
+  { name: "Google My Business (GMB / Maps)", category: "GOOGLE", defaultUrl: "https://business.google.com", icon: "📍", group: "Google Workspace & Tools" },
+  { name: "Google Ads / MCC Account", category: "GOOGLE", defaultUrl: "https://ads.google.com", icon: "🎯", group: "Google Workspace & Tools" },
+  { name: "Google Analytics 4 (GA4)", category: "GOOGLE", defaultUrl: "https://analytics.google.com", icon: "📊", group: "Google Workspace & Tools" },
+  { name: "Google Search Console", category: "GOOGLE", defaultUrl: "https://search.google.com/search-console", icon: "🔍", group: "Google Workspace & Tools" },
+  { name: "Google Tag Manager (GTM)", category: "GOOGLE", defaultUrl: "https://tagmanager.google.com", icon: "🏷️", group: "Google Workspace & Tools" },
+  { name: "YouTube Studio / Channel", category: "GOOGLE", defaultUrl: "https://studio.youtube.com", icon: "▶️", group: "Google Workspace & Tools" },
+
+  // 3. E-Commerce & Marketplaces
+  { name: "Amazon Seller Central", category: "ECOM", defaultUrl: "https://sellercentral.amazon.in", icon: "📦", group: "E-Commerce & Marketplaces" },
+  { name: "Amazon Advertising", category: "ECOM", defaultUrl: "https://advertising.amazon.in", icon: "📢", group: "E-Commerce & Marketplaces" },
+  { name: "Flipkart Seller Hub", category: "ECOM", defaultUrl: "https://seller.flipkart.com", icon: "⚡", group: "E-Commerce & Marketplaces" },
+  { name: "Blinkit Partner Hub", category: "ECOM", defaultUrl: "https://partner.blinkit.com", icon: "🛵", group: "E-Commerce & Marketplaces" },
+  { name: "Zepto Partner / Swiggy Instamart", category: "ECOM", defaultUrl: "https://partner.swiggy.com", icon: "🛍️", group: "E-Commerce & Marketplaces" },
+  { name: "Shopify Store Admin", category: "ECOM", defaultUrl: "https://admin.shopify.com", icon: "🛒", group: "E-Commerce & Marketplaces" },
+  { name: "WooCommerce / Store Admin", category: "ECOM", defaultUrl: "", icon: "🛍️", group: "E-Commerce & Marketplaces" },
+  { name: "Meesho Supplier Panel", category: "ECOM", defaultUrl: "https://supplier.meesho.com", icon: "🏷️", group: "E-Commerce & Marketplaces" },
+
+  // 4. Social Media & Advertising
+  { name: "Instagram Business", category: "SOCIAL", defaultUrl: "https://www.instagram.com", icon: "📸", group: "Social Media & Advertising" },
+  { name: "Meta Business Suite / Facebook Ads", category: "SOCIAL", defaultUrl: "https://business.facebook.com", icon: "📘", group: "Social Media & Advertising" },
+  { name: "WhatsApp Business API", category: "SOCIAL", defaultUrl: "https://business.facebook.com/wa/manage/", icon: "💬", group: "Social Media & Advertising" },
+  { name: "LinkedIn Campaign Manager", category: "SOCIAL", defaultUrl: "https://www.linkedin.com/campaignmanager/", icon: "💼", group: "Social Media & Advertising" },
+  { name: "Twitter / X Ads & Profile", category: "SOCIAL", defaultUrl: "https://ads.x.com", icon: "🐦", group: "Social Media & Advertising" },
+  { name: "Pinterest Business", category: "SOCIAL", defaultUrl: "https://business.pinterest.com", icon: "📌", group: "Social Media & Advertising" },
+  { name: "Snapchat Ads Manager", category: "SOCIAL", defaultUrl: "https://ads.snapchat.com", icon: "👻", group: "Social Media & Advertising" },
+
+  // 5. Website, Hosting & Domain
+  { name: "WordPress / Website CMS Admin", category: "WEB", defaultUrl: "", icon: "🌐", group: "Website, Hosting & Domain" },
+  { name: "Hosting / cPanel / DNS Server", category: "WEB", defaultUrl: "", icon: "🖥️", group: "Website, Hosting & Domain" },
+  { name: "GoDaddy / Domain Registrar", category: "WEB", defaultUrl: "https://sso.godaddy.com", icon: "🔒", group: "Website, Hosting & Domain" },
+  { name: "Hostinger / Cloudflare / AWS", category: "WEB", defaultUrl: "https://hpanel.hostinger.com", icon: "☁️", group: "Website, Hosting & Domain" },
+
+  // 6. Payments & Billing
+  { name: "Razorpay Dashboard", category: "PAYMENT", defaultUrl: "https://dashboard.razorpay.com", icon: "💳", group: "Payments & Accounting" },
+  { name: "PhonePe Business", category: "PAYMENT", defaultUrl: "https://business.phonepe.com", icon: "📱", group: "Payments & Accounting" },
+  { name: "Paytm Business / Cashfree", category: "PAYMENT", defaultUrl: "https://dashboard.paytm.com", icon: "💰", group: "Payments & Accounting" },
+  { name: "Stripe Dashboard", category: "PAYMENT", defaultUrl: "https://dashboard.stripe.com", icon: "💳", group: "Payments & Accounting" },
+
+  // 7. Custom Platform
+  { name: "Custom / Enter Any Platform Name", category: "OTHER", defaultUrl: "", icon: "✨", group: "Custom / Any Other Platform" },
+];
+
 interface ClientNote {
   id: string;
   clientId: string;
@@ -165,11 +221,27 @@ export default function ClientsPage() {
   const [credentials, setCredentials] = useState<ClientCredentialItem[]>([]);
   const [credentialsLoading, setCredentialsLoading] = useState(false);
   const [isAddCredModalOpen, setIsAddCredModalOpen] = useState(false);
+  const [isEditCredModalOpen, setIsEditCredModalOpen] = useState(false);
+  const [editingCred, setEditingCred] = useState<ClientCredentialItem | null>(null);
   const [savingCred, setSavingCred] = useState(false);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [copiedCredId, setCopiedCredId] = useState<string | null>(null);
+  const [credSearchQuery, setCredSearchQuery] = useState("");
+  const [credCategoryFilter, setCredCategoryFilter] = useState("ALL");
+  const [newCredCustomPlatformName, setNewCredCustomPlatformName] = useState("");
   const [credForm, setCredForm] = useState({
-    platform: "Meta Business Suite",
+    platform: "Goibibo Extranet",
+    accountIdentifier: "",
+    password: "",
+    loginUrl: "https://in.goibibo.com/extranet",
+    recoveryDetails: "",
+    accessLevel: "ADMIN",
+    notes: "",
+  });
+  const [editCredForm, setEditCredForm] = useState({
+    id: "",
+    platform: "",
+    customPlatformName: "",
     accountIdentifier: "",
     password: "",
     loginUrl: "",
@@ -301,6 +373,189 @@ export default function ClientsPage() {
     }
   }
 
+  function handleCopyCredentialsBundle(cred: ClientCredentialItem) {
+    const lines = [
+      `Client: ${selectedClient?.name || "Client"}`,
+      `Platform: ${getDisplayPlatformName(cred)}`,
+      `Username / Account: ${cred.accountIdentifier}`,
+      `Password: ${cred.password || cred.decryptedPassword || "••••••••••••"}`,
+    ];
+    if (cred.loginUrl) lines.push(`Login Portal: ${cred.loginUrl}`);
+    if (cred.recoveryDetails) lines.push(`2FA / Recovery: ${cred.recoveryDetails}`);
+    if (cred.notes) lines.push(`Notes: ${cred.notes}`);
+
+    navigator.clipboard.writeText(lines.join("\n"));
+    setCopiedCredId(cred.id + "-bundle");
+    setTimeout(() => setCopiedCredId(null), 2500);
+  }
+
+  function generateSecurePassword() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*";
+    let pwd = "";
+    for (let i = 0; i < 16; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pwd;
+  }
+
+  function getDisplayPlatformName(cred: ClientCredentialItem) {
+    if (cred.platform && cred.platform !== "Custom / Other") {
+      return cred.platform;
+    }
+    if (cred.notes?.trim() && !cred.notes.includes(" ") && cred.notes.length <= 25) {
+      return cred.notes.trim();
+    }
+    const notesLower = (cred.notes || "").toLowerCase();
+    if (notesLower.includes("goibibo")) return "Goibibo Extranet";
+    if (notesLower.includes("booking.com") || notesLower.includes("booking")) return "Booking.com Extranet";
+    if (notesLower.includes("airbnb")) return "Airbnb Host Portal";
+    if (notesLower.includes("makemytrip") || notesLower.includes("mmt")) return "MakeMyTrip Ingoibibo";
+
+    const urlLower = (cred.loginUrl || "").toLowerCase();
+    if (urlLower.includes("drive.google.com")) return "Google Drive";
+    if (urlLower.includes("mail.google.com")) return "Gmail / Google Workspace";
+    if (urlLower.includes("instagram.com")) return "Instagram Business";
+    if (urlLower.includes("facebook.com")) return "Meta Business Suite";
+    if (urlLower.includes("booking.com")) return "Booking.com Extranet";
+    if (urlLower.includes("goibibo.com")) return "Goibibo Extranet";
+    if (urlLower.includes("amazon.in") || urlLower.includes("amazon.com")) return "Amazon Seller Central";
+    if (urlLower.includes("blinkit.com")) return "Blinkit Partner";
+    if (urlLower.includes("flipkart.com")) return "Flipkart Seller Hub";
+
+    return cred.platform || "Custom Platform";
+  }
+
+  function getPlatformStyle(platformName: string) {
+    const p = (platformName || "").toLowerCase();
+    if (p.includes("goibibo") || p.includes("makemytrip") || p.includes("mmt")) {
+      return {
+        badgeBg: "bg-orange-50 text-orange-800 border-orange-200",
+        iconBg: "bg-orange-100 text-orange-700",
+        label: "OTA • Travel",
+        emoji: "🏨",
+      };
+    }
+    if (p.includes("booking.com") || p.includes("booking")) {
+      return {
+        badgeBg: "bg-blue-50 text-blue-900 border-blue-200",
+        iconBg: "bg-blue-100 text-blue-700",
+        label: "OTA • Stays",
+        emoji: "🏨",
+      };
+    }
+    if (p.includes("airbnb")) {
+      return {
+        badgeBg: "bg-rose-50 text-rose-800 border-rose-200",
+        iconBg: "bg-rose-100 text-rose-700",
+        label: "Vacation Rental",
+        emoji: "🏡",
+      };
+    }
+    if (p.includes("drive") || p.includes("google drive")) {
+      return {
+        badgeBg: "bg-amber-50 text-amber-900 border-amber-200",
+        iconBg: "bg-amber-100 text-amber-700",
+        label: "Google Drive",
+        emoji: "📁",
+      };
+    }
+    if (p.includes("gmail") || p.includes("mail")) {
+      return {
+        badgeBg: "bg-red-50 text-red-800 border-red-200",
+        iconBg: "bg-red-100 text-red-700",
+        label: "Email / Workspace",
+        emoji: "✉️",
+      };
+    }
+    if (p.includes("instagram")) {
+      return {
+        badgeBg: "bg-pink-50 text-pink-800 border-pink-200",
+        iconBg: "bg-pink-100 text-pink-700",
+        label: "Social Media",
+        emoji: "📸",
+      };
+    }
+    if (p.includes("meta") || p.includes("facebook")) {
+      return {
+        badgeBg: "bg-blue-50 text-blue-800 border-blue-200",
+        iconBg: "bg-blue-100 text-blue-700",
+        label: "Meta Ads & Pages",
+        emoji: "📘",
+      };
+    }
+    if (p.includes("amazon")) {
+      return {
+        badgeBg: "bg-amber-50 text-amber-800 border-amber-200",
+        iconBg: "bg-amber-100 text-amber-700",
+        label: "Amazon Marketplace",
+        emoji: "📦",
+      };
+    }
+    if (p.includes("blinkit")) {
+      return {
+        badgeBg: "bg-yellow-50 text-yellow-900 border-yellow-300",
+        iconBg: "bg-yellow-100 text-yellow-800",
+        label: "Quick Commerce",
+        emoji: "🛵",
+      };
+    }
+    if (p.includes("flipkart")) {
+      return {
+        badgeBg: "bg-sky-50 text-sky-800 border-sky-200",
+        iconBg: "bg-sky-100 text-sky-700",
+        label: "Flipkart Hub",
+        emoji: "⚡",
+      };
+    }
+    if (p.includes("shopify")) {
+      return {
+        badgeBg: "bg-emerald-50 text-emerald-800 border-emerald-200",
+        iconBg: "bg-emerald-100 text-emerald-700",
+        label: "Shopify Store",
+        emoji: "🛒",
+      };
+    }
+    if (p.includes("wordpress") || p.includes("cms")) {
+      return {
+        badgeBg: "bg-indigo-50 text-indigo-800 border-indigo-200",
+        iconBg: "bg-indigo-100 text-indigo-700",
+        label: "Website CMS",
+        emoji: "🌐",
+      };
+    }
+    if (p.includes("razorpay") || p.includes("phonepe") || p.includes("stripe") || p.includes("paytm")) {
+      return {
+        badgeBg: "bg-teal-50 text-teal-800 border-teal-200",
+        iconBg: "bg-teal-100 text-teal-700",
+        label: "Payment Gateway",
+        emoji: "💳",
+      };
+    }
+    return {
+      badgeBg: "bg-slate-100 text-slate-800 border-slate-200",
+      iconBg: "bg-slate-100 text-slate-700",
+      label: "Client Login",
+      emoji: "🔑",
+    };
+  }
+
+  function openEditCredentialModal(cred: ClientCredentialItem) {
+    const isPreset = PLATFORM_PRESETS.some((p) => p.name.toLowerCase() === cred.platform.toLowerCase());
+    setEditingCred(cred);
+    setEditCredForm({
+      id: cred.id,
+      platform: isPreset ? cred.platform : "Custom / Enter Any Platform Name",
+      customPlatformName: isPreset ? "" : (cred.platform === "Custom / Other" ? (cred.notes || "") : cred.platform),
+      accountIdentifier: cred.accountIdentifier,
+      password: cred.password || cred.decryptedPassword || "",
+      loginUrl: cred.loginUrl || "",
+      recoveryDetails: cred.recoveryDetails || "",
+      accessLevel: cred.accessLevel || "ADMIN",
+      notes: cred.notes || "",
+    });
+    setIsEditCredModalOpen(true);
+  }
+
   async function handleCreateCredential(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedClient) return;
@@ -310,30 +565,84 @@ export default function ClientsPage() {
       return;
     }
 
+    const finalPlatform =
+      credForm.platform === "Custom / Enter Any Platform Name"
+        ? (newCredCustomPlatformName.trim() || "Custom / Other")
+        : credForm.platform.trim();
+
     try {
       setSavingCred(true);
       const res = await fetch(`/api/agency/clients/${selectedClient.id}/credentials`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credForm),
+        body: JSON.stringify({
+          ...credForm,
+          platform: finalPlatform,
+        }),
       });
 
       const data = await res.json();
       if (data.success) {
         setCredForm({
-          platform: "Meta Business Suite",
+          platform: "Goibibo Extranet",
           accountIdentifier: "",
           password: "",
-          loginUrl: "",
+          loginUrl: "https://in.goibibo.com/extranet",
           recoveryDetails: "",
           accessLevel: "ADMIN",
           notes: "",
         });
+        setNewCredCustomPlatformName("");
         setIsAddCredModalOpen(false);
         fetchCredentialsForClient(selectedClient.id);
         fetchClients(); // Refresh credentials count
       } else {
         alert(data.error || "Failed to save client credential");
+      }
+    } catch (err: any) {
+      alert(err.message || "An error occurred");
+    } finally {
+      setSavingCred(false);
+    }
+  }
+
+  async function handleUpdateCredential(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedClient || !editingCred) return;
+
+    if (selectedClient.confidentialAccess?.canAccessNotes === false) {
+      alert(`Access Restricted: You are not authorized to modify credentials for ${selectedClient.name}.`);
+      return;
+    }
+
+    const finalPlatform =
+      editCredForm.platform === "Custom / Enter Any Platform Name"
+        ? (editCredForm.customPlatformName.trim() || "Custom / Other")
+        : editCredForm.platform.trim();
+
+    try {
+      setSavingCred(true);
+      const res = await fetch(`/api/agency/clients/${selectedClient.id}/credentials/${editingCred.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platform: finalPlatform,
+          accountIdentifier: editCredForm.accountIdentifier,
+          password: editCredForm.password,
+          loginUrl: editCredForm.loginUrl,
+          recoveryDetails: editCredForm.recoveryDetails,
+          accessLevel: editCredForm.accessLevel,
+          notes: editCredForm.notes,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setIsEditCredModalOpen(false);
+        setEditingCred(null);
+        fetchCredentialsForClient(selectedClient.id);
+      } else {
+        alert(data.error || "Failed to update credential");
       }
     } catch (err: any) {
       alert(err.message || "An error occurred");
@@ -1414,7 +1723,7 @@ export default function ClientsPage() {
                     </button>
                   </div>
 
-                  {/* Credentials List */}
+                  {/* Credentials List with Search & Category Filters */}
                   {credentialsLoading ? (
                     <div className="p-12 text-center">
                       <div className="w-8 h-8 border-3 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -1427,7 +1736,7 @@ export default function ClientsPage() {
                       </div>
                       <h4 className="text-sm font-bold text-slate-800">No Credentials Stored Yet</h4>
                       <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
-                        Securely store Meta Business Suite, Google Ads, CMS, Instagram, or hosting logins for {selectedClient.name}.
+                        Store Goibibo, Booking.com, Airbnb, Google Drive, Gmail, Instagram, Meta Ads, Amazon, or custom logins for {selectedClient.name}.
                       </p>
                       <button
                         onClick={() => setIsAddCredModalOpen(true)}
@@ -1438,139 +1747,338 @@ export default function ClientsPage() {
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {credentials.map((cred) => {
-                        const isRevealed = !!revealedPasswords[cred.id];
-                        const isCopied = copiedCredId === cred.id;
-                        return (
-                          <div
-                            key={cred.id}
-                            className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:border-amber-300 transition space-y-3 flex flex-col justify-between"
+                    <div className="space-y-4">
+                      {/* Search Bar & Category Filter Chips */}
+                      <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                        <div className="relative flex-1 max-w-sm">
+                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            placeholder="Filter logins by platform, user, URL, or notes..."
+                            value={credSearchQuery}
+                            onChange={(e) => setCredSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 flex-wrap">
+                          <button
+                            onClick={() => setCredCategoryFilter("ALL")}
+                            className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] transition cursor-pointer ${
+                              credCategoryFilter === "ALL"
+                                ? "bg-amber-600 text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                            }`}
                           >
-                            <div>
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs shrink-0">
-                                    <Key className="w-4 h-4" />
-                                  </span>
+                            All ({credentials.length})
+                          </button>
+                          <button
+                            onClick={() => setCredCategoryFilter("OTA")}
+                            className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] transition cursor-pointer ${
+                              credCategoryFilter === "OTA"
+                                ? "bg-amber-600 text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            🏨 OTAs & Travel
+                          </button>
+                          <button
+                            onClick={() => setCredCategoryFilter("GOOGLE")}
+                            className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] transition cursor-pointer ${
+                              credCategoryFilter === "GOOGLE"
+                                ? "bg-amber-600 text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            📁 Google & Work
+                          </button>
+                          <button
+                            onClick={() => setCredCategoryFilter("ECOM")}
+                            className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] transition cursor-pointer ${
+                              credCategoryFilter === "ECOM"
+                                ? "bg-amber-600 text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            🛒 E-Commerce
+                          </button>
+                          <button
+                            onClick={() => setCredCategoryFilter("SOCIAL")}
+                            className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] transition cursor-pointer ${
+                              credCategoryFilter === "SOCIAL"
+                                ? "bg-amber-600 text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            📸 Social & Ads
+                          </button>
+                          <button
+                            onClick={() => setCredCategoryFilter("WEB")}
+                            className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] transition cursor-pointer ${
+                              credCategoryFilter === "WEB"
+                                ? "bg-amber-600 text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            🌐 Tech & Hosting
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Credentials Grid */}
+                      {credentials.filter((cred) => {
+                        if (credSearchQuery.trim()) {
+                          const q = credSearchQuery.toLowerCase();
+                          const p = (cred.platform || "").toLowerCase();
+                          const d = getDisplayPlatformName(cred).toLowerCase();
+                          const u = (cred.accountIdentifier || "").toLowerCase();
+                          const n = (cred.notes || "").toLowerCase();
+                          const l = (cred.loginUrl || "").toLowerCase();
+                          if (!p.includes(q) && !d.includes(q) && !u.includes(q) && !n.includes(q) && !l.includes(q)) return false;
+                        }
+
+                        if (credCategoryFilter !== "ALL") {
+                          const p = (cred.platform + " " + (cred.notes || "") + " " + (cred.loginUrl || "")).toLowerCase();
+                          if (credCategoryFilter === "OTA") {
+                            const isOta = p.includes("goibibo") || p.includes("booking") || p.includes("airbnb") || p.includes("makemytrip") || p.includes("agoda") || p.includes("expedia") || p.includes("tripadvisor") || p.includes("yatra");
+                            if (!isOta) return false;
+                          } else if (credCategoryFilter === "GOOGLE") {
+                            const isGoogle = p.includes("google") || p.includes("drive") || p.includes("gmail") || p.includes("youtube") || p.includes("gmb") || p.includes("ga4") || p.includes("gtm");
+                            if (!isGoogle) return false;
+                          } else if (credCategoryFilter === "ECOM") {
+                            const isEcom = p.includes("amazon") || p.includes("flipkart") || p.includes("blinkit") || p.includes("shopify") || p.includes("zepto") || p.includes("swiggy") || p.includes("meesho") || p.includes("woocommerce");
+                            if (!isEcom) return false;
+                          } else if (credCategoryFilter === "SOCIAL") {
+                            const isSocial = p.includes("instagram") || p.includes("meta") || p.includes("facebook") || p.includes("whatsapp") || p.includes("linkedin") || p.includes("twitter") || p.includes("x ads") || p.includes("pinterest") || p.includes("snapchat");
+                            if (!isSocial) return false;
+                          } else if (credCategoryFilter === "WEB") {
+                            const isWeb = p.includes("wordpress") || p.includes("hosting") || p.includes("cpanel") || p.includes("godaddy") || p.includes("hostinger") || p.includes("cloudflare") || p.includes("aws");
+                            if (!isWeb) return false;
+                          }
+                        }
+
+                        return true;
+                      }).length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 text-xs">
+                          No credentials match your search or category filter.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {credentials
+                            .filter((cred) => {
+                              if (credSearchQuery.trim()) {
+                                const q = credSearchQuery.toLowerCase();
+                                const p = (cred.platform || "").toLowerCase();
+                                const d = getDisplayPlatformName(cred).toLowerCase();
+                                const u = (cred.accountIdentifier || "").toLowerCase();
+                                const n = (cred.notes || "").toLowerCase();
+                                const l = (cred.loginUrl || "").toLowerCase();
+                                if (!p.includes(q) && !d.includes(q) && !u.includes(q) && !n.includes(q) && !l.includes(q)) return false;
+                              }
+
+                              if (credCategoryFilter !== "ALL") {
+                                const p = (cred.platform + " " + (cred.notes || "") + " " + (cred.loginUrl || "")).toLowerCase();
+                                if (credCategoryFilter === "OTA") {
+                                  const isOta = p.includes("goibibo") || p.includes("booking") || p.includes("airbnb") || p.includes("makemytrip") || p.includes("agoda") || p.includes("expedia") || p.includes("tripadvisor") || p.includes("yatra");
+                                  if (!isOta) return false;
+                                } else if (credCategoryFilter === "GOOGLE") {
+                                  const isGoogle = p.includes("google") || p.includes("drive") || p.includes("gmail") || p.includes("youtube") || p.includes("gmb") || p.includes("ga4") || p.includes("gtm");
+                                  if (!isGoogle) return false;
+                                } else if (credCategoryFilter === "ECOM") {
+                                  const isEcom = p.includes("amazon") || p.includes("flipkart") || p.includes("blinkit") || p.includes("shopify") || p.includes("zepto") || p.includes("swiggy") || p.includes("meesho") || p.includes("woocommerce");
+                                  if (!isEcom) return false;
+                                } else if (credCategoryFilter === "SOCIAL") {
+                                  const isSocial = p.includes("instagram") || p.includes("meta") || p.includes("facebook") || p.includes("whatsapp") || p.includes("linkedin") || p.includes("twitter") || p.includes("x ads") || p.includes("pinterest") || p.includes("snapchat");
+                                  if (!isSocial) return false;
+                                } else if (credCategoryFilter === "WEB") {
+                                  const isWeb = p.includes("wordpress") || p.includes("hosting") || p.includes("cpanel") || p.includes("godaddy") || p.includes("hostinger") || p.includes("cloudflare") || p.includes("aws");
+                                  if (!isWeb) return false;
+                                }
+                              }
+
+                              return true;
+                            })
+                            .map((cred) => {
+                              const isRevealed = !!revealedPasswords[cred.id];
+                              const isCopied = copiedCredId === cred.id;
+                              const isBundleCopied = copiedCredId === cred.id + "-bundle";
+                              const displayName = getDisplayPlatformName(cred);
+                              const style = getPlatformStyle(displayName);
+
+                              return (
+                                <div
+                                  key={cred.id}
+                                  className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:border-amber-400 hover:shadow-sm transition space-y-3 flex flex-col justify-between"
+                                >
                                   <div>
-                                    <h4 className="text-sm font-bold text-slate-900">{cred.platform}</h4>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700">
-                                        {cred.accessLevel}
-                                      </span>
-                                      {cred.isVerified && (
-                                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                          Verified
+                                    <div className="flex items-start justify-between gap-2 pb-2 border-b border-slate-100">
+                                      <div className="flex items-center gap-2.5">
+                                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${style.iconBg}`}>
+                                          <span>{style.emoji}</span>
                                         </span>
+                                        <div>
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <h4 className="text-sm font-bold text-slate-900">{displayName}</h4>
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${style.badgeBg}`}>
+                                              {style.label}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700">
+                                              {cred.accessLevel}
+                                            </span>
+                                            {cred.isVerified && (
+                                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                Verified
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-1">
+                                        {/* Direct Launch Portal Button */}
+                                        {cred.loginUrl && (
+                                          <a
+                                            href={cred.loginUrl.startsWith("http") ? cred.loginUrl : `https://${cred.loginUrl}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="p-1.5 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                                            title="Launch Login Portal"
+                                          >
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                          </a>
+                                        )}
+
+                                        {/* Copy Full Credentials Bundle */}
+                                        <button
+                                          onClick={() => handleCopyCredentialsBundle(cred)}
+                                          className="p-1.5 text-slate-400 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                          title={isBundleCopied ? "Full Credentials Copied!" : "Copy Username + Password"}
+                                        >
+                                          {isBundleCopied ? (
+                                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                          ) : (
+                                            <Share2 className="w-3.5 h-3.5" />
+                                          )}
+                                        </button>
+
+                                        {/* Edit Credential Button */}
+                                        <button
+                                          onClick={() => openEditCredentialModal(cred)}
+                                          className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                                          title="Edit Login Details"
+                                        >
+                                          <Edit className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        {/* Delete Credential Button */}
+                                        <button
+                                          onClick={() => handleDeleteCredential(cred.id)}
+                                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                          title="Delete Credential"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-2 text-xs pt-3">
+                                      {/* Account ID / Username */}
+                                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Username / Account ID</span>
+                                          <span className="font-mono font-medium text-slate-800 text-xs truncate block">{cred.accountIdentifier}</span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCopyPassword(cred.id + "-user", cred.accountIdentifier)}
+                                          className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
+                                          title="Copy Username"
+                                        >
+                                          {copiedCredId === cred.id + "-user" ? (
+                                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                          ) : (
+                                            <Copy className="w-3.5 h-3.5" />
+                                          )}
+                                        </button>
+                                      </div>
+
+                                      {/* Password / Key */}
+                                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Password / Secret Key</span>
+                                          <span className="font-mono font-semibold text-slate-800 text-xs tracking-wider block">
+                                            {isRevealed ? (cred.password || cred.decryptedPassword || cred.maskedPassword || "••••••••••••") : (cred.maskedPassword || "••••••••••••")}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleRevealPassword(cred.id)}
+                                            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
+                                            title={isRevealed ? "Hide password" : "Show password"}
+                                          >
+                                            {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCopyPassword(cred.id, cred.password || cred.decryptedPassword)}
+                                            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
+                                            title="Copy Password"
+                                          >
+                                            {isCopied ? (
+                                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                            ) : (
+                                              <Copy className="w-3.5 h-3.5" />
+                                            )}
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Login URL */}
+                                      {cred.loginUrl && (
+                                        <div className="flex items-center justify-between text-[11px] pt-1">
+                                          <span className="text-slate-400">Login Portal:</span>
+                                          <a
+                                            href={cred.loginUrl.startsWith("http") ? cred.loginUrl : `https://${cred.loginUrl}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1 hover:underline truncate max-w-[240px]"
+                                          >
+                                            <span>{cred.loginUrl.replace(/^https?:\/\//, "")}</span>
+                                            <ExternalLink className="w-3 h-3 shrink-0" />
+                                          </a>
+                                        </div>
+                                      )}
+
+                                      {/* Recovery / 2FA Details */}
+                                      {cred.recoveryDetails && (
+                                        <div className="p-2 rounded-lg bg-amber-50/50 border border-amber-100 text-[11px] text-amber-900">
+                                          <span className="font-semibold block text-[10px] text-amber-700 uppercase">2FA / Recovery:</span>
+                                          <span>{cred.recoveryDetails}</span>
+                                        </div>
+                                      )}
+
+                                      {/* Notes */}
+                                      {cred.notes && (
+                                        <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                          <span className="font-semibold block text-[10px] text-slate-400 uppercase">Notes:</span>
+                                          <span>{cred.notes}</span>
+                                        </div>
                                       )}
                                     </div>
                                   </div>
-                                </div>
 
-                                <button
-                                  onClick={() => handleDeleteCredential(cred.id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                  title="Delete Credential"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-
-                              <div className="space-y-2 text-xs pt-3">
-                                {/* Account ID / Username */}
-                                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Username / Account ID</span>
-                                    <span className="font-mono font-medium text-slate-800 text-xs truncate block">{cred.accountIdentifier}</span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCopyPassword(cred.id + "-user", cred.accountIdentifier)}
-                                    className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
-                                    title="Copy Username"
-                                  >
-                                    {copiedCredId === cred.id + "-user" ? (
-                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                    ) : (
-                                      <Copy className="w-3.5 h-3.5" />
-                                    )}
-                                  </button>
-                                </div>
-
-                                {/* Password / Key */}
-                                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2">
-                                  <div className="min-w-0 flex-1">
-                                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Password / Secret Key</span>
-                                    <span className="font-mono font-semibold text-slate-800 text-xs tracking-wider block">
-                                      {isRevealed ? (cred.password || cred.decryptedPassword || cred.maskedPassword || "••••••••••••") : (cred.maskedPassword || "••••••••••••")}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleRevealPassword(cred.id)}
-                                      className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
-                                      title={isRevealed ? "Hide password" : "Show password"}
-                                    >
-                                      {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCopyPassword(cred.id, cred.password || cred.decryptedPassword)}
-                                      className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-white transition cursor-pointer"
-                                      title="Copy Password"
-                                    >
-                                      {isCopied ? (
-                                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                      ) : (
-                                        <Copy className="w-3.5 h-3.5" />
-                                      )}
-                                    </button>
+                                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                                    <span>Added by {cred.createdBy?.fullName || "Admin"}</span>
+                                    <span>{new Date(cred.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}</span>
                                   </div>
                                 </div>
-
-                                {/* Login URL */}
-                                {cred.loginUrl && (
-                                  <div className="flex items-center justify-between text-[11px] pt-1">
-                                    <span className="text-slate-400">Login Portal:</span>
-                                    <a
-                                      href={cred.loginUrl.startsWith("http") ? cred.loginUrl : `https://${cred.loginUrl}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-amber-700 hover:text-amber-800 font-medium flex items-center gap-1 hover:underline truncate max-w-[220px]"
-                                    >
-                                      <span>{cred.loginUrl.replace(/^https?:\/\//, "")}</span>
-                                      <ExternalLink className="w-3 h-3 shrink-0" />
-                                    </a>
-                                  </div>
-                                )}
-
-                                {/* Recovery / 2FA Details */}
-                                {cred.recoveryDetails && (
-                                  <div className="p-2 rounded-lg bg-amber-50/50 border border-amber-100 text-[11px] text-amber-900">
-                                    <span className="font-semibold block text-[10px] text-amber-700 uppercase">2FA / Recovery:</span>
-                                    <span>{cred.recoveryDetails}</span>
-                                  </div>
-                                )}
-
-                                {/* Notes */}
-                                {cred.notes && (
-                                  <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                    <span className="font-semibold block text-[10px] text-slate-400 uppercase">Notes:</span>
-                                    <span>{cred.notes}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                              <span>Added by {cred.createdBy?.fullName || "Admin"}</span>
-                              <span>{new Date(cred.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                              );
+                            })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2521,10 +3029,10 @@ export default function ClientsPage() {
       {/* ========================================================================= */}
       {isAddCredModalOpen && selectedClient && selectedClient.confidentialAccess?.canAccessNotes !== false && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 shadow-xs">
                   <Key className="w-5 h-5" />
                 </div>
                 <div>
@@ -2543,29 +3051,132 @@ export default function ClientsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateCredential} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+            <form onSubmit={handleCreateCredential} className="p-6 space-y-4 max-h-[78vh] overflow-y-auto">
+              {/* Quick Preset Chips */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Platform / Service *</label>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Quick Select Platform / Service
+                </label>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { name: "Goibibo Extranet", label: "🏨 Goibibo" },
+                    { name: "Booking.com Extranet", label: "🏨 Booking.com" },
+                    { name: "Airbnb Host Portal", label: "🏡 Airbnb" },
+                    { name: "Google Drive / Cloud Storage", label: "📁 Google Drive" },
+                    { name: "Gmail / Google Workspace", label: "✉️ Gmail" },
+                    { name: "Instagram Business", label: "📸 Instagram" },
+                    { name: "Meta Business Suite / Facebook Ads", label: "📘 Meta Ads" },
+                    { name: "Amazon Seller Central", label: "📦 Amazon" },
+                    { name: "Blinkit Partner Hub", label: "🛵 Blinkit" },
+                    { name: "Shopify Store Admin", label: "🛒 Shopify" },
+                    { name: "WordPress / Website CMS Admin", label: "🌐 WordPress" },
+                    { name: "Razorpay Dashboard", label: "💳 Razorpay" },
+                    { name: "Custom / Enter Any Platform Name", label: "✨ Custom Name" },
+                  ].map((chip) => {
+                    const isSelected = credForm.platform === chip.name;
+                    return (
+                      <button
+                        key={chip.name}
+                        type="button"
+                        onClick={() => {
+                          const preset = PLATFORM_PRESETS.find((p) => p.name === chip.name);
+                          setCredForm((prev) => ({
+                            ...prev,
+                            platform: chip.name,
+                            loginUrl: preset?.defaultUrl || prev.loginUrl,
+                          }));
+                          if (chip.name !== "Custom / Enter Any Platform Name") {
+                            setNewCredCustomPlatformName("");
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition cursor-pointer border ${
+                          isSelected
+                            ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Platform Dropdown with Groupings */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Platform Category / Service *</label>
                 <select
                   required
                   value={credForm.platform}
-                  onChange={(e) => setCredForm({ ...credForm, platform: e.target.value })}
+                  onChange={(e) => {
+                    const selectedName = e.target.value;
+                    const preset = PLATFORM_PRESETS.find((p) => p.name === selectedName);
+                    setCredForm((prev) => ({
+                      ...prev,
+                      platform: selectedName,
+                      loginUrl: preset?.defaultUrl || prev.loginUrl,
+                    }));
+                  }}
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 font-semibold"
                 >
-                  <option value="Meta Business Suite">Meta Business Suite / Facebook Ads</option>
-                  <option value="Google Ads / MCC">Google Ads / MCC Account</option>
-                  <option value="Google Analytics 4">Google Analytics 4 (GA4)</option>
-                  <option value="Google Tag Manager">Google Tag Manager (GTM)</option>
-                  <option value="Instagram Business">Instagram Business Account</option>
-                  <option value="Shopify Admin">Shopify Store Admin</option>
-                  <option value="WordPress / CMS">WordPress / Website CMS Admin</option>
-                  <option value="Web Hosting / CPanel">Hosting / CPanel / DNS Server</option>
-                  <option value="LinkedIn Campaign Manager">LinkedIn Campaign Manager</option>
-                  <option value="WhatsApp Business API">WhatsApp Business API</option>
-                  <option value="Custom / Other">Custom / Other Service</option>
+                  <optgroup label="🏨 Hospitality, Stays & OTAs (Airbnbs / Hotels)">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "OTA").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🌐 Google Workspace & Cloud Tools">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "GOOGLE").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🛒 E-Commerce & Marketplaces">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "ECOM").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="📱 Social Media & Advertising">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "SOCIAL").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="💻 Website, CMS, Domain & Hosting">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "WEB").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="💳 Payments, Finance & Accounting">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "PAYMENT").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="✨ Custom Platform">
+                    <option value="Custom / Enter Any Platform Name">✨ Custom / Enter Any Platform Name</option>
+                  </optgroup>
                 </select>
               </div>
 
+              {/* Dynamic Custom Platform Name Input */}
+              {credForm.platform === "Custom / Enter Any Platform Name" && (
+                <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 space-y-1">
+                  <label className="block text-xs font-bold text-amber-950">
+                    Custom Platform / Service Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={newCredCustomPlatformName}
+                    onChange={(e) => setNewCredCustomPlatformName(e.target.value)}
+                    placeholder="e.g. Goibibo, Booking.com, Canva, CCTV Wifi, Tally on Cloud"
+                    className="w-full px-3 py-2 text-xs bg-white border border-amber-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 font-semibold text-slate-800"
+                  />
+                  <p className="text-[11px] text-amber-800">
+                    This exact name will be saved in your vault (never as generic "Custom / Other").
+                  </p>
+                </div>
+              )}
+
+              {/* Account Identifier / Username */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Account Identifier / Username / Email *</label>
                 <input
@@ -2573,13 +3184,26 @@ export default function ClientsPage() {
                   required
                   value={credForm.accountIdentifier}
                   onChange={(e) => setCredForm({ ...credForm, accountIdentifier: e.target.value })}
-                  placeholder="e.g. ads@brand.com or ACT-928174921"
+                  placeholder="e.g. anvhomestay@gmail.com, 96854 31113, or ACT-928174"
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 font-mono"
                 />
               </div>
 
+              {/* Password / Key with Generator */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Password / API Key / Access Token *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700">Password / Secret Key / Access Token *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const generated = generateSecurePassword();
+                      setCredForm({ ...credForm, password: generated });
+                    }}
+                    className="text-[11px] text-amber-700 hover:text-amber-800 font-semibold hover:underline cursor-pointer"
+                  >
+                    🎲 Generate Password
+                  </button>
+                </div>
                 <input
                   type="text"
                   required
@@ -2590,14 +3214,15 @@ export default function ClientsPage() {
                 />
               </div>
 
+              {/* Portal URL and Access Level */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Login URL / Portal</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Login URL / Portal Link</label>
                   <input
                     type="text"
                     value={credForm.loginUrl}
                     onChange={(e) => setCredForm({ ...credForm, loginUrl: e.target.value })}
-                    placeholder="https://business.facebook.com"
+                    placeholder="https://in.goibibo.com/extranet"
                     className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                   />
                 </div>
@@ -2616,24 +3241,26 @@ export default function ClientsPage() {
                 </div>
               </div>
 
+              {/* 2FA / Recovery Details */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">2FA & Recovery Instructions (Optional)</label>
                 <input
                   type="text"
                   value={credForm.recoveryDetails}
                   onChange={(e) => setCredForm({ ...credForm, recoveryDetails: e.target.value })}
-                  placeholder="e.g. 2FA sent to client CEO WhatsApp +91-98... or Backup OTPs in Vault"
+                  placeholder="e.g. OTP sent to 96854 31113 or backup codes in Google Auth"
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
               </div>
 
+              {/* Notes */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Internal Instructions / Notes (Optional)</label>
                 <textarea
                   rows={2}
                   value={credForm.notes}
                   onChange={(e) => setCredForm({ ...credForm, notes: e.target.value })}
-                  placeholder="e.g. Do not modify pixel settings. Use Ad Account #3 for campaigns."
+                  placeholder="e.g. Goibibo Homestay listing ID #1042. Booking managed by front desk."
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
               </div>
@@ -2641,7 +3268,7 @@ export default function ClientsPage() {
               <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
                 <ShieldCheck className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                 <span>
-                  This credential will be encrypted with AES-256 and restricted to Super Admin & assigned Account Manager.
+                  This credential is encrypted with AES-256 and restricted to Super Admin & assigned Account Manager.
                 </span>
               </div>
 
@@ -2659,6 +3286,273 @@ export default function ClientsPage() {
                   className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
                 >
                   {savingCred ? "Encrypting & Saving..." : "Save to Vault"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* EDIT CLIENT LOGIN CREDENTIAL MODAL */}
+      {/* ========================================================================= */}
+      {isEditCredModalOpen && editingCred && selectedClient && selectedClient.confidentialAccess?.canAccessNotes !== false && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
+                  <Edit className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Edit Login Credential</h3>
+                  <p className="text-xs text-slate-500">
+                    Update credential details for <strong className="text-slate-800">{selectedClient.name}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditCredModalOpen(false);
+                  setEditingCred(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCredential} className="p-6 space-y-4 max-h-[78vh] overflow-y-auto">
+              {/* Quick Preset Chips */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Change Platform / Service
+                </label>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { name: "Goibibo Extranet", label: "🏨 Goibibo" },
+                    { name: "Booking.com Extranet", label: "🏨 Booking.com" },
+                    { name: "Airbnb Host Portal", label: "🏡 Airbnb" },
+                    { name: "Google Drive / Cloud Storage", label: "📁 Google Drive" },
+                    { name: "Gmail / Google Workspace", label: "✉️ Gmail" },
+                    { name: "Instagram Business", label: "📸 Instagram" },
+                    { name: "Meta Business Suite / Facebook Ads", label: "📘 Meta Ads" },
+                    { name: "Amazon Seller Central", label: "📦 Amazon" },
+                    { name: "Blinkit Partner Hub", label: "🛵 Blinkit" },
+                    { name: "Shopify Store Admin", label: "🛒 Shopify" },
+                    { name: "WordPress / Website CMS Admin", label: "🌐 WordPress" },
+                    { name: "Razorpay Dashboard", label: "💳 Razorpay" },
+                    { name: "Custom / Enter Any Platform Name", label: "✨ Custom Name" },
+                  ].map((chip) => {
+                    const isSelected = editCredForm.platform === chip.name;
+                    return (
+                      <button
+                        key={chip.name}
+                        type="button"
+                        onClick={() => {
+                          const preset = PLATFORM_PRESETS.find((p) => p.name === chip.name);
+                          setEditCredForm((prev) => ({
+                            ...prev,
+                            platform: chip.name,
+                            loginUrl: prev.loginUrl || preset?.defaultUrl || "",
+                          }));
+                          if (chip.name !== "Custom / Enter Any Platform Name") {
+                            setEditCredForm((prev) => ({ ...prev, customPlatformName: "" }));
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition cursor-pointer border ${
+                          isSelected
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Platform Dropdown */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Platform Category / Service *</label>
+                <select
+                  required
+                  value={editCredForm.platform}
+                  onChange={(e) => {
+                    const selectedName = e.target.value;
+                    const preset = PLATFORM_PRESETS.find((p) => p.name === selectedName);
+                    setEditCredForm((prev) => ({
+                      ...prev,
+                      platform: selectedName,
+                      loginUrl: prev.loginUrl || preset?.defaultUrl || "",
+                    }));
+                  }}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-semibold"
+                >
+                  <optgroup label="🏨 Hospitality, Stays & OTAs (Airbnbs / Hotels)">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "OTA").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🌐 Google Workspace & Cloud Tools">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "GOOGLE").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🛒 E-Commerce & Marketplaces">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "ECOM").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="📱 Social Media & Advertising">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "SOCIAL").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="💻 Website, CMS, Domain & Hosting">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "WEB").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="💳 Payments, Finance & Accounting">
+                    {PLATFORM_PRESETS.filter((p) => p.category === "PAYMENT").map((p) => (
+                      <option key={p.name} value={p.name}>{p.icon} {p.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="✨ Custom Platform">
+                    <option value="Custom / Enter Any Platform Name">✨ Custom / Enter Any Platform Name</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Dynamic Custom Platform Name Input */}
+              {editCredForm.platform === "Custom / Enter Any Platform Name" && (
+                <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-1">
+                  <label className="block text-xs font-bold text-emerald-950">
+                    Custom Platform / Service Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editCredForm.customPlatformName}
+                    onChange={(e) => setEditCredForm({ ...editCredForm, customPlatformName: e.target.value })}
+                    placeholder="e.g. Goibibo, Booking.com, Canva, CCTV Wifi, Tally on Cloud"
+                    className="w-full px-3 py-2 text-xs bg-white border border-emerald-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-semibold text-slate-800"
+                  />
+                  <p className="text-[11px] text-emerald-800">
+                    Specify the exact platform name to replace generic "Custom / Other".
+                  </p>
+                </div>
+              )}
+
+              {/* Account Identifier / Username */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Account Identifier / Username / Email *</label>
+                <input
+                  type="text"
+                  required
+                  value={editCredForm.accountIdentifier}
+                  onChange={(e) => setEditCredForm({ ...editCredForm, accountIdentifier: e.target.value })}
+                  placeholder="e.g. anvhomestay@gmail.com or 96854 31113"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono"
+                />
+              </div>
+
+              {/* Password / Key with Generator */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700">Password / Secret Key *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const generated = generateSecurePassword();
+                      setEditCredForm({ ...editCredForm, password: generated });
+                    }}
+                    className="text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold hover:underline cursor-pointer"
+                  >
+                    🎲 Generate Password
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={editCredForm.password}
+                  onChange={(e) => setEditCredForm({ ...editCredForm, password: e.target.value })}
+                  placeholder="Enter new password or keep existing"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-mono"
+                />
+              </div>
+
+              {/* Portal URL and Access Level */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Login URL / Portal Link</label>
+                  <input
+                    type="text"
+                    value={editCredForm.loginUrl}
+                    onChange={(e) => setEditCredForm({ ...editCredForm, loginUrl: e.target.value })}
+                    placeholder="https://admin.booking.com"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Access Level</label>
+                  <select
+                    value={editCredForm.accessLevel}
+                    onChange={(e) => setEditCredForm({ ...editCredForm, accessLevel: e.target.value })}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-medium"
+                  >
+                    <option value="ADMIN">Administrator / Full Access</option>
+                    <option value="EDITOR">Standard / Editor Access</option>
+                    <option value="VIEWER">Read / Viewer Only</option>
+                    <option value="AGENCY_PARTNER">Agency Partner Delegation</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 2FA / Recovery Details */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">2FA & Recovery Instructions (Optional)</label>
+                <input
+                  type="text"
+                  value={editCredForm.recoveryDetails}
+                  onChange={(e) => setEditCredForm({ ...editCredForm, recoveryDetails: e.target.value })}
+                  placeholder="e.g. OTP sent to 96854 31113"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Internal Instructions / Notes (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={editCredForm.notes}
+                  onChange={(e) => setEditCredForm({ ...editCredForm, notes: e.target.value })}
+                  placeholder="Internal account instructions or notes"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditCredModalOpen(false);
+                    setEditingCred(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCred}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
+                >
+                  {savingCred ? "Updating Vault..." : "Update Credential"}
                 </button>
               </div>
             </form>
